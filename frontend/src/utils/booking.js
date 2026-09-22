@@ -155,10 +155,15 @@ export function countRangeSlots(ranges) {
 }
 
 /**
- * Plantillas semanales -> filas con fecha. Una fila por (docente, materia,
- * día) con TODOS los rangos de ese día, que es exactamente una tarjeta.
+ * Plantillas semanales -> filas con fecha. Una fila por (docente, día) con
+ * TODOS los rangos de ese día, que es exactamente una tarjeta. La materia no
+ * es parte del horario: la fila lleva las que da el docente y el alumno elige
+ * una al reservar.
  *
- * entries: [{ teacherId, teacherName, subjectId, subjectName, schedule }]
+ * Es el mismo cálculo que hace el backend (lib/availabilityExpansion.js); la
+ * pantalla ya recibe las filas hechas y esto queda para los tests.
+ *
+ * entries: [{ teacherId, teacherName, subjects: [{ id, name }], schedule }]
  */
 export function expandAvailability(entries, from, to) {
   const rows = []
@@ -174,13 +179,12 @@ export function expandAvailability(entries, from, to) {
       if (!Array.isArray(ranges) || ranges.length === 0) continue
 
       rows.push({
-        id: `${iso}|${entry.teacherId}|${entry.subjectId}`,
+        id: `${iso}|${entry.teacherId}`,
         date: iso,
         dayKey,
         teacherId: entry.teacherId,
         teacherName: entry.teacherName,
-        subjectId: entry.subjectId,
-        subjectName: entry.subjectName,
+        subjects: entry.subjects || [],
         ranges: ranges.map((range) => ({ start: range.start, end: range.end })),
       })
     }
@@ -254,7 +258,7 @@ export function annotateClashes(rows, myLessons) {
   })
 }
 
-/** { [iso]: Card[] }, cada lista ordenada por hora, materia y docente. */
+/** { [iso]: Card[] }, cada lista ordenada por hora y docente. */
 export function groupCardsByDate(cards) {
   const porFecha = {}
 
@@ -267,13 +271,39 @@ export function groupCardsByDate(cards) {
     porFecha[iso].sort((a, b) => {
       const inicio = (a.ranges[0]?.start || '').localeCompare(b.ranges[0]?.start || '')
       if (inicio !== 0) return inicio
-      const materia = a.subjectName.localeCompare(b.subjectName)
-      if (materia !== 0) return materia
       return a.teacherName.localeCompare(b.teacherName)
     })
   }
 
   return porFecha
+}
+
+/**
+ * ¿La tarjeta es de un docente que da alguna de estas materias? El id se
+ * compara como string: puede venir de la URL, y ahí siempre es string aunque
+ * el de la tarjeta no lo sea.
+ */
+function teachesAny(card, subjectIds) {
+  return (card.subjects || []).some((subject) =>
+    subjectIds.some((id) => String(id) === String(subject.id)),
+  )
+}
+
+/**
+ * Qué materia llega ya elegida al modal de reserva, o null si el alumno la
+ * tiene que elegir. Solo se elige sola cuando no hay duda: el docente da una
+ * sola, o de las que da hay una sola entre las que el alumno filtró. Elegir
+ * "la primera" sería reservar algo que el alumno no pidió.
+ */
+export function preselectedSubjectId(card, filterSubjectIds = []) {
+  const subjects = card.subjects || []
+  if (subjects.length === 1) return subjects[0].id
+  if (filterSubjectIds.length === 0) return null
+
+  const filtradas = subjects.filter((subject) =>
+    filterSubjectIds.some((id) => String(id) === String(subject.id)),
+  )
+  return filtradas.length === 1 ? filtradas[0].id : null
 }
 
 /** Minúsculas y sin acentos, para comparar lo tipeado contra nombres con tilde. */
@@ -300,14 +330,9 @@ export function filterCards(cards, filters = {}) {
 
   return cards.filter((card) => {
     if (dayKeys.length > 0 && !dayKeys.includes(card.dayKey)) return false
-    // El id de materia se compara como string: puede venir de la URL, y ahí
-    // siempre es string aunque el de la tarjeta no lo sea.
-    if (
-      subjectIds.length > 0 &&
-      !subjectIds.some((id) => String(id) === String(card.subjectId))
-    ) {
-      return false
-    }
+    // La tarjeta es de un docente, no de una materia: entra si da alguna de
+    // las elegidas.
+    if (subjectIds.length > 0 && !teachesAny(card, subjectIds)) return false
     if (docente && !normalizeText(card.teacherName).includes(docente)) return false
 
     if (fromTime || toTime) {

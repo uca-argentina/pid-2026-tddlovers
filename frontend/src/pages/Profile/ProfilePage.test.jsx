@@ -128,7 +128,7 @@ describe('ProfilePage', () => {
     await esperarMaterias()
 
     expect(screen.queryByText('Matemática')).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /Disponibilidad de/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /disponibilidad/i })).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/Dejar de dar/)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/Agregar/)).not.toBeInTheDocument()
     // Sin sección no hay catálogo que traer.
@@ -154,20 +154,13 @@ describe('ProfilePage', () => {
     expect(await screen.findByLabelText('Dejar de dar Matemática')).toBeInTheDocument()
   })
 
-  it('como docente cada materia linkea a su disponibilidad', async () => {
+  it('como docente hay un solo link a la disponibilidad, no uno por materia', async () => {
     renderProfile({ viewRole: 'teacher' })
     await screen.findByText('Matemática')
 
-    // El nombre accesible incluye la materia: con solo "Disponibilidad" no
-    // se distinguirían entre sí ni del ícono de la barra.
-    expect(screen.getByRole('link', { name: 'Disponibilidad de Matemática' })).toHaveAttribute(
-      'href',
-      '/disponibilidad/1',
-    )
-    expect(screen.getByRole('link', { name: 'Disponibilidad de Álgebra' })).toHaveAttribute(
-      'href',
-      '/disponibilidad/3',
-    )
+    const links = screen.getAllByRole('link', { name: /disponibilidad/i })
+    expect(links).toHaveLength(1)
+    expect(links[0]).toHaveAttribute('href', '/disponibilidad')
   })
 
   it('como docente se agregan y se quitan materias', async () => {

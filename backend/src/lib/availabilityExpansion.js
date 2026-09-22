@@ -80,13 +80,13 @@ function fitsAClass(range) {
 
 /**
  * Proyecta las plantillas semanales sobre las fechas del rango y resta lo ya
- * reservado. Devuelve una fila por (docente, materia, fecha) con los rangos
- * libres de ese día.
+ * reservado. Devuelve una fila por (docente, fecha) con los rangos libres de
+ * ese día y las materias del docente — la materia no es parte del horario, la
+ * elige el alumno al reservar.
  *
  * Dos sentidos distintos de "reservado", y solo uno se resta:
  *  - Reservado CON ESE DOCENTE: la hora deja de existir para todos, así que
- *    se resta. Se compara por (docente, fecha) IGNORANDO la materia: nadie da
- *    dos materias a la vez.
+ *    se resta, sea de la materia que sea.
  *  - Reservado por el alumno con OTRO docente: la hora del docente sigue
  *    existiendo, este alumno no puede tomarla. NO se resta acá — el front la
  *    pinta en gris con lo que devuelve /api/classes.
@@ -132,13 +132,12 @@ export function expandAvailability({ entries, bookings, from, to, nowIso, nowTim
       if (free.length === 0) continue;
 
       rows.push({
-        id: `${iso}|${entry.teacherId}|${entry.subjectId}`,
+        id: `${iso}|${entry.teacherId}`,
         date: iso,
         dayKey,
         teacherId: entry.teacherId,
         teacherName: entry.teacherName,
-        subjectId: entry.subjectId,
-        subjectName: entry.subjectName,
+        subjects: entry.subjects,
         ranges: free,
       });
     }

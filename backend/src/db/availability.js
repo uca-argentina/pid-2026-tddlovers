@@ -5,93 +5,88 @@ import { getPool } from './pool.js';
 const TIME_FORMAT = `to_char(start_time, 'HH24:MI') AS start, to_char(end_time, 'HH24:MI') AS "end"`;
 
 /**
- * Toda la disponibilidad de un docente, agrupada por materia:
- *   { [subjectId]: { lunes: [{ start, end }], ... } }
- *
- * Es un solo pedido con TODAS las materias a propósito: la pantalla del
- * scheduler necesita las otras para pintar los horarios que ya están ocupados
- * (nadie da dos materias a la vez), y pedirlas de a una sería un N+1.
+ * La semana de un docente: { lunes: [{ start, end }], ... }. Una sola, sin
+ * materia: el docente ofrece horarios y es el alumno el que elige para qué
+ * materia reserva.
  */
 export async function findAvailabilityByTeacher(teacherId) {
   const result = await getPool().query(
-    `SELECT subject_id, day_key, ${TIME_FORMAT}
+    `SELECT day_key, ${TIME_FORMAT}
      FROM availability
      WHERE teacher_id = $1
-     ORDER BY subject_id, day_key, start_time`,
+     ORDER BY day_key, start_time`,
     [teacherId]
   );
 
-  const bySubject = {};
+  const schedule = {};
   for (const row of result.rows) {
-    const subject = (bySubject[row.subject_id] ??= {});
-    (subject[row.day_key] ??= []).push({ start: row.start, end: row.end });
+    (schedule[row.day_key] ??= []).push({ start: row.start, end: row.end });
   }
-  return bySubject;
+  return schedule;
 }
 
 /**
- * Toda la disponibilidad publicada, con los nombres ya resueltos, lista para
- * proyectarse sobre fechas. Una entrada por (docente, materia) con su semana
- * adentro.
+ * Toda la disponibilidad publicada, lista para proyectarse sobre fechas. Una
+ * entrada por docente con su semana y las materias que da, que son entre las
+ * que el alumno elige al reservar.
  *
- * Solo docentes que efectivamente dan esa materia (join con teacher_subjects):
- * si un docente se saca una materia del perfil pero le queda disponibilidad
- * vieja, no tiene que aparecer ofreciéndola.
+ * Solo docentes con al menos una materia en el perfil: sin materias no hay
+ * nada que reservarles.
  */
 export async function findPublishedAvailability() {
   const result = await getPool().query(
     `SELECT av.teacher_id AS "teacherId",
             u.nombre || ' ' || u.apellido AS "teacherName",
-            av.subject_id AS "subjectId",
-            s.name AS "subjectName",
             av.day_key AS "dayKey",
-            ${TIME_FORMAT}
+            ${TIME_FORMAT},
+            subj.subjects
      FROM availability av
      JOIN users u ON u.id = av.teacher_id
-     JOIN subjects s ON s.id = av.subject_id
-     JOIN teacher_subjects ts
-       ON ts.teacher_id = av.teacher_id AND ts.subject_id = av.subject_id
-     ORDER BY u.nombre, s.name, av.day_key, av.start_time`
+     JOIN LATERAL (
+       SELECT json_agg(json_build_object('id', s.id, 'name', s.name) ORDER BY s.name) AS subjects
+       FROM teacher_subjects ts
+       JOIN subjects s ON s.id = ts.subject_id
+       WHERE ts.teacher_id = av.teacher_id
+     ) subj ON subj.subjects IS NOT NULL
+     ORDER BY u.nombre, u.apellido, av.day_key, av.start_time`
   );
 
-  const byPair = new Map();
+  const byTeacher = new Map();
   for (const row of result.rows) {
-    const key = `${row.teacherId}|${row.subjectId}`;
-    if (!byPair.has(key)) {
-      byPair.set(key, {
+    if (!byTeacher.has(row.teacherId)) {
+      byTeacher.set(row.teacherId, {
         teacherId: row.teacherId,
         teacherName: row.teacherName,
-        subjectId: row.subjectId,
-        subjectName: row.subjectName,
+        subjects: row.subjects,
         schedule: {},
       });
     }
-    const entry = byPair.get(key);
+    const entry = byTeacher.get(row.teacherId);
     (entry.schedule[row.dayKey] ??= []).push({ start: row.start, end: row.end });
   }
-  return [...byPair.values()];
+  return [...byTeacher.values()];
 }
 
 /**
- * ¿Este docente ofrece esta materia en esta fecha y hora? Se usa antes de
- * reservar: el front solo ofrece turnos válidos, pero se puede saltear.
+ * ¿Este docente ofrece esa fecha y hora? Se usa antes de reservar: el front
+ * solo ofrece turnos válidos, pero se puede saltear.
  */
-export async function isWithinAvailability({ teacherId, subjectId, dayKey, startTime, endTime }) {
+export async function isWithinAvailability({ teacherId, dayKey, startTime, endTime }) {
   const result = await getPool().query(
     `SELECT 1
      FROM availability
-     WHERE teacher_id = $1 AND subject_id = $2 AND day_key = $3::week_day
-       AND start_time <= $4::time AND end_time >= $5::time
+     WHERE teacher_id = $1 AND day_key = $2::week_day
+       AND start_time <= $3::time AND end_time >= $4::time
      LIMIT 1`,
-    [teacherId, subjectId, dayKey, startTime, endTime]
+    [teacherId, dayKey, startTime, endTime]
   );
   return result.rowCount > 0;
 }
 
 /**
- * Reemplaza la plantilla semanal de UNA materia de un docente. Es un
- * reemplazo completo y no un diff: la pantalla manda siempre la semana
- * entera, y así borrar un día es simplemente no mandarlo.
+ * Reemplaza la semana entera de un docente. Es un reemplazo completo y no un
+ * diff: la pantalla manda siempre la semana entera, y así borrar un día es
+ * simplemente no mandarlo.
  *
  * En una transacción para que no quede una plantilla a medio guardar: si
  * falla un rango, la anterior sigue intacta.
@@ -100,15 +95,12 @@ export async function isWithinAvailability({ teacherId, subjectId, dayKey, start
  * alguien ya tenía tomada, esa clase sigue en pie — solo deja de ofrecerse
  * para el futuro.
  */
-export async function replaceSubjectAvailability(teacherId, subjectId, schedule) {
+export async function replaceTeacherAvailability(teacherId, schedule) {
   const client = await getPool().connect();
   try {
     await client.query('BEGIN');
 
-    await client.query(`DELETE FROM availability WHERE teacher_id = $1 AND subject_id = $2`, [
-      teacherId,
-      subjectId,
-    ]);
+    await client.query(`DELETE FROM availability WHERE teacher_id = $1`, [teacherId]);
 
     const dayKeys = [];
     const starts = [];
@@ -124,11 +116,11 @@ export async function replaceSubjectAvailability(teacherId, subjectId, schedule)
     if (dayKeys.length > 0) {
       // unnest en vez de un INSERT por rango: una sola ida a la base.
       await client.query(
-        `INSERT INTO availability (teacher_id, subject_id, day_key, start_time, end_time)
-         SELECT $1, $2, day_key::week_day, start_time::time, end_time::time
-         FROM unnest($3::text[], $4::text[], $5::text[])
+        `INSERT INTO availability (teacher_id, day_key, start_time, end_time)
+         SELECT $1, day_key::week_day, start_time::time, end_time::time
+         FROM unnest($2::text[], $3::text[], $4::text[])
            AS t(day_key, start_time, end_time)`,
-        [teacherId, subjectId, dayKeys, starts, ends]
+        [teacherId, dayKeys, starts, ends]
       );
     }
 

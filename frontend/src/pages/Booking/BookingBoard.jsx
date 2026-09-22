@@ -23,8 +23,9 @@ const SIN_TARJETAS = { slots: null, myLessons: null, cards: [] }
  * el calendario del mes y a la izquierda las clases del día elegido, con los
  * filtros arriba.
  *
- * Una tarjeta es un docente, una materia y un día: todos los tramos libres de
- * ese día van juntos. Los horarios que el alumno ya reservó CON ESE DOCENTE ya
+ * Una tarjeta es un docente y un día: todos los tramos libres de ese día van
+ * juntos. La materia no es parte del horario — el docente ofrece horas y el
+ * alumno elige para qué materia reserva en el modal. Los horarios que el alumno ya reservó CON ESE DOCENTE ya
  * no están (los restó el backend); los que tiene con OTRO aparecen como aviso
  * gris, porque el horario del docente sigue existiendo aunque este alumno no
  * lo pueda tomar.
@@ -227,11 +228,14 @@ class BookingBoard extends Component {
     return map
   }
 
-  /** Solo las materias que de verdad aparecen en el rango cargado. */
+  /** Solo las materias que da algún docente con horarios en el rango cargado. */
   getFilterSubjects() {
     // Todo se normaliza a string: el id elegido puede venir de la URL (siempre
     // string) y el de las tarjetas del backend, y un Set compara con ===.
-    const presentes = new Set(this.getCards().map((card) => String(card.subjectId)))
+    const presentes = new Set()
+    for (const card of this.getCards()) {
+      for (const subject of card.subjects || []) presentes.add(String(subject.id))
+    }
     // La elegida se agrega igual: si no, un chip seleccionado que se queda sin
     // resultados desaparecería y no habría forma de sacarlo.
     for (const id of this.state.subjectIds) presentes.add(String(id))
@@ -297,13 +301,14 @@ class BookingBoard extends Component {
   /**
    * Reservada: se vuelve a pedir el mes entero en vez de tocar el estado a
    * mano. No es solo la tarjeta que se reservó la que cambia — ese horario
-   * desaparece de todas las materias de ese docente y puede pasar a chocar con
-   * tarjetas de otros. Recalcular eso acá sería repetir lo que ya hace el
-   * backend, y es una sola llamada.
+   * puede pasar a chocar con tarjetas de otros docentes. Recalcular eso acá
+   * sería repetir lo que ya hace el backend, y es una sola llamada.
+   *
+   * `booked` lo arma el modal: la tarjeta no sabe qué materia se eligió.
    */
-  handleBooked = () => {
+  handleBooked = (booked) => {
     const { booking, from, to } = this.state
-    this.setState({ booking: null, booked: booking, selectedIso: booking.date })
+    this.setState({ booking: null, booked, selectedIso: booking.date })
     if (from && to) this.loadRange(from, to)
   }
 
@@ -371,6 +376,7 @@ class BookingBoard extends Component {
           <BookingDialog
             card={booking}
             myLessons={this.state.myLessons}
+            filterSubjectIds={this.state.subjectIds}
             onClose={this.handleCloseDialog}
             onBooked={this.handleBooked}
           />

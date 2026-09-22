@@ -10,17 +10,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## App concept
 A responsive web app (must work well on phone) that connects students and teachers.
 - **Single account type**: role is chosen at signup, not separate signup flows. On the wire, in the DB, and in frontend logic the role is **`"teacher"` or `"student"`** — English. The `user_role` enum stores this; "Docente"/"Alumno" are display text only, produced at render time. Never compare against/accept `docente`/`alumno`.
-- **Teachers**: pick which subjects they teach from a fixed list, and set their availability as a **weekly template per subject** (e.g. "Mondays 13:00–15:30"), not specific dates — the backend expands this into dated availability (see below). Classes are always **1 hour long**, starting only on `:00` or `:30`.
+- **Teachers**: pick which subjects they teach from a fixed list, and set their availability as **one weekly template** (e.g. "Mondays 13:00–15:30") — **not per subject**, and not specific dates. The backend expands this into dated availability (see below). Classes are always **1 hour long**, starting only on `:00` or `:30`.
 - **Students**: search/browse teachers, view their profile and subjects, see availability and open class slots.
-- **Booking**: a student picking a slot **reserves it** — it disappears from availability for other students once booked.
+- **Booking**: a student picking a slot **reserves it** — it disappears from availability for other students once booked. The **student chooses the subject when booking**, from the subjects that teacher teaches (`teacher_subjects`); `classes.subject_id` is where the subject lives, `availability` has none.
 - **Payments/pricing**: out of scope for this version.
 
 ### The one design decision to understand across front and back: weekly template → dated availability
-A teacher saves a **weekly template** (`{ lunes: [13:00–15:30] }`). A student books a **date** (`2026-09-14`). The backend bridges the two: `GET /api/availability` returns rows that already have a `date` and are already net of what's booked, via `PID-Back/src/lib/availabilityExpansion.js` (ported from the frontend's original `src/utils/booking.js`). Two different meanings of "booked", only one subtracted:
-- Booked **with that teacher** → subtract it (matching by teacher+date, ignoring subject — nobody teaches two subjects at once). A row left with no ranges is dropped.
+A teacher saves a **weekly template** (`{ lunes: [13:00–15:30] }`, via `PUT /api/teachers/me/availability`). A student books a **date** (`2026-09-14`). The backend bridges the two: `GET /api/availability` returns one row per **(teacher, date)** — with the teacher's `subjects: [{ id, name }]` to pick from — that already has a `date` and is already net of what's booked, via `backend/src/lib/availabilityExpansion.js` (ported from the frontend's original `src/utils/booking.js`). Teachers with no subjects aren't listed. Two different meanings of "booked", only one subtracted:
+- Booked **with that teacher** → subtract it (matching by teacher+date, whatever the subject). A row left with no ranges is dropped.
 - Booked by **this student with someone else** → don't subtract; the frontend greys it out using `/api/classes?student=me`.
 
-Rules the backend must enforce (the UI already does, but the UI can be bypassed): a class is exactly 1h starting at `:00`/`:30`; a booked hour disappears from that teacher's availability for everybody; a teacher can't double-book across subjects; a student can't have overlapping classes even by a minute; an availability block under 1h is invalid.
+Rules the backend must enforce (the UI already does, but the UI can be bypassed): a class is exactly 1h starting at `:00`/`:30`; a booked hour disappears from that teacher's availability for everybody; a teacher can't double-book; a student can't have overlapping classes even by a minute; an availability block under 1h is invalid, and blocks of the same day can't overlap; the booked subject must be one the teacher teaches.
 
 ## Local dev ports
 - Frontend: `127.0.0.1:5173`

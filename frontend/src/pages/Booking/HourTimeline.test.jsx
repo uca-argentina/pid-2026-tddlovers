@@ -73,13 +73,14 @@ describe('HourTimeline', () => {
     expect(barra('is-busy')).toBe(`${COLUMNA_12 + 4} / span 2`)
   })
 
-  it('la barra gris dice adentro de qué clase es', () => {
-    // Sin esto el gris no se entiende: dice "no podés" y no dice por qué.
+  it('la barra gris no muestra los datos de la clase', () => {
+    // Alcanza con saber que ese rato está ocupado: materia y docente de otra
+    // reserva no aportan nada al reservar.
     renderLine()
 
-    const materia = screen.getByText('Álgebra')
-    expect(materia.closest('.hour-bar')).toHaveClass('is-busy')
-    expect(screen.getByText('Martín Sosa').closest('.hour-bar')).toBe(materia.closest('.hour-bar'))
+    expect(document.querySelector('.hour-bar.is-busy')).toBeEmptyDOMElement()
+    expect(screen.queryByText('Álgebra')).not.toBeInTheDocument()
+    expect(screen.queryByText('Martín Sosa')).not.toBeInTheDocument()
   })
 
   it('solo se puede arrancar donde entra la clase entera', () => {

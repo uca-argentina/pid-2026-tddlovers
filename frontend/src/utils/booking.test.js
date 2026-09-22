@@ -11,6 +11,7 @@ import {
   groupCardsByDate,
   intersectRanges,
   normalizeText,
+  preselectedSubjectId,
   rangeOffersStartBetween,
   rangesOverlap,
   resolveQuery,
@@ -30,8 +31,10 @@ const ENTRADAS = [
   {
     teacherId: 2,
     teacherName: 'Laura Gómez',
-    subjectId: 1,
-    subjectName: 'Matemática',
+    subjects: [
+      { id: 1, name: 'Matemática' },
+      { id: 3, name: 'Álgebra' },
+    ],
     schedule: {
       lunes: [
         { start: '13:00', end: '15:30' },
@@ -42,8 +45,7 @@ const ENTRADAS = [
   {
     teacherId: 4,
     teacherName: 'Carla Benítez',
-    subjectId: 2,
-    subjectName: 'Física',
+    subjects: [{ id: 2, name: 'Física' }],
     schedule: { lunes: [{ start: '12:00', end: '17:00' }] },
   },
 ]
@@ -224,7 +226,9 @@ describe('expandAvailability', () => {
     const rows = expandAvailability(ENTRADAS, LUNES, DOMINGO)
     // Solo hay plantilla para lunes, así que dos filas (una por docente).
     expect(rows).toHaveLength(2)
-    expect(rows[0]).toMatchObject({ date: LUNES, dayKey: 'lunes', teacherId: 2, subjectId: 1 })
+    expect(rows[0]).toMatchObject({ date: LUNES, dayKey: 'lunes', teacherId: 2 })
+    // Una fila por docente, no por materia: las materias viajan adentro.
+    expect(rows[0].subjects.map((subject) => subject.id)).toEqual([1, 3])
     expect(rows[0].ranges).toEqual([
       { start: '13:00', end: '15:30' },
       { start: '16:00', end: '17:00' },
@@ -243,9 +247,9 @@ describe('expandAvailability', () => {
     expect(rows).toEqual([])
   })
 
-  it('el id identifica fecha, docente y materia', () => {
+  it('el id identifica fecha y docente', () => {
     const rows = expandAvailability(ENTRADAS, LUNES, LUNES)
-    expect(rows[0].id).toBe(`${LUNES}|2|1`)
+    expect(rows[0].id).toBe(`${LUNES}|2`)
   })
 })
 
@@ -324,8 +328,7 @@ describe('annotateClashes', () => {
         {
           teacherId: 2,
           teacherName: 'Laura Gómez',
-          subjectId: 3,
-          subjectName: 'Álgebra',
+          subjects: [{ id: 3, name: 'Álgebra' }],
           schedule: { lunes: [{ start: '08:30', end: '10:30' }] },
         },
       ],
@@ -358,9 +361,9 @@ describe('annotateClashes', () => {
 describe('groupCardsByDate', () => {
   it('agrupa por fecha y ordena por hora', () => {
     const cards = [
-      { date: LUNES, ranges: [{ start: '16:00', end: '17:00' }], subjectName: 'B', teacherName: 'B' },
-      { date: LUNES, ranges: [{ start: '09:00', end: '10:00' }], subjectName: 'A', teacherName: 'A' },
-      { date: MARTES, ranges: [{ start: '08:00', end: '09:00' }], subjectName: 'C', teacherName: 'C' },
+      { date: LUNES, ranges: [{ start: '16:00', end: '17:00' }], teacherName: 'B' },
+      { date: LUNES, ranges: [{ start: '09:00', end: '10:00' }], teacherName: 'A' },
+      { date: MARTES, ranges: [{ start: '08:00', end: '09:00' }], teacherName: 'C' },
     ]
     const porFecha = groupCardsByDate(cards)
 
@@ -373,13 +376,16 @@ describe('filterCards', () => {
   const cards = [
     {
       dayKey: 'lunes',
-      subjectId: 1,
+      subjects: [
+        { id: 1, name: 'Matemática' },
+        { id: 3, name: 'Álgebra' },
+      ],
       teacherName: 'Laura Gómez',
       ranges: [{ start: '13:00', end: '17:00' }],
     },
     {
       dayKey: 'martes',
-      subjectId: 2,
+      subjects: [{ id: 2, name: 'Física' }],
       teacherName: 'Carla Benítez',
       ranges: [{ start: '08:00', end: '11:00' }],
     },
@@ -393,8 +399,11 @@ describe('filterCards', () => {
     expect(filterCards(cards, { dayKeys: ['lunes'] })).toHaveLength(1)
   })
 
-  it('filtra por materia', () => {
+  it('filtra por materia: entra el docente que da alguna de las elegidas', () => {
     expect(filterCards(cards, { subjectIds: [2] })[0].dayKey).toBe('martes')
+    // Laura da Álgebra además de Matemática.
+    expect(filterCards(cards, { subjectIds: ['3'] })[0].teacherName).toBe('Laura Gómez')
+    expect(filterCards(cards, { subjectIds: [3, 2] })).toHaveLength(2)
   })
 
   it('filtra por docente sin importar acentos ni mayúsculas', () => {
@@ -431,6 +440,29 @@ describe('filterCards', () => {
     // sea más angosto: recortarla sería inventar otra disponibilidad.
     const resultado = filterCards(cards, { fromTime: '15:00' })
     expect(resultado[0].ranges).toEqual([{ start: '13:00', end: '17:00' }])
+  })
+})
+
+describe('preselectedSubjectId', () => {
+  const laura = { subjects: [{ id: 1, name: 'Matemática' }, { id: 3, name: 'Álgebra' }] }
+  const carla = { subjects: [{ id: 2, name: 'Física' }] }
+
+  it('si el docente da una sola materia, viene elegida', () => {
+    expect(preselectedSubjectId(carla)).toBe(2)
+  })
+
+  it('si da varias y no hay filtro, la elige el alumno', () => {
+    expect(preselectedSubjectId(laura)).toBeNull()
+  })
+
+  it('si de las que da hay una sola filtrada, viene esa', () => {
+    // El id del filtro puede venir de la URL, como string.
+    expect(preselectedSubjectId(laura, ['3'])).toBe(3)
+    expect(preselectedSubjectId(laura, [3, 2])).toBe(3)
+  })
+
+  it('si hay más de una filtrada, no adivina', () => {
+    expect(preselectedSubjectId(laura, [1, 3])).toBeNull()
   })
 })
 

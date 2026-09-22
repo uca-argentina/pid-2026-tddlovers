@@ -4,13 +4,15 @@ import BookingCard from './BookingCard.jsx'
 
 function card(overrides = {}) {
   return {
-    id: '2026-09-14|2|1',
+    id: '2026-09-14|2',
     date: '2026-09-14',
     dayKey: 'lunes',
     teacherId: 2,
     teacherName: 'Laura Gómez',
-    subjectId: 1,
-    subjectName: 'Matemática',
+    subjects: [
+      { id: 1, name: 'Matemática' },
+      { id: 3, name: 'Álgebra' },
+    ],
     ranges: [
       { start: '13:00', end: '15:30' },
       { start: '16:00', end: '17:00' },
@@ -34,9 +36,9 @@ function renderCard(overrides, onReservar = () => {}) {
   )
 }
 
-// El botón se llama por la materia y el docente, no solo "Reservar": en un día
-// con varias tarjetas todos dirían lo mismo.
-const BOTON = 'Reservar Matemática con Laura Gómez'
+// El botón se llama por el docente, no solo "Reservar": en un día con varias
+// tarjetas todos dirían lo mismo. La materia no va: se elige en el modal.
+const BOTON = 'Reservar con Laura Gómez'
 
 const choqueConLaura = {
   id: 'sl-1',
@@ -52,10 +54,10 @@ describe('BookingCard', () => {
     expect(screen.getByText('13:00 – 15:30 · 16:00 – 17:00')).toBeInTheDocument()
   })
 
-  it('dice de qué materia y de qué docente es', () => {
+  it('dice de qué docente es y qué materias da', () => {
     renderCard()
-    expect(screen.getByText('Matemática')).toBeInTheDocument()
     expect(screen.getByText('Laura Gómez')).toBeInTheDocument()
+    expect(screen.getByText('Matemática · Álgebra')).toBeInTheDocument()
   })
 
   it('muestra cuánto hay libre', () => {

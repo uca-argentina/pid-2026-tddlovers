@@ -31,6 +31,29 @@
   color: var(--color-text);
 }
 
+.booking-dialog-subjects {
+  margin: 0;
+  padding: 0;
+  border: none;
+  min-width: 0;
+}
+
+.booking-dialog-subjects legend {
+  padding: 0;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.booking-dialog-subject-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .booking-dialog-hint,
 .booking-dialog-pick {
   /* Los dos ocupan el mismo lugar: la frase de ayuda se reemplaza por la hora

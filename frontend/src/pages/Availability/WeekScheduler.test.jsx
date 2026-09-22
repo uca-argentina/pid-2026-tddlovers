@@ -343,8 +343,8 @@ describe('WeekScheduler', () => {
 
     expect(screen.getByText('Guardado')).toBeInTheDocument()
     expect(screen.getByText('Sin guardar')).toBeInTheDocument()
-    expect(screen.getByText('Otra materia')).toBeInTheDocument()
-    // Estos dos solo aparecen cuando hay alguno.
+    // Estos tres solo aparecen cuando hay alguno.
+    expect(screen.queryByText('Ocupado')).not.toBeInTheDocument()
     expect(screen.queryByText('Se va a borrar')).not.toBeInTheDocument()
     expect(screen.queryByText('Menos de 1 h')).not.toBeInTheDocument()
   })

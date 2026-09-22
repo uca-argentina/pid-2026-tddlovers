@@ -99,14 +99,10 @@ class HourTimeline extends Component {
   }
 
   /**
-   * Las clases que el alumno ya tiene, con el nombre adentro de la barra: el
-   * gris sin nombre dice "no podés" y no dice por qué.
-   *
-   * Materia y docente van en dos renglones y en spans separados porque lo que
-   * entra depende del ANCHO DE LA BARRA, no del de la pantalla: una clase de
-   * 1 h son 128px en un monitor y 45px en un teléfono, y una de 2 h es el
-   * doble. Quién se muestra lo decide el CSS con una container query sobre la
-   * barra misma (ver HourTimeline.css).
+   * Las clases que el alumno ya tiene: solo el bloque gris, sin materia ni
+   * docente adentro. Acá se está reservando con otro docente, y el detalle de
+   * esa clase no aporta nada — alcanza con saber que ese rato está ocupado,
+   * que es lo que dice la leyenda ("Ya tenés clase").
    */
   renderBusy(win) {
     return this.props.busy.map((lesson) => {
@@ -119,14 +115,7 @@ class HourTimeline extends Component {
           key={lesson.id || `ocupado-${lesson.startTime}`}
           className="hour-bar is-busy"
           style={place}
-        >
-          <span className="hour-bar-label">
-            <span className="hour-bar-subject">{lesson.subjectName || 'Tu clase'}</span>
-            {lesson.teacherName ? (
-              <span className="hour-bar-teacher">{lesson.teacherName}</span>
-            ) : null}
-          </span>
-        </div>
+        />
       )
     })
   }
