@@ -267,9 +267,13 @@ class BookingBoard extends Component {
     }))
   }
 
-  handleChangeTime = (field) => (event) => {
+  /**
+   * El slider manda las dos puntas juntas: no se puede mover una sin saber
+   * dónde quedó la otra (se empujan entre sí).
+   */
+  handleChangeRange = (fromTime, toTime) => {
     this.dropQuery()
-    this.setState({ [field]: event.target.value })
+    this.setState({ fromTime, toTime })
   }
 
   handleClearTeacher = () => {
@@ -348,7 +352,7 @@ class BookingBoard extends Component {
               hasFilters={this.hasFilters()}
               onToggleDay={this.handleToggleDay}
               onToggleSubject={this.handleToggleSubject}
-              onChangeTime={this.handleChangeTime}
+              onChangeRange={this.handleChangeRange}
               onClearTeacher={this.handleClearTeacher}
               onClear={this.handleClear}
             />

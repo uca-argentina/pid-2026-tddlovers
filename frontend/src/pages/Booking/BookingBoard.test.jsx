@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import BookingBoard from './BookingBoard.jsx'
@@ -182,14 +182,34 @@ describe('BookingBoard', () => {
   it('filtra por hora de arranque', async () => {
     renderBoard()
     await esperarCarga()
+    await abrirFiltro('Horario')
+    // El slider es un <input type="range">: se cambia con fireEvent porque
+    // userEvent no sabe arrastrar una manija.
     const desde = screen.getByLabelText('Desde')
 
     // 13:00–17:00 ofrece arrancar hasta las 16:00.
-    await userEvent.selectOptions(desde, '15:00')
+    fireEvent.change(desde, { target: { value: '15' } })
     expect(screen.getByText('13:00 – 17:00')).toBeInTheDocument()
 
-    await userEvent.selectOptions(desde, '17:00')
+    fireEvent.change(desde, { target: { value: '17' } })
     expect(screen.queryByText('13:00 – 17:00')).not.toBeInTheDocument()
+  })
+
+  it('las manijas del horario no se cruzan', async () => {
+    // Sin esto se podría armar un rango invertido, que no devuelve nada y
+    // obligaba a un cartel de advertencia.
+    renderBoard()
+    await esperarCarga()
+    await abrirFiltro('Horario')
+
+    const desde = screen.getByLabelText('Desde')
+    const hasta = screen.getByLabelText('Hasta')
+
+    fireEvent.change(hasta, { target: { value: '10' } })
+    // Se la empuja más allá de "hasta": queda una hora antes, no después.
+    fireEvent.change(desde, { target: { value: '20' } })
+
+    expect(Number(desde.value)).toBeLessThan(Number(hasta.value))
   })
 
   it('el número verde del día es cuántas tarjetas hay', async () => {

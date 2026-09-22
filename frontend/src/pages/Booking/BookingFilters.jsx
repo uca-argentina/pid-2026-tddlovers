@@ -1,18 +1,9 @@
 import { Component } from 'react'
 import { ChevronRightIcon, ErrorIcon } from '../../components/icons.jsx'
-import {
-  DAY_KEYS,
-  DAY_LABELS,
-  slotIndexToTime,
-  SLOTS_PER_DAY,
-  timeToSlotIndex,
-} from '../../utils/availability.js'
+import TimeRangeSlider from './TimeRangeSlider.jsx'
+import { DAY_KEYS, DAY_LABELS } from '../../utils/availability.js'
 import { WEEKDAY_LABELS } from '../../utils/calendar.js'
 import './BookingFilters.css'
-
-// Las 48 medias horas del día, que es exactamente lo que ofrecen los dos
-// selects. No hay concepto nuevo: es slotIndexToTime sobre SLOTS_PER_DAY.
-const HORAS = Array.from({ length: SLOTS_PER_DAY }, (_, index) => slotIndexToTime(index))
 
 /**
  * El panel de filtros: días, materias y las dos horas. Todo se combina con Y,
@@ -28,13 +19,11 @@ const HORAS = Array.from({ length: SLOTS_PER_DAY }, (_, index) => slotIndexToTim
  * `hidden`: el estado de los filtros no depende de si la sección está abierta,
  * y así plegar no borra lo elegido.
  *
- * Los dos selects son "Desde" y "Hasta" y los dos son opcionales, porque así
- * salen los tres casos con un solo control: solo Desde es "que arranque
- * después de", solo Hasta es "que arranque antes de", y los dos juntos es
- * "entre". Son los primeros <select> de la app: para 48 opciones dan teclado,
- * búsqueda al tipear y la rueda nativa del teléfono gratis, mientras que una
- * lista propia necesitaría una capa flotante y una trampa de foco que la app
- * todavía no tiene.
+ * El horario se elige con un slider de dos manijas (ver TimeRangeSlider) y no
+ * con dos <select>: las 48 medias horas en una lista desplegable eran
+ * incómodas de recorrer para algo que en la práctica es "de tarde". Hacia
+ * afuera el filtro no cambió — sigue siendo fromTime/toTime en "HH:MM", vacío
+ * cuando no hay límite.
  */
 class BookingFilters extends Component {
   // Qué secciones están abiertas. Se decide una sola vez, al montar, a partir
@@ -59,13 +48,6 @@ class BookingFilters extends Component {
     if (seEligioMateria && !this.state.abiertas.materias) {
       this.setState((prev) => ({ abiertas: { ...prev.abiertas, materias: true } }))
     }
-  }
-
-  /** Desde después de Hasta no se corrige solo: se avisa y no da resultados. */
-  isRangeBackwards() {
-    const { fromTime, toTime } = this.props
-    if (!fromTime || !toTime) return false
-    return timeToSlotIndex(fromTime) > timeToSlotIndex(toTime)
   }
 
   handleToggleSection = (key) => () => {
@@ -112,7 +94,10 @@ class BookingFilters extends Component {
       'dias',
       'Días',
       dayKeys.length,
-      <div className="booking-filter-chips" role="group" aria-label="Días">
+      // Grilla y no chips que se envuelven: los siete días son etiquetas de
+      // largo parejo y en columnas quedan mucho más ordenados. Las materias
+      // sí van envueltas, porque sus nombres miden cualquier cosa.
+      <div className="booking-filter-days" role="group" aria-label="Días">
         {DAY_KEYS.map((dayKey, index) => {
           const activo = dayKeys.includes(dayKey)
           return (
@@ -162,39 +147,15 @@ class BookingFilters extends Component {
   }
 
   renderHours() {
-    const { fromTime, toTime, onChangeTime } = this.props
-    // Cuenta como UN filtro aunque estén las dos horas: es un solo rango.
+    const { fromTime, toTime, onChangeRange } = this.props
+    // Cuenta como UN filtro aunque estén las dos puntas: es un solo rango.
     const activos = fromTime || toTime ? 1 : 0
 
     return this.renderSection(
       'horario',
       'Horario',
       activos,
-      <div className="booking-filter-times">
-        <label className="booking-filter-time">
-          <span>Desde</span>
-          <select value={fromTime} onChange={onChangeTime('fromTime')}>
-            <option value="">Cualquiera</option>
-            {HORAS.map((hora) => (
-              <option key={hora} value={hora}>
-                {hora}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="booking-filter-time">
-          <span>Hasta</span>
-          <select value={toTime} onChange={onChangeTime('toTime')}>
-            <option value="">Cualquiera</option>
-            {HORAS.map((hora) => (
-              <option key={hora} value={hora}>
-                {hora}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>,
+      <TimeRangeSlider fromTime={fromTime} toTime={toTime} onChange={onChangeRange} />,
     )
   }
 
@@ -223,10 +184,6 @@ class BookingFilters extends Component {
               Docente: {teacherQuery}
             </button>
           </div>
-        ) : null}
-
-        {this.isRangeBackwards() ? (
-          <p className="booking-filters-hint">Elegí una hora de fin posterior a la de inicio.</p>
         ) : null}
 
         {hasFilters ? (

@@ -65,9 +65,11 @@
 }
 
 /* Cuántos filtros tiene elegidos la sección: es lo único que se ve de su
-   contenido cuando está plegada, así que va en el color de acento. */
+   contenido cuando está plegada, así que va en el color de acento. Va al
+   lado del título y no contra el borde derecho: ahí se leía como un badge
+   suelto en vez de como parte de la sección. */
 .booking-filter-count {
-  margin-left: auto;
+  margin-right: auto;
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
@@ -91,26 +93,46 @@
   gap: 6px;
 }
 
-/* Los chips de este panel son más chicos que los del registro: acá hay
-   muchos más y entran en una columna angosta. */
-.booking-filters .subject-chip {
-  padding: 6px 12px;
-  font-size: 12.5px;
+/* Los siete días en columnas parejas (4 + 3): son etiquetas de largo
+   similar, así que una grilla se lee más ordenada que el envuelto. */
+.booking-filter-days {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
 }
 
-/* En columna los dos selects no entran uno al lado del otro: van apilados y
-   cada uno ocupa el ancho, con la etiqueta a la izquierda. */
+/* Los chips de este panel son más chicos que los del registro: acá hay
+   muchos más y entran en una columna angosta. El borde de 1px los alinea
+   con el resto de las superficies de la app (las tarjetas también son 1px). */
+.booking-filters .subject-chip {
+  padding: 7px 12px;
+  font-size: 12.5px;
+  border-width: 1px;
+  justify-content: center;
+}
+
+.booking-filters .subject-chip:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* En columna los dos selects no entran uno al lado del otro: van apilados,
+   cada uno con su etiqueta arriba y ocupando el ancho completo. */
 .booking-filter-times {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .booking-filter-time {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12.5px;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.booking-filter-time-label {
+  font-size: 11.5px;
+  font-weight: 600;
   color: var(--color-text-muted);
 }
 
@@ -119,29 +141,35 @@
    que el desplegable nativo siga el tema solo. */
 .booking-filter-time select {
   appearance: none;
-  flex: 1;
-  min-width: 0;
-  border: 1.5px solid var(--color-border);
+  width: 100%;
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   background-color: var(--color-bg);
   color: var(--color-text);
   font-family: inherit;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
-  padding: 7px 26px 7px 10px;
+  padding: 9px 30px 9px 12px;
   cursor: pointer;
-  transition: border-color 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 
   background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
     linear-gradient(135deg, currentColor 50%, transparent 50%);
-  background-position: calc(100% - 14px) calc(50% + 1px), calc(100% - 9px) calc(50% + 1px);
+  background-position: calc(100% - 16px) calc(50% + 1px), calc(100% - 11px) calc(50% + 1px);
   background-size: 5px 5px, 5px 5px;
   background-repeat: no-repeat;
 }
 
-.booking-filter-time select:hover,
+.booking-filter-time select:hover {
+  border-color: var(--color-text-muted);
+}
+
+/* El mismo anillo de foco que los inputs del resto de la app (ver
+   FormField.css): así el panel no inventa su propio estado de foco. */
 .booking-filter-time select:focus-visible {
+  outline: none;
   border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 20%, transparent);
 }
 
 /* El chip del docente buscado, que llega desde el buscador de la barra. */
@@ -152,12 +180,26 @@
   padding: 6px 6px 0;
 }
 
+/* Este chip lleva un nombre entero, así que a diferencia de los de días y
+   materias se deja crecer y corta con "..." en vez de desbordar. */
+.booking-filters-foot .subject-chip {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .booking-filters-clear {
   width: 100%;
   margin-top: 10px;
   padding: 9px 14px;
   font-size: 12.5px;
   border-radius: 10px;
+  /* 1px como el resto del panel: .btn-ghost trae 1px, pero los chips y los
+     selects se declaran acá, así que se deja explícito para que los tres
+     controles se vean del mismo peso. */
+  border-width: 1px;
 }
 
 .booking-filters-hint {

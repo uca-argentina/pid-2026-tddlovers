@@ -1,0 +1,122 @@
+/* Dos <input type="range"> apilados sobre una misma barra. El truco es que
+   los inputs sean transparentes y NO reciban el puntero salvo en sus manijas:
+   si lo recibieran en toda su caja, el de arriba taparía al de abajo y una de
+   las dos manijas sería imposible de agarrar. */
+
+.time-range {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.time-range-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.time-range-dash {
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+
+.time-range-track {
+  position: relative;
+  height: 20px;
+  display: flex;
+  align-items: center;
+}
+
+/* La barra de fondo y el tramo elegido, los dos decorativos. */
+.time-range-rail,
+.time-range-fill {
+  position: absolute;
+  height: 4px;
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.time-range-rail {
+  left: 0;
+  right: 0;
+  background: var(--color-border);
+}
+
+.time-range-fill {
+  background: var(--color-primary);
+}
+
+.time-range-input {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  margin: 0;
+  height: 20px;
+  appearance: none;
+  background: none;
+  /* La caja entera es "transparente" al mouse; solo las manijas de abajo lo
+     vuelven a activar. Sin esto, el segundo input taparía al primero. */
+  pointer-events: none;
+}
+
+/* Las manijas: una regla por motor, porque ::-webkit y ::-moz no se pueden
+   agrupar en un mismo selector (si uno no se entiende, se descarta la regla
+   completa). */
+.time-range-input::-webkit-slider-thumb {
+  appearance: none;
+  pointer-events: auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-surface-solid);
+  border: 2px solid var(--color-primary);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.25);
+  cursor: grab;
+  transition: transform 0.1s ease;
+}
+
+.time-range-input::-moz-range-thumb {
+  pointer-events: auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-surface-solid);
+  border: 2px solid var(--color-primary);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.25);
+  cursor: grab;
+  transition: transform 0.1s ease;
+}
+
+.time-range-input:active::-webkit-slider-thumb {
+  cursor: grabbing;
+  transform: scale(1.12);
+}
+
+.time-range-input:active::-moz-range-thumb {
+  cursor: grabbing;
+  transform: scale(1.12);
+}
+
+/* El foco se dibuja en la manija y no en la caja del input, que ocupa todo
+   el ancho y daría un recuadro enorme. */
+.time-range-input:focus-visible {
+  outline: none;
+}
+
+.time-range-input:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 30%, transparent);
+}
+
+.time-range-input:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 30%, transparent);
+}
+
+/* La pista nativa se esconde: la que se ve es .time-range-rail. */
+.time-range-input::-webkit-slider-runnable-track {
+  background: none;
+}
+
+.time-range-input::-moz-range-track {
+  background: none;
+}
