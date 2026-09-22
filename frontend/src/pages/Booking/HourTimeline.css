@@ -1,0 +1,210 @@
+/* La línea de horas del modal de reserva: un carril con barras redondeadas,
+   una fila sola, tipo diagrama de Gantt.
+
+   Nada de líneas separando cada media hora: la grilla la marcan las etiquetas
+   de arriba y las barras se leen por dónde empiezan y dónde terminan, que es
+   lo que importa. Por eso tampoco hay acá el truco de gap:1px sobre un fondo
+   del color del borde que usan las otras grillas de la app. */
+
+.hour-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hour-ticks {
+  display: grid;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.hour-tick {
+  /* Pegada al borde izquierdo de su bloque: la etiqueta marca DÓNDE arranca
+     esa hora, no el centro del bloque. */
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+
+/* El carril. Las dos capas —las barras y los botones— se apilan en la misma
+   celda de grilla en vez de posicionarse absolutas: así comparten las mismas
+   48 columnas sin tener que repetir medidas. */
+.hour-line {
+  display: grid;
+  height: 48px;
+  border-radius: 999px;
+  /* Apenas visible: marca hasta dónde llega el día sin competir con las
+     barras. Donde el docente no da clase no hay nada, que es justo lo que
+     tiene que decir ese vacío. */
+  background: color-mix(in srgb, var(--color-text-muted) 8%, var(--color-surface-solid));
+}
+
+.hour-line > * {
+  grid-area: 1 / 1;
+  display: grid;
+  grid-template-rows: 1fr;
+}
+
+/* Solo dibujo: los clics son de la capa de arriba. */
+.hour-bars {
+  pointer-events: none;
+}
+
+/* Todas en la MISMA fila y apiladas por orden de aparición: si no, la grilla
+   les busca una fila libre a las que se pisan (el azul de la selección cae
+   siempre adentro del verde) y quedan una abajo de la otra. */
+.hour-bar {
+  position: relative;
+  grid-row: 1;
+  /* Más bajas que el carril: una clase de 1 h son 37px de ancho, y con la
+     altura completa la cápsula quedaría más alta que ancha, o sea un círculo.
+     Así se lee como una barra acostada aunque sea corta. */
+  align-self: center;
+  height: 34px;
+  border-radius: 999px;
+}
+
+/* Verde: el docente está libre. */
+.hour-bar.is-free {
+  background: color-mix(in srgb, var(--color-success) 55%, var(--color-surface-solid));
+}
+
+/* Gris: el alumno ya tiene clase, con cualquier docente y de cualquier
+   materia. Se ve, pero no se puede elegir. */
+.hour-bar.is-busy {
+  display: flex;
+  align-items: center;
+  /* El nombre no puede salirse de la barra: lo que sobra se corta. Recorta con
+     la forma redondeada, así que las puntas siguen limpias. */
+  overflow: hidden;
+  padding: 0 10px;
+  background: color-mix(in srgb, var(--color-text-muted) 38%, var(--color-surface-solid));
+  /* La barra se mide a sí misma: lo que entra adentro no depende del ancho de
+     la pantalla sino del de la barra, que cambia con cuánto dura la clase y
+     con cuántas horas muestre la línea. */
+  container-type: inline-size;
+}
+
+/* Azul lleno: la hora elegida. */
+.hour-bar.is-selected {
+  background: var(--color-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 30%, transparent);
+}
+
+/* El mismo azul pero translúcido: lo que se está señalando. Que deje ver lo de
+   abajo es justamente lo que lo hace leer como una propuesta y no como algo
+   ya decidido. */
+.hour-bar.is-hover {
+  background: color-mix(in srgb, var(--color-primary) 45%, transparent);
+}
+
+/* Materia arriba y docente abajo: en una barra de 1 h las dos cosas no entran
+   en el mismo renglón, y en dos sí. */
+.hour-bar-label {
+  /* Escondido mientras la barra sea muy angosta: media palabra cortada no
+     dice nada y ensucia. Las reglas de abajo lo van mostrando a medida que
+     hay lugar. */
+  display: none;
+  min-width: 0;
+  font-size: 11px;
+  /* 1.3 y no 1: con menos, las letras con cola (g, j, p, q, y) se cortan. */
+  line-height: 1.3;
+  font-weight: 600;
+  color: var(--color-text);
+  pointer-events: none;
+}
+
+.hour-bar-subject,
+.hour-bar-teacher {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hour-bar-teacher {
+  display: none;
+  font-weight: 500;
+  opacity: 0.85;
+}
+
+/* Los cortes salen de lo que mide el texto de verdad: una materia son unos
+   60px y un nombre con apellido unos 80px, más los 20px de relleno de la
+   barra. Una clase de 1 h es de 128px en un monitor —entran las dos cosas— y
+   de 45px en un teléfono, donde no entra ninguna y por eso no se muestra
+   nada. */
+@container (min-width: 84px) {
+  .hour-bar-label {
+    display: block;
+  }
+}
+
+@container (min-width: 104px) {
+  .hour-bar-teacher {
+    display: block;
+  }
+}
+
+.hour-pick {
+  border: none;
+  padding: 0;
+  background: transparent;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.hour-pick:disabled {
+  cursor: default;
+}
+
+.hour-pick:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+.hour-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  list-style: none;
+}
+
+.hour-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hour-swatch {
+  width: 14px;
+  height: 10px;
+  border-radius: 999px;
+}
+
+.hour-swatch.is-free {
+  background: color-mix(in srgb, var(--color-success) 55%, var(--color-surface-solid));
+}
+
+.hour-swatch.is-busy {
+  background: color-mix(in srgb, var(--color-text-muted) 38%, var(--color-surface-solid));
+}
+
+.hour-swatch.is-selected {
+  background: var(--color-primary);
+}
+
+@media (max-width: 600px) {
+  .hour-line {
+    height: 52px;
+  }
+
+  .hour-bar {
+    height: 38px;
+  }
+
+  .hour-ticks {
+    font-size: 11px;
+  }
+
+}

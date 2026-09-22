@@ -1,0 +1,96 @@
+/* La primera capa flotante de la app. El z-index más alto que había era 10 (la
+   barra de arriba y el globito de copiar días), así que 100 deja lugar de
+   sobra en el medio si algún día hace falta algo intermedio. */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: color-mix(in srgb, #0b1220 55%, transparent);
+  /* El desenfoque es el mismo de la barra: da profundidad sin tapar del todo
+     lo de atrás, que ayuda a no perder el contexto. */
+  backdrop-filter: blur(3px);
+}
+
+.modal-panel {
+  width: 100%;
+  max-width: 640px;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 22px 24px 24px;
+  border: 1.5px solid var(--color-border);
+  border-radius: 24px;
+  background: var(--color-surface-solid);
+  box-shadow: var(--shadow-card);
+}
+
+/* Más ancho para lo que se entiende mejor con lugar. El ancho de la pantalla
+   lo sigue mandando `width: 100%` de arriba, así que en un teléfono esto no
+   cambia nada. */
+.modal-panel.is-wide {
+  max-width: 960px;
+  padding: 26px 30px 28px;
+}
+
+.modal-panel:focus-visible {
+  outline: none;
+}
+
+.modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.modal-title {
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.modal-close {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.modal-close:hover {
+  background: color-mix(in srgb, var(--color-text-muted) 14%, transparent);
+  color: var(--color-text);
+}
+
+.modal-close svg {
+  width: 16px;
+  height: 16px;
+}
+
+@media (max-width: 600px) {
+  .modal-backdrop {
+    padding: 12px;
+    /* En un teléfono el modal se pega abajo: queda más cerca del pulgar que
+       flotando en el medio. */
+    align-items: flex-end;
+  }
+
+  /* El ancho extra no trae relleno extra: en un teléfono se come la pantalla. */
+  .modal-panel,
+  .modal-panel.is-wide {
+    padding: 18px 16px 20px;
+    border-radius: 20px;
+  }
+}

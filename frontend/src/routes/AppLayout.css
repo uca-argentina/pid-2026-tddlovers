@@ -1,0 +1,26 @@
+/* Altura fija (no min-height): el calendario ocupa exactamente lo que sobra
+   abajo de la barra y no hace scrollear la página. Las pantallas que sí son
+   largas (perfil) scrollean adentro de .app-main. */
+.app-shell {
+  height: 100svh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg);
+}
+
+.app-main {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  width: 100%;
+  max-width: 1440px;
+  margin-inline: auto;
+  padding: 16px;
+}
+
+@media (max-width: 600px) {
+  .app-main {
+    padding: 12px;
+  }
+}

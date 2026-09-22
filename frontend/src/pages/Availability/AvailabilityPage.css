@@ -1,0 +1,169 @@
+.availability-page {
+  width: 100%;
+  /* El editor usa todo el ancho que le den: son 7 columnas por 48 filas. El
+     placeholder y el elegidor se limitan solos más abajo. */
+  max-width: 1100px;
+  margin-inline: auto;
+}
+
+/* El tablero del alumno ocupa exactamente la pantalla: el calendario se
+   estira hasta donde llega y la lista de tarjetas scrollea adentro, en vez de
+   estirar la página. Sin el height acá la cadena se corta —.booking-board es
+   height:100% de este div— y el calendario queda del alto de su contenido. */
+.availability-page.is-board {
+  height: 100%;
+  min-height: 0;
+  max-width: none;
+}
+
+.availability-empty,
+.availability-chooser {
+  max-width: 720px;
+  margin-inline: auto;
+}
+
+.availability-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+  padding: 48px 20px;
+  border: 1.5px solid var(--color-border);
+  border-radius: 24px;
+  background: var(--color-surface-solid);
+}
+
+.availability-empty svg {
+  width: 36px;
+  height: 36px;
+  color: var(--color-text-muted);
+  margin-bottom: 4px;
+}
+
+.availability-title {
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.availability-hint {
+  font-size: 13.5px;
+  color: var(--color-text-muted);
+  max-width: 44ch;
+}
+
+.availability-warning {
+  font-size: 13px;
+  color: var(--color-warning);
+}
+
+@media (max-width: 480px) {
+  .availability-empty {
+    padding: 36px 16px;
+    border-radius: 20px;
+  }
+
+  .availability-title {
+    font-size: 17px;
+  }
+}
+
+/* --- Elegir materia ------------------------------------------------------ */
+
+.availability-chooser {
+  border: 1.5px solid var(--color-border);
+  border-radius: 24px;
+  background: var(--color-surface-solid);
+  padding: 28px 24px;
+}
+
+.availability-chooser .availability-hint {
+  margin-top: 6px;
+}
+
+.availability-subject-list {
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.availability-subject-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1.5px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  text-decoration: none;
+  transition: border-color 0.15s ease;
+}
+
+.availability-subject-link:hover {
+  border-color: var(--color-primary);
+}
+
+.availability-subject-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.availability-subject-total {
+  flex-shrink: 0;
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+}
+
+/* --- Editor -------------------------------------------------------------- */
+
+/* Acá no hay tarjeta: la grilla ya tiene su propio marco y meterla adentro de
+   otra caja le come ancho, que es justo lo que más necesita. */
+.availability-editor-head {
+  margin-bottom: 16px;
+}
+
+.availability-editor .availability-hint {
+  margin-top: 4px;
+  max-width: none;
+}
+
+.availability-editor .btn-row {
+  margin-top: 16px;
+}
+
+.availability-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.availability-back {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1.5px solid var(--color-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.availability-back:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.availability-back svg {
+  width: 16px;
+  height: 16px;
+}

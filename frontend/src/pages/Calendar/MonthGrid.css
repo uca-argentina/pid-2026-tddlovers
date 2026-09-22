@@ -1,0 +1,294 @@
+/* Incluye los estilos de DayCell: fuera de la grilla no significan nada, así
+   que no les hacemos un archivo propio (misma excepción que AuthHero con
+   ui.css). */
+
+.month-grid {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Alto de cada línea de clase dentro de una celda. CalendarPage lo lee de
+   acá con getComputedStyle para saber cuántas entran, así que el número vive
+   en un solo lado: este. */
+.month-grid-weeks {
+  --day-event-line: 19px;
+  /* El radio del marco y el de adentro. El de adentro es el de afuera MENOS el
+     borde, y es el que tienen que copiar las cuatro celdas de las esquinas: el
+     overflow:hidden recorta con esa curva, así que una celda cuadrada pegada al
+     borde pierde el anillo de .is-selected (y el outline del foco) en una
+     diagonal justo en la esquina. */
+  --month-radius: 12px;
+  --month-radius-inner: 11px;
+
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: repeat(6, 1fr);
+  /* Los "gap" de 1px sobre un fondo del color del borde son las líneas
+     finitas de la grilla: las celdas tapan el resto con su propio fondo. */
+  gap: 1px;
+  background: var(--color-border);
+  border: 1px solid var(--color-border);
+  border-radius: var(--month-radius);
+  overflow: hidden;
+}
+
+.month-grid-week {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+  background: var(--color-border);
+  min-height: 0;
+}
+
+.month-grid-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.month-grid-weekday {
+  text-align: center;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  padding-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.day-cell {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  border: none;
+  /* El fondo va por variable y no directo: así el tinte verde de "hay algo
+     para reservar", el gris de los días de relleno, el hover y el seleccionado
+     se COMPONEN en vez de pelearse. Los cuatro son .day-cell.is-* con la misma
+     especificidad, así que sin esto gana el orden del archivo y se pierde el
+     que quede arriba. */
+  --cell-bg: var(--color-surface-solid);
+  background: var(--cell-bg);
+  color: var(--color-text);
+  font-size: 13px;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  padding: 4px 5px;
+  overflow: hidden;
+  transition: background-color 0.15s ease;
+}
+
+/* Tinte verde apenas perceptible: "acá hay algo para reservar". El color es
+   --color-success, que este archivo venía reservando para esta pantalla. */
+.day-cell.is-free {
+  --cell-bg: color-mix(in srgb, var(--color-success) 10%, var(--color-surface-solid));
+}
+
+.day-cell:hover {
+  background: color-mix(in srgb, var(--color-primary) 8%, var(--cell-bg));
+}
+
+/* Las cuatro esquinas. Siempre hay 6 semanas de 7 días (WEEKS_IN_GRID), así
+   que la posición en el DOM es la posición en pantalla y :first-child /
+   :last-child alcanzan — no hace falta que JS marque nada. */
+.month-grid-week:first-child .day-cell:first-child {
+  border-top-left-radius: var(--month-radius-inner);
+}
+
+.month-grid-week:first-child .day-cell:last-child {
+  border-top-right-radius: var(--month-radius-inner);
+}
+
+.month-grid-week:last-child .day-cell:first-child {
+  border-bottom-left-radius: var(--month-radius-inner);
+}
+
+.month-grid-week:last-child .day-cell:last-child {
+  border-bottom-right-radius: var(--month-radius-inner);
+}
+
+/* Los días de relleno (del mes anterior o del siguiente) se pueden tocar,
+   pero se ven apagados para que no compitan con el mes que se está viendo. */
+.day-cell.is-outside {
+  --cell-bg: color-mix(in srgb, var(--color-bg) 60%, var(--color-surface-solid));
+  color: var(--color-text-muted);
+}
+
+.day-cell.is-outside.is-free {
+  --cell-bg: color-mix(in srgb, var(--color-success) 6%, var(--color-bg));
+}
+
+.day-cell.is-selected {
+  background: color-mix(in srgb, var(--color-primary) 14%, var(--cell-bg));
+  box-shadow: inset 0 0 0 2px var(--color-primary);
+}
+
+.day-cell-number {
+  align-self: flex-end;
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  min-width: 20px;
+  text-align: center;
+}
+
+/* Hoy: el número adentro de un círculo lleno, como en el calendario de
+   Apple (el resto de la celda queda legible). */
+.day-cell.is-today .day-cell-number {
+  background: var(--color-primary);
+  color: #fff;
+  border-radius: 50%;
+  font-weight: 700;
+}
+
+/* El contenedor de las clases se queda con todo el alto que sobra, sin
+   importar cuántas haya: eso es lo que hace que medirlo dé el espacio
+   disponible y no el que ya está ocupado. */
+.day-cell-events {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.day-event {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: var(--day-event-line, 19px);
+  flex-shrink: 0;
+  font-size: 11.5px;
+  /* No puede ser 1: con line-height:1 la caja de línea mide exactamente el
+     font-size y las colas de las letras (q y p j g) se salen por abajo. Como
+     .day-event-title necesita overflow:hidden para el "...", esas colas no
+     se desbordan: se cortan. 1.35 da una caja de ~15.5px, que sigue entrando
+     holgada en los 19px fijos de la fila. */
+  line-height: 1.35;
+  padding: 0 2px;
+  border-radius: 4px;
+  min-width: 0;
+}
+
+/* El punto de una clase propia es azul y no distingue nada más: solo marca
+   "acá hay una clase". El verde queda para los horarios libres de abajo. */
+.day-event-dot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-primary);
+}
+
+/* Horarios libres para reservar: verde, y el número aparte del texto para que
+   sobreviva al breakpoint donde .day-event-title se esconde. */
+.day-event-free .day-event-dot {
+  background: var(--color-success);
+}
+
+.day-event-free .day-event-title {
+  color: var(--color-success);
+  font-weight: 600;
+}
+
+.day-event-free-count {
+  flex-shrink: 0;
+  font-weight: 700;
+  color: var(--color-success);
+  font-variant-numeric: tabular-nums;
+}
+
+.day-event-time {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.day-event-title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.day-event-more {
+  height: var(--day-event-line, 19px);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding-left: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+/* En pantallas chicas la grilla deja de estirarse para llenar el alto: las
+   filas toman una altura mínima y el scroll lo hace .app-main. */
+@media (max-width: 900px) {
+  .month-grid-weeks {
+    grid-template-rows: repeat(6, minmax(76px, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .month-grid-weeks {
+    /* Acá cada clase es un puntito de 10px que además se acomoda en fila,
+       así que "la altura de una línea" es mucho menor que en escritorio. Si
+       no se ajusta, CalendarPage calcula que entra una sola y casi todo se
+       convierte en un "+N". */
+    --day-event-line: 9px;
+
+    grid-template-rows: repeat(6, minmax(62px, 1fr));
+  }
+
+  .day-cell {
+    padding: 3px;
+    font-size: 12px;
+  }
+
+  /* En un teléfono no entra el texto de cada clase: dejamos solo los
+     puntitos, y el detalle se lee en la lista de abajo. */
+  .day-event-time,
+  .day-event-title {
+    display: none;
+  }
+
+  .day-event {
+    height: 10px;
+    padding: 0;
+    justify-content: flex-start;
+  }
+
+  /* El número de libres sobrevive: es lo único que distingue un día con
+     horarios para reservar cuando las clases son solo puntitos. */
+  .day-event-free {
+    gap: 2px;
+  }
+
+  .day-event-free-count {
+    font-size: 9px;
+    line-height: 1;
+  }
+
+  .day-cell-events {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: 3px;
+    padding-top: 2px;
+  }
+
+  .day-event-more {
+    height: 10px;
+    padding-left: 0;
+    font-size: 10px;
+  }
+}

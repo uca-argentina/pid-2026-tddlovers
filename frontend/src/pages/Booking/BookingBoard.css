@@ -1,0 +1,43 @@
+/* Dos columnas, igual que el calendario de "mis clases" (ver
+   CalendarPage.css): el detalle a la izquierda y el calendario a la derecha,
+   con el calendario primero en el DOM y mandado a la derecha con `order`.
+   Van duplicadas y no compartidas a propósito: son veinte líneas declarativas
+   y las dos pantallas difieren de verdad (acá el panel es más ancho porque las
+   tarjetas tienen botón, y arriba hay una fila de filtros). */
+
+.booking-board {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.booking-panes {
+  display: flex;
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+}
+
+.booking-aside {
+  order: -1;
+  width: 360px;
+  flex-shrink: 0;
+  min-height: 0;
+}
+
+@media (max-width: 900px) {
+  .booking-board {
+    height: auto;
+  }
+
+  .booking-panes {
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .booking-aside {
+    order: 0;
+    width: 100%;
+  }
+}

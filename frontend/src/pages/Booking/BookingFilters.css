@@ -1,0 +1,118 @@
+.booking-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 14px 24px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  border: 1.5px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--color-surface-solid);
+}
+
+.booking-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.booking-filter-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.booking-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Los chips de la barra son más chicos que los del registro: acá hay muchos
+   más y tienen que entrar en una fila. */
+.booking-filters .subject-chip {
+  padding: 6px 12px;
+  font-size: 12.5px;
+}
+
+.booking-filter-times {
+  display: flex;
+  gap: 10px;
+}
+
+.booking-filter-time {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+}
+
+/* appearance: none + el mismo borde que el resto para que el select no
+   desentone; la flecha la dibuja el background. El color-scheme de :root hace
+   que el desplegable nativo siga el tema solo. */
+.booking-filter-time select {
+  appearance: none;
+  border: 1.5px solid var(--color-border);
+  border-radius: 10px;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  padding: 7px 26px 7px 10px;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 14px) calc(50% + 1px), calc(100% - 9px) calc(50% + 1px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+
+.booking-filter-time select:hover,
+.booking-filter-time select:focus-visible {
+  border-color: var(--color-primary);
+}
+
+.booking-filters-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  align-self: flex-end;
+}
+
+.booking-filters-clear {
+  width: auto;
+  padding: 8px 14px;
+  font-size: 12.5px;
+  border-radius: 10px;
+}
+
+.booking-filters-hint {
+  flex-basis: 100%;
+  font-size: 12.5px;
+  color: var(--color-warning);
+}
+
+@media (max-width: 900px) {
+  .booking-filters-foot {
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 600px) {
+  .booking-filters {
+    gap: 12px 16px;
+    padding: 10px 12px;
+  }
+
+  .booking-filter-times {
+    flex-wrap: wrap;
+  }
+}

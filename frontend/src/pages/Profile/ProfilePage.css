@@ -1,0 +1,239 @@
+/* .app-main ahora es ancho (lo necesita el calendario), así que las
+   pantallas angostas se limitan solas. */
+.profile-page {
+  width: 100%;
+  max-width: 720px;
+  margin-inline: auto;
+}
+
+.profile-card {
+  background: var(--color-surface-solid);
+  border: 1.5px solid var(--color-border);
+  border-radius: 24px;
+  box-shadow: var(--shadow-soft);
+  padding: 24px 20px;
+}
+
+.profile-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--color-text-muted);
+  padding: 40px 20px;
+}
+
+.profile-identity {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.profile-avatar {
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.profile-name {
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.profile-role {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 3px 10px;
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--color-primary);
+}
+
+.profile-section {
+  margin-top: 24px;
+}
+
+.profile-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 8px;
+}
+
+.profile-meta {
+  font-size: 14px;
+  color: var(--color-text);
+  margin-bottom: 4px;
+}
+
+.profile-role-hint {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-top: 6px;
+}
+
+.profile-readonly {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.profile-readonly-row {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.profile-readonly-label {
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+  min-width: 78px;
+  flex-shrink: 0;
+}
+
+.profile-readonly-value {
+  font-size: 14px;
+  color: var(--color-text);
+  margin: 0;
+  word-break: break-word;
+}
+
+.profile-subject-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.profile-subject-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1.5px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--color-bg);
+}
+
+.profile-subject-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.profile-subject-link {
+  flex-shrink: 0;
+  border: 1.5px solid var(--color-primary);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: var(--color-primary);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 6px 12px;
+  text-decoration: none;
+  transition: background-color 0.15s ease;
+}
+
+.profile-subject-link:hover {
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+}
+
+.profile-subject-remove {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  padding: 6px 4px;
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.profile-subject-remove:hover {
+  color: var(--color-danger);
+}
+
+.profile-subsection-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  margin: 18px 0 8px;
+}
+
+.profile-subject-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 480px) {
+  .profile-card {
+    padding: 20px 16px;
+    border-radius: 20px;
+  }
+
+  .profile-avatar {
+    width: 48px;
+    height: 48px;
+    font-size: 17px;
+  }
+
+  .profile-name {
+    font-size: 17px;
+  }
+
+  /* A 320px la fila de materia no entra en una línea. */
+  .profile-subject-row {
+    flex-wrap: wrap;
+  }
+
+  .profile-readonly-row {
+    flex-direction: column;
+    gap: 2px;
+  }
+}
+
+/* Cerrar sesión no es una acción del formulario: va separado de Guardar y
+   Cancelar, y más apagado, para que no compita con ellos. */
+.profile-logout {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1.5px solid var(--color-border);
+  display: flex;
+  justify-content: center;
+}
+
+.profile-logout-link {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  padding: 6px 10px;
+  border-radius: 10px;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.profile-logout-link:hover {
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+}

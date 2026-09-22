@@ -1,0 +1,69 @@
+.subject-search {
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.subject-search input {
+  width: 100%;
+  font-size: 14px;
+  padding: 10px 14px 10px 36px;
+  border-radius: 12px;
+  border: 1.5px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  outline: none;
+}
+
+.subject-search input:focus {
+  border-color: var(--color-primary);
+}
+
+.subject-search svg {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  color: var(--color-text-muted);
+}
+
+.subject-list {
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 2px;
+}
+
+/* .subject-chip vive en styles/ui.css: lo usan el registro y el perfil. */
+
+.subject-empty {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  padding: 12px 0;
+  text-align: center;
+  width: 100%;
+}
+
+.subject-count {
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+  margin-top: 8px;
+}
+
+.subject-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--color-text-muted);
+  padding: 24px 0;
+  justify-content: center;
+}
+
+.subject-loading svg {
+  width: 18px;
+  height: 18px;
+}

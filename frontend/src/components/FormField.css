@@ -1,0 +1,93 @@
+.field {
+  margin-bottom: 16px;
+  text-align: left;
+}
+
+.field-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  margin-bottom: 6px;
+}
+
+.field-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.field-input {
+  width: 100%;
+  font-size: 15px;
+  padding: 13px 40px 13px 16px;
+  border-radius: 14px;
+  border: 1.5px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.field-input::placeholder {
+  color: var(--color-text-muted);
+  opacity: 0.7;
+}
+
+.field-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 20%, transparent);
+}
+
+.field-valid .field-input {
+  border-color: var(--color-success);
+}
+
+.field-invalid .field-input {
+  border-color: var(--color-danger);
+}
+
+.field-icon {
+  position: absolute;
+  right: 12px;
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+}
+
+.field-icon.is-button {
+  pointer-events: auto;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-text-muted);
+}
+
+.field-valid .field-icon {
+  color: var(--color-success);
+}
+
+.field-invalid .field-icon {
+  color: var(--color-danger);
+}
+
+.field-message {
+  font-size: 12.5px;
+  margin-top: 6px;
+  display: block;
+}
+
+.field-invalid .field-message {
+  color: var(--color-danger);
+}
+
+.field-valid .field-message {
+  color: var(--color-success);
+}
+
+.field-hint {
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+  margin-top: 6px;
+}

@@ -1,0 +1,55 @@
+# Production - deployed on the VPS once it's provisioned.
+# Pulls pre-built images from GHCR (built by CI from ./frontend and ./backend).
+# Not used yet - kept here for when the VPS is ready.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - internal
+
+  backend:
+    image: ghcr.io/OWNER/pid-2026-tddlovers-backend:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    depends_on:
+      - postgres
+    networks:
+      - internal
+
+  frontend:
+    image: ghcr.io/OWNER/pid-2026-tddlovers-frontend:latest
+    restart: unless-stopped
+    networks:
+      - internal
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - internal
+
+volumes:
+  pgdata:
+  caddy_data:
+
+networks:
+  internal:

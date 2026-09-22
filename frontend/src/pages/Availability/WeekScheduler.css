@@ -1,0 +1,474 @@
+/* Incluye los estilos de SchedulerCell, SchedulerDayColumn y CopyDayMenu:
+   fuera de la grilla no significan nada, así que no les hacemos un archivo
+   propio (misma excepción que DayCell con MonthGrid.css). */
+
+.sched {
+  /* El alto de una celda de media hora vive acá y WeekScheduler lo lee de
+     vuelta con getComputedStyle, así que el número está en un solo lado
+     (mismo patrón que --day-event-line en MonthGrid.css). Solo decide una
+     cosa: si un bloque de media hora es demasiado bajo para su etiqueta. */
+  --sched-slot-h: 14px;
+  --sched-gutter-w: 46px;
+  /* El radio del marco y el de adentro (el de afuera menos el borde). El de
+     adentro lo copian los hijos de las esquinas DE LA DERECHA: ahí es donde
+     recorta el overflow:hidden, y un hijo cuadrado pegado al borde pierde su
+     anillo en diagonal. Las esquinas de la izquierda son del gutter, que no
+     dibuja ningún anillo, así que no necesitan nada. */
+  --sched-radius: 12px;
+  --sched-radius-inner: 11px;
+
+  width: 100%;
+}
+
+/* Las dos grillas comparten el reparto de columnas (lo fija WeekScheduler en
+   línea, porque la cantidad de días cambia en el teléfono) para que no se
+   puedan desalinear — como .month-grid-weekdays y .month-grid-weeks. */
+.sched-head {
+  display: grid;
+  align-items: end;
+  gap: 1px;
+  margin-bottom: 6px;
+}
+
+.sched-head-cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  padding-bottom: 2px;
+}
+
+.sched-head-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sched-head-short {
+  display: none;
+}
+
+.sched-copy-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.sched-copy-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--color-primary);
+}
+
+.sched-copy-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.sched-copy-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.sched-body {
+  display: grid;
+  /* Los gap de 1px sobre un fondo del color del borde son las líneas de la
+     grilla: las celdas tapan el resto con su propio fondo (ver MonthGrid). */
+  gap: 1px;
+  background: var(--color-border);
+  border: 1px solid var(--color-border);
+  border-radius: var(--sched-radius);
+  overflow: hidden;
+
+  /* Un arrastre con el dedo no tiene que seleccionar texto. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.sched-gutter {
+  display: grid;
+  background: var(--color-surface-solid);
+  /* La columna de horas es por donde se scrollea en el teléfono: las columnas
+     de días tienen touch-action: none para poder pintar. */
+  touch-action: pan-y;
+}
+
+.sched-gutter-hour {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 1px 6px 0 0;
+  font-size: 10.5px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.sched-day {
+  display: grid;
+  gap: 1px;
+  background: var(--color-border);
+  min-width: 0;
+  /* Sin esto, arrastrar con el dedo scrollea la página en vez de pintar. */
+  touch-action: none;
+}
+
+.sched-cell {
+  grid-column: 1;
+  min-height: var(--sched-slot-h);
+  border: none;
+  padding: 0;
+  background: var(--color-surface-solid);
+  cursor: pointer;
+  transition: background-color 0.1s ease;
+}
+
+/* Zebra suavísima en la media hora, para que el par :00/:30 se lea como una
+   hora sin tener que dibujar dos tipos de línea. */
+.sched-cell.is-half {
+  background: color-mix(in srgb, var(--color-bg) 45%, var(--color-surface-solid));
+}
+
+.sched-cell:hover:not(.is-blocked) {
+  background: color-mix(in srgb, var(--color-primary) 12%, var(--color-surface-solid));
+}
+
+.sched-cell.is-blocked {
+  cursor: not-allowed;
+}
+
+/* El foco tiene que verse POR ENCIMA del bloque, si no lo tapa. Y va con
+   inset box-shadow y no con border: un borde correría la grilla. */
+.sched-cell:focus-visible {
+  outline: none;
+  z-index: 3;
+  box-shadow: inset 0 0 0 2px var(--color-primary);
+}
+
+/* La última columna es la que toca el borde derecho. :last-child, y no
+   :nth-child(8), porque en el teléfono se dibuja UN solo día: esa única columna
+   es a la vez la primera y la última.
+
+   :first-of-type / :last-of-type y no :first-child / :last-child porque adentro
+   de la columna las celdas son <button> y los bloques son <div>: el selector
+   por tipo agarra la primera y la última CELDA sin importar dónde quedaron los
+   bloques en el DOM. De paso, eso hace que recortar con startHour/endHour
+   funcione solo: la primera celda que se dibuja es la de fromIndex. */
+.sched-body > .sched-day:last-child > .sched-cell:first-of-type {
+  border-top-right-radius: var(--sched-radius-inner);
+}
+
+.sched-body > .sched-day:last-child > .sched-cell:last-of-type {
+  border-bottom-right-radius: var(--sched-radius-inner);
+}
+
+/* El bloque fusionado va POR ENCIMA de las celdas y NO recibe eventos: el
+   área sensible sigue siendo la media hora de abajo. Al abarcar varias filas
+   tapa también los gaps de 1px que hay entre ellas, así que borra sus propias
+   líneas internas y se ve como un rectángulo entero. */
+.sched-block {
+  grid-column: 1;
+  z-index: 1;
+  pointer-events: none;
+  border-radius: 6px;
+  padding: 1px 4px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  font-size: 10.5px;
+  line-height: 1.3;
+}
+
+/* Lo que YA está guardado va en el azul de la app — el mismo del botón
+   "Guardar cambios", para que se lea de una que eso ya está. */
+.sched-block.is-selected,
+.sched-legend-swatch.is-selected {
+  background: color-mix(in srgb, var(--color-primary) 18%, var(--color-surface-solid));
+  box-shadow: inset 0 0 0 1.5px var(--color-primary);
+  color: var(--color-text);
+}
+
+/* Lo pintado en esta sesión y todavía sin guardar. Va DESPUÉS del azul: un
+   bloque nuevo tiene las dos clases y pesan igual, así que gana el de abajo. */
+.sched-block.is-pending,
+.sched-legend-swatch.is-pending {
+  background: color-mix(in srgb, var(--color-success) 20%, var(--color-surface-solid));
+  box-shadow: inset 0 0 0 1.5px var(--color-success);
+  color: var(--color-text);
+}
+
+/* Estaba guardado y el docente lo despintó: se muestra "fantasma" hasta que
+   guarde, así se ve también la mitad de los cambios que consiste en borrar.
+   Punteado además de despintado: que no dependa solo del color. */
+.sched-block.is-removed,
+.sched-legend-swatch.is-removed {
+  background: transparent;
+  box-shadow: none;
+  border: 1.5px dashed color-mix(in srgb, var(--color-text-muted) 70%, transparent);
+  color: var(--color-text-muted);
+  opacity: 0.75;
+}
+
+/* Ocupado por otra materia: rayado + gris. No es un error (por eso no va
+   --color-danger) y el rayado hace que no dependa solo del color. */
+.sched-block.is-blocked,
+.sched-legend-swatch.is-blocked {
+  background: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--color-text-muted) 18%, var(--color-surface-solid)) 0 5px,
+    var(--color-surface-solid) 5px 10px
+  );
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--color-text-muted) 55%, transparent);
+  color: var(--color-text-muted);
+}
+
+.sched-block-time {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sched-block-subject {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Cuando la celda es muy baja no entra nada de texto: queda solo el color, y
+   el detalle vive en el aria-label y en la lista de abajo. */
+.sched-block.is-compact .sched-block-time,
+.sched-block.is-compact .sched-block-subject {
+  display: none;
+}
+
+/* Media hora suelta: no se puede guardar, porque una clase dura 1 h (ver
+   CLAUDE.md). Va DESPUÉS de .is-selected a propósito — un bloque corto tiene
+   las dos clases y las dos reglas pesan igual, así que gana la de abajo.
+   Anillo inset y no border: un borde correría la grilla. */
+.sched-block.is-invalid,
+.sched-legend-swatch.is-invalid {
+  background: color-mix(in srgb, var(--color-danger) 22%, var(--color-surface-solid));
+  box-shadow: inset 0 0 0 1.5px var(--color-danger);
+  color: var(--color-text);
+}
+
+/* El anillo del foco también se pone rojo: si no, pararse en la celda que está
+   mal la pinta de azul y tapa justo lo que hay que mirar. */
+.sched-cell.is-invalid:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--color-danger);
+}
+
+/* Los bloques van por grid-row y en el DOM están todos juntos al final, así que
+   el CSS no puede saber cuál quedó arriba de todo ni cuál abajo: lo marca la
+   columna (ver SchedulerDayColumn). Solo la esquina que coincide con el marco
+   cambia de radio; las otras tres se quedan con los 6px del bloque. */
+.sched-body > .sched-day:last-child > .sched-block.is-first-row {
+  border-top-right-radius: var(--sched-radius-inner);
+}
+
+.sched-body > .sched-day:last-child > .sched-block.is-last-row {
+  border-bottom-right-radius: var(--sched-radius-inner);
+}
+
+.sched-status {
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+}
+
+/* --- Menú "copiar a otros días" ------------------------------------------ */
+
+.sched-copy {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 10;
+  width: 200px;
+  padding: 12px;
+  border: 1.5px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--color-surface-solid);
+  box-shadow: var(--shadow-soft);
+  text-align: left;
+}
+
+.sched-copy-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.sched-copy-warning {
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--color-text-muted);
+}
+
+.sched-copy-list {
+  list-style: none;
+  margin: 10px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sched-copy-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 2px;
+  font-size: 13px;
+  color: var(--color-text);
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+.sched-copy-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.sched-copy-actions .btn {
+  padding: 8px 12px;
+  font-size: 13px;
+  border-radius: 12px;
+}
+
+/* --- Referencia de colores ----------------------------------------------- */
+
+.sched-legend {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.sched-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Las muestras comparten las reglas de color con los bloques (cada regla de
+   estado lleva los dos selectores), así que si cambia un color del scheduler
+   la leyenda cambia sola y no se pueden desincronizar. */
+.sched-legend-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+/* --- Vista de un día sola (teléfono) ------------------------------------- */
+
+.sched-tabs {
+  display: none;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.sched-tab {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  padding: 8px 2px;
+  border: 1.5px solid var(--color-border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+
+.sched-tab.is-active {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--color-primary);
+}
+
+/* Un puntito en los días que ya tienen horarios, para ver de un vistazo
+   cuáles están cargados sin ir cambiando de pestaña. */
+.sched-tab.has-slots::after {
+  content: '';
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--color-success);
+}
+
+@media (max-width: 900px) {
+  .sched {
+    --sched-slot-h: 18px;
+    --sched-gutter-w: 40px;
+  }
+
+  .sched-head-long {
+    display: none;
+  }
+
+  .sched-head-short {
+    display: inline;
+  }
+}
+
+@media (max-width: 600px) {
+  .sched {
+    --sched-slot-h: 22px;
+  }
+
+  .sched-tabs {
+    display: flex;
+  }
+
+  .sched-head-long {
+    display: inline;
+  }
+
+  .sched-head-short {
+    display: none;
+  }
+
+  .sched-block {
+    font-size: 11.5px;
+  }
+}
+
+@media (max-width: 480px) {
+  .sched-copy {
+    width: 170px;
+    padding: 10px;
+  }
+}

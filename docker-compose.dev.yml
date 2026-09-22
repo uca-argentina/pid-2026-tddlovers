@@ -1,0 +1,54 @@
+# Local development. Run from the repo root:
+#   docker compose -f docker-compose.dev.yml up --build
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata_dev:/var/lib/postgresql/data
+      - ./backend/migrations:/docker-entrypoint-initdb.d
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      NODE_ENV: development
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    ports:
+      - "4000:4000"
+    depends_on:
+      - postgres
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    restart: unless-stopped
+    environment:
+      # El proxy /api de Vite corre dentro del contenedor, así que 127.0.0.1
+      # sería el propio contenedor del frontend. El backend se alcanza por el
+      # nombre del servicio en la red de compose.
+      VITE_BACKEND_URL: http://backend:4000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata_dev:

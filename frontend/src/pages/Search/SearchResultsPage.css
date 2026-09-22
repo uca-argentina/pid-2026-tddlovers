@@ -1,0 +1,27 @@
+.search-page {
+  width: 100%;
+  max-width: 720px;
+  margin-inline: auto;
+}
+
+.search-page-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  padding: 56px 20px;
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+.search-page-empty svg {
+  width: 32px;
+  height: 32px;
+  color: var(--color-border);
+  margin-bottom: 4px;
+}
+
+.search-page-hint {
+  font-size: 13px;
+}

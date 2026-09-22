@@ -1,0 +1,131 @@
+@import './styles/ui.css';
+
+:root {
+  /* Paleta azul — modo claro. Mismo tono que el modo oscuro en distintos
+     pasos de luminosidad/saturación, para que cambiar de tema no se sienta
+     como una app distinta (ver CLAUDE.md). */
+  --color-bg: #eff6ff;
+  --color-surface: #dbeafe;
+  --color-surface-solid: #ffffff;
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-text: #0f172a;
+  --color-text-muted: #64748b;
+  --color-border: #cbd5e1;
+
+  --color-success: #16a34a;
+  --color-success-bg: rgba(22, 163, 74, 0.1);
+  --color-danger: #dc2626;
+  --color-danger-bg: rgba(220, 38, 38, 0.1);
+  --color-warning: #d97706;
+  --color-warning-bg: rgba(217, 119, 6, 0.1);
+
+  --shadow-card: 0 20px 45px -15px rgba(37, 99, 235, 0.35);
+  --shadow-soft: 0 10px 25px -8px rgba(15, 23, 42, 0.15);
+
+  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+
+  font: 16px/1.5 var(--sans);
+  color-scheme: light dark;
+  color: var(--color-text);
+  background: var(--color-bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* El tema tiene tres estados: sin elegir (manda el sistema), forzado claro y
+   forzado oscuro. El botón de la barra superior escribe data-theme en <html>
+   (ver utils/theme.js), así que la paleta oscura va escrita dos veces: una
+   para "el sistema está en oscuro y el usuario no eligió nada" y otra para
+   "el usuario eligió oscuro". No hay forma de compartirlas en CSS puro. */
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --color-bg: #0b1220;
+    --color-surface: #131c2e;
+    --color-surface-solid: #131c2e;
+    --color-primary: #3b82f6;
+    --color-primary-hover: #60a5fa;
+    --color-text: #f1f5f9;
+    --color-text-muted: #94a3b8;
+    --color-border: #263149;
+
+    --color-success: #4ade80;
+    --color-success-bg: rgba(74, 222, 128, 0.15);
+    --color-danger: #f87171;
+    --color-danger-bg: rgba(248, 113, 113, 0.15);
+    --color-warning: #fbbf24;
+    --color-warning-bg: rgba(251, 191, 36, 0.15);
+
+    --shadow-card: 0 20px 45px -15px rgba(0, 0, 0, 0.6);
+    --shadow-soft: 0 10px 25px -8px rgba(0, 0, 0, 0.4);
+  }
+}
+
+:root[data-theme='dark'] {
+  --color-bg: #0b1220;
+  --color-surface: #131c2e;
+  --color-surface-solid: #131c2e;
+  --color-primary: #3b82f6;
+  --color-primary-hover: #60a5fa;
+  --color-text: #f1f5f9;
+  --color-text-muted: #94a3b8;
+  --color-border: #263149;
+
+  --color-success: #4ade80;
+  --color-success-bg: rgba(74, 222, 128, 0.15);
+  --color-danger: #f87171;
+  --color-danger-bg: rgba(248, 113, 113, 0.15);
+  --color-warning: #fbbf24;
+  --color-warning-bg: rgba(251, 191, 36, 0.15);
+
+  --shadow-card: 0 20px 45px -15px rgba(0, 0, 0, 0.6);
+  --shadow-soft: 0 10px 25px -8px rgba(0, 0, 0, 0.4);
+
+  color-scheme: dark;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100svh;
+}
+
+#root {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--sans);
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0;
+}
+
+p {
+  margin: 0;
+}
+
+button {
+  font-family: var(--sans);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+a {
+  color: inherit;
+}

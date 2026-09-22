@@ -1,0 +1,20 @@
+.register-success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+  padding: 48px 32px;
+}
+
+.register-success-icon {
+  width: 40px;
+  height: 40px;
+  color: var(--color-primary);
+}
+
+.register-success p {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+}

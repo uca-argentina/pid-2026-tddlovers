@@ -1,0 +1,131 @@
+/* Incluye los estilos de BookingCard: fuera de la lista no significan nada
+   (misma excepción que DayCell con MonthGrid.css). */
+
+.booking-results {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.booking-results-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text);
+  flex-shrink: 0;
+}
+
+.booking-results-count {
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+.booking-results-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  color: var(--color-text-muted);
+  padding: 12px 0;
+}
+
+.booking-results-empty svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* La lista scrollea sola: el panel no crece más allá del alto del calendario
+   que tiene al lado. */
+.booking-results-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* --- Una tarjeta --------------------------------------------------------- */
+
+.booking-card {
+  padding: 12px 14px;
+  border: 1.5px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--color-surface-solid);
+}
+
+/* Sin una hora entera libre no se puede reservar: se apaga, pero se sigue
+   viendo — que el docente tenga horario ahí es información. */
+.booking-card.is-blocked {
+  background: color-mix(in srgb, var(--color-bg) 60%, var(--color-surface-solid));
+}
+
+.booking-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.booking-card-subject {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.booking-card-teacher {
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+  text-align: right;
+}
+
+.booking-card-ranges {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-success);
+  font-variant-numeric: tabular-nums;
+}
+
+.booking-card-total {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+/* El aviso de superposición va en gris: no es un error, es un dato. */
+.booking-card-clash {
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+  line-height: 1.35;
+}
+
+.booking-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+/* .btn es width:100% en ui.css, que adentro de una tarjeta no va. */
+.booking-card-actions .btn {
+  width: auto;
+  padding: 10px 16px;
+  font-size: 14px;
+  border-radius: 12px;
+}
+
+@media (max-width: 900px) {
+  .booking-results {
+    height: auto;
+  }
+
+  .booking-results-list {
+    overflow-y: visible;
+  }
+}

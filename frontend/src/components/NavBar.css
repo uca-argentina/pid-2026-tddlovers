@@ -1,0 +1,96 @@
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: color-mix(in srgb, var(--color-surface-solid) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1.5px solid var(--color-border);
+  padding-top: env(safe-area-inset-top);
+}
+
+.navbar-inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  /* Ancho del calendario, que ahora ocupa casi toda la pantalla. */
+  max-width: 1440px;
+  margin-inline: auto;
+  padding: 10px 16px;
+}
+
+/* El buscador queda entre el perfil y los botones de la derecha, y es lo
+   único que se achica cuando falta lugar. */
+.navbar-inner .search-bar {
+  margin-right: auto;
+  max-width: 420px;
+}
+
+.navbar-icon-btn {
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.navbar-icon-btn:hover {
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+}
+
+.navbar-icon-btn.is-active {
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+}
+
+.navbar-icon-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Con cinco botones más el buscador hay que apretar el espaciado antes de
+   llegar al ancho de un teléfono. */
+@media (max-width: 600px) {
+  .navbar-inner {
+    gap: 4px;
+    padding: 8px 10px;
+  }
+
+  .navbar-icon-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  .navbar-icon-btn svg {
+    width: 18px;
+    height: 18px;
+  }
+}
+
+/* Con el quinto botón, de 480px para abajo el buscador se queda sin ancho
+   útil: le sobrarían 155px a 375px y 100px a 320px. Apretamos un escalón más
+   los botones y el padding lateral y vuelve a tener casi lo mismo que tenía
+   con cuatro. Nunca se desborda: .search-bar es flex:1 con min-width:0, así
+   que es él el que se achica. */
+@media (max-width: 480px) {
+  .navbar-inner {
+    gap: 2px;
+    padding: 8px;
+  }
+
+  .navbar-icon-btn {
+    width: 32px;
+    height: 32px;
+  }
+
+  .navbar-icon-btn svg {
+    width: 17px;
+    height: 17px;
+  }
+}

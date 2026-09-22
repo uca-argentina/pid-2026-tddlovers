@@ -1,0 +1,78 @@
+/* El contenido del modal de reserva. La capa flotante en sí (fondo, panel,
+   título, cerrar) está en Modal.css: acá solo va lo de adentro. */
+
+.booking-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 14px;
+}
+
+.booking-dialog-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 28px;
+}
+
+.booking-dialog-details dt {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.booking-dialog-details dd {
+  /* El navegador le mete 40px de sangría a los dd por su cuenta, y acá el
+     valor tiene que quedar debajo de su etiqueta, no corrido. */
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.booking-dialog-hint,
+.booking-dialog-pick {
+  /* Los dos ocupan el mismo lugar: la frase de ayuda se reemplaza por la hora
+     elegida, y con la misma altura el modal no salta al elegir. */
+  min-height: 22px;
+  margin: -6px 0 0;
+  font-size: 15px;
+}
+
+.booking-dialog-hint {
+  color: var(--color-text-muted);
+}
+
+.booking-dialog-pick {
+  font-weight: 700;
+  color: var(--color-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.booking-dialog-duration {
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.booking-dialog-actions {
+  display: flex;
+  gap: 12px;
+}
+
+/* .btn es width:100% en ui.css, hecho para los formularios de una columna del
+   login; acá son dos botones al lado y el de confirmar pesa más. */
+.booking-dialog-actions .btn {
+  flex: 1 1 0;
+}
+
+.booking-dialog-actions .btn-primary {
+  flex-grow: 1.6;
+}
+
+@media (max-width: 600px) {
+  .booking-dialog-actions {
+    /* El principal arriba y más cerca del pulgar. */
+    flex-direction: column-reverse;
+  }
+}

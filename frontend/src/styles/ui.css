@@ -1,0 +1,309 @@
+/* Piezas compartidas por la página de registro (y futuras pantallas de
+   auth). Una sola hoja chica, no un design system completo. */
+
+.card {
+  background: var(--color-surface-solid);
+  border-radius: 24px;
+  box-shadow: var(--shadow-card);
+  padding: 36px 32px;
+  width: 100%;
+  max-width: 420px;
+}
+
+@media (max-width: 480px) {
+  .card {
+    border-radius: 20px;
+    padding: 28px 20px;
+  }
+}
+
+.auth-page {
+  /* El flujo de registro se diseñó calcado a un mockup en paleta clara —
+     lo fijamos siempre así acá, sin importar el modo claro/oscuro del
+     sistema, para no perder ese contraste. El resto de la app (si en el
+     futuro tiene más pantallas) puede seguir respetando el modo del
+     sistema normalmente, ya que esto solo pisa las variables dentro de
+     este contenedor. */
+  --color-bg: #eff6ff;
+  --color-surface: #dbeafe;
+  --color-surface-solid: #ffffff;
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-text: #0f172a;
+  --color-text-muted: #64748b;
+  --color-border: #cbd5e1;
+  --color-success: #16a34a;
+  --color-success-bg: rgba(22, 163, 74, 0.1);
+  --color-danger: #dc2626;
+  --color-danger-bg: rgba(220, 38, 38, 0.1);
+  --color-warning: #d97706;
+  --color-warning-bg: rgba(217, 119, 6, 0.1);
+  --shadow-card: 0 20px 45px -15px rgba(37, 99, 235, 0.35);
+  --shadow-soft: 0 10px 25px -8px rgba(15, 23, 42, 0.15);
+
+  min-height: 100svh;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  position: relative;
+  overflow: hidden;
+  background: radial-gradient(
+      circle at 15% 20%,
+      color-mix(in srgb, var(--color-primary) 35%, transparent) 0%,
+      transparent 55%
+    ),
+    radial-gradient(
+      circle at 85% 80%,
+      color-mix(in srgb, var(--color-primary) 25%, transparent) 0%,
+      transparent 50%
+    ),
+    var(--color-bg);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  border-radius: 16px;
+  padding: 14px 20px;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease, transform 0.1s ease, opacity 0.15s ease;
+  width: 100%;
+}
+
+.btn:active {
+  transform: scale(0.98);
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+}
+
+.btn-primary {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  color: var(--color-text);
+  border-color: var(--color-text-muted);
+}
+
+.btn-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.spin {
+  animation: ui-spin 0.8s linear infinite;
+}
+
+@keyframes ui-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.banner {
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.banner-danger {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.banner-success {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.banner svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* Chips de materia — compartidos por el registro (SubjectPicker) y el
+   perfil. Viven acá y no en SubjectPicker.css porque los usan dos pantallas
+   que no se importan entre sí. */
+
+.subject-chip {
+  border: 1.5px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.subject-chip:hover {
+  border-color: var(--color-primary);
+}
+
+.subject-chip.selected {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+
+.subject-chip svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* Estructura compartida por las pantallas de auth (Registro, Login):
+   encabezado azul decorativo + tarjeta blanca superpuesta. */
+
+.auth-shell {
+  width: 100%;
+  max-width: 400px;
+}
+
+.auth-hero {
+  position: relative;
+  height: 180px;
+  border-radius: 32px 32px 0 0;
+  overflow: hidden;
+  background: linear-gradient(
+    160deg,
+    var(--color-primary) 0%,
+    color-mix(in srgb, var(--color-primary) 55%, #0b1436) 100%
+  );
+}
+
+.auth-hero-circle {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.auth-hero-circle-a {
+  width: 220px;
+  height: 220px;
+  top: -120px;
+  right: -60px;
+}
+
+.auth-hero-circle-b {
+  width: 140px;
+  height: 140px;
+  bottom: -75px;
+  right: 30px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.auth-hero-circle-c {
+  width: 90px;
+  height: 90px;
+  top: 24px;
+  left: -35px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.auth-back {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  z-index: 1;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: rgba(10, 15, 40, 0.28);
+  color: #fff;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.auth-back:hover {
+  background: rgba(10, 15, 40, 0.4);
+}
+
+.auth-back svg {
+  width: 18px;
+  height: 18px;
+}
+
+.auth-card {
+  position: relative;
+  background: var(--color-surface-solid);
+  border-radius: 28px;
+  margin: -34px 8px 0;
+  padding: 32px 24px 28px;
+  box-shadow: var(--shadow-card);
+}
+
+@media (max-width: 420px) {
+  .auth-card {
+    margin-inline: 0;
+    border-radius: 24px;
+  }
+}
+
+.auth-title {
+  font-size: 23px;
+  font-weight: 700;
+  color: var(--color-text);
+  text-align: left;
+  margin: 0 0 20px;
+}
+
+.auth-switch {
+  margin: 20px 0 0;
+  text-align: center;
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+/* Sirve tanto para <button> como para el <Link> de react-router (que
+   renderiza un <a>), de ahí el text-decoration: none. */
+.auth-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-primary);
+  font-weight: 600;
+  font-size: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.auth-link:hover {
+  color: var(--color-primary-hover);
+  text-decoration: underline;
+}

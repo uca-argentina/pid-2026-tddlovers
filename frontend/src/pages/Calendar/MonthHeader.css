@@ -1,0 +1,86 @@
+/* El encabezado del mes: el título y los botones de mover. Vivía en
+   CalendarPage.css, pero el componente es genérico y lo usan dos pantallas, así
+   que ahora se importa desde MonthHeader.jsx. */
+
+.month-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+.month-header-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.month-header-title svg {
+  width: 15px;
+  height: 15px;
+  color: var(--color-text-muted);
+}
+
+.month-header-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.month-nav-btn {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--color-border);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.month-nav-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.month-nav-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.month-today-btn {
+  border: 1.5px solid var(--color-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 7px 14px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.month-today-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+@media (max-width: 600px) {
+  .month-header-title {
+    font-size: 18px;
+  }
+
+  .month-nav-btn {
+    width: 32px;
+    height: 32px;
+  }
+}

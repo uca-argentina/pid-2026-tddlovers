@@ -1,0 +1,33 @@
+/* Dos columnas: el detalle del día a la izquierda (angosto pero cómodo de
+   leer) y el calendario a la derecha, que se queda con todo lo demás. En el
+   DOM el calendario va primero — es el contenido principal — y acá se lo
+   manda a la derecha con `order`. */
+
+.calendar-page {
+  display: flex;
+  gap: 16px;
+  height: 100%;
+  min-height: 0;
+}
+
+.calendar-aside {
+  order: -1;
+  width: 320px;
+  flex-shrink: 0;
+  min-height: 0;
+}
+
+/* Abajo de 900px no hay lugar para dos columnas: se apilan en el orden del
+   DOM (primero el calendario, después el detalle) y scrollea .app-main. */
+@media (max-width: 900px) {
+  .calendar-page {
+    flex-direction: column;
+    height: auto;
+    gap: 20px;
+  }
+
+  .calendar-aside {
+    order: 0;
+    width: 100%;
+  }
+}
