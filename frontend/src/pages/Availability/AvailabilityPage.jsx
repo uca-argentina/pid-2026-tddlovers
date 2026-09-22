@@ -1,16 +1,14 @@
 import { Component } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import withRouter from '../../routes/withRouter.jsx'
 import WeekScheduler from './WeekScheduler.jsx'
 import Banner from '../../components/Banner.jsx'
-import { ChevronLeftIcon, ClockIcon, SpinnerIcon } from '../../components/icons.jsx'
-import { fetchAvailabilityByTeacher, fetchSubjects, saveAvailability } from '../../api/client.js'
+import { SpinnerIcon } from '../../components/icons.jsx'
+import { fetchAvailabilityByTeacher, saveAvailability } from '../../api/client.js'
 import BookingBoard from '../Booking/BookingBoard.jsx'
 import {
-  countSlots,
   findShortRuns,
   formatShortRunsError,
-  formatSlotTotal,
   rangesToSlotIds,
   runsToSlotIds,
   sameSlots,
@@ -24,23 +22,18 @@ import './AvailabilityPage.css'
 const SIN_TRAMOS_CORTOS = { slotIds: null, runs: [], ids: new Set() }
 
 /**
- * Disponibilidad semanal de UNA materia: el docente pinta las medias horas en
- * las que da clase. Las clases duran 1 h y arrancan en punto o y media (ver
- * CLAUDE.md), así que la unidad de la grilla es la media hora y dos seguidas
- * son una clase.
+ * Disponibilidad semanal del docente: pinta las medias horas en las que da
+ * clase. Las clases duran 1 h y arrancan en punto o y media (ver CLAUDE.md),
+ * así que la unidad de la grilla es la media hora y dos seguidas son una
+ * clase.
  *
- * Dos formas de ruta:
- *   /disponibilidad              → elegir materia (solo las que da)
- *   /disponibilidad/:materiaId   → la grilla de esa materia
- *
- * El docente no puede estar en dos lugares a la vez: los horarios que ya marcó
- * para OTRA materia se muestran ocupados y no se pueden tocar. Por eso se piden
- * todas las materias de una sola vez (fetchAvailabilityByTeacher) y no solo la
- * que se está editando — los horarios bloqueados son la unión de las otras.
+ * Es UNA semana, no una por materia: el docente dice cuándo puede, y es el
+ * alumno el que elige para qué materia reserva (entre las que da el docente).
  *
  * Mirando como alumno, la misma ruta muestra otra cosa: el tablero para
  * buscar horarios libres y reservar (ver pages/Booking). Por eso el primer
- * guard de renderBody es el rol y no el usuario.
+ * guard de renderBody es el rol y no el usuario. /disponibilidad/:materiaId
+ * solo tiene sentido ahí — deja esa materia filtrada.
  */
 class AvailabilityPage extends Component {
   state = {
@@ -48,17 +41,11 @@ class AvailabilityPage extends Component {
     // Lo último que devolvió el backend: con esto se sabe si hay cambios sin
     // guardar y es a lo que vuelve "Cancelar".
     savedSlotIds: new Set(),
-    blockedBySlot: {},
-    // El mapa crudo { [materiaId]: horario }, para que el elegidor pueda decir
-    // cuántas horas tiene cargada cada materia.
-    bySubject: {},
-    subjects: [],
     loading: false,
     loadError: null,
     saving: false,
     saveError: null,
     saved: false,
-    copyHint: null,
     // "¿Ya intentó guardar y no se pudo?". Mientras está en false, pintar es
     // silencioso: nadie quiere que le marquen en rojo una media hora que
     // todavía está por completar. Una vez que dijo que no, el aviso se
@@ -75,52 +62,37 @@ class AvailabilityPage extends Component {
   shortRunsCache = SIN_TRAMOS_CORTOS
 
   componentDidMount() {
-    if (this.canEdit()) this.loadAvailability()
+    if (this.shouldLoad(this.props)) this.loadAvailability()
   }
 
   componentDidUpdate(prevProps) {
-    // React Router reusa la misma instancia al ir de /disponibilidad/1 a
-    // /disponibilidad/3, así que sin esto la pantalla mostraría los horarios de
-    // una materia diciendo que son de la otra.
-    if (prevProps.router.params.materiaId !== this.props.router.params.materiaId) {
-      if (this.canEdit()) this.loadAvailability()
-    }
+    // React Router reusa la misma instancia al redirigir de
+    // /disponibilidad/:materiaId a /disponibilidad (y al cambiar el rol con el
+    // interruptor), así que componentDidMount no vuelve a correr: se carga
+    // cuando la grilla PASA a ser editable.
+    if (!this.shouldLoad(prevProps) && this.shouldLoad(this.props)) this.loadAvailability()
+  }
+
+  /**
+   * Con materia en la URL el docente se redirige (ver renderBody): pedir ahí
+   * sería un fetch que se tira.
+   */
+  shouldLoad(props) {
+    const editable = Boolean(props.user) && props.viewRole === 'teacher'
+    return editable && !props.router.params.materiaId
   }
 
   componentWillUnmount() {
     this.fetchToken += 1
   }
 
-  canEdit() {
-    return Boolean(this.props.user) && this.props.viewRole === 'teacher'
-  }
-
-  /**
-   * El id de materia se trata como opaco: es el UUID que manda el backend, y
-   * lo único que se hace con él es compararlo y usarlo de clave. Convertirlo
-   * a número lo rompía (Number(uuid) es NaN).
-   */
+  /** Solo la usa el tablero del alumno: el docente edita una sola semana. */
   getSubjectId() {
     return this.props.router.params.materiaId || null
   }
 
-  /** Las materias que el docente da, resueltas contra el catálogo. */
-  getMySubjects() {
-    const ids = this.props.user?.subjectIds || []
-    return this.state.subjects.filter((subject) => ids.includes(subject.id))
-  }
-
-  getSubject() {
-    const id = this.getSubjectId()
-    if (id === null) return null
-    // String() de los dos lados: el id de la URL siempre es string y el del
-    // catálogo puede no serlo mientras queden mocks con ids numéricos.
-    return this.state.subjects.find((subject) => String(subject.id) === id) || null
-  }
-
-  teachesSubject() {
-    const id = this.getSubjectId()
-    return (this.props.user?.subjectIds || []).some((mine) => String(mine) === id)
+  hasSubjects() {
+    return (this.props.user?.subjectIds || []).length > 0
   }
 
   hasChanges() {
@@ -139,52 +111,20 @@ class AvailabilityPage extends Component {
     return this.shortRunsCache
   }
 
-  getTitle() {
-    const subject = this.getSubject()
-    return subject ? `Disponibilidad de ${subject.name}` : 'Disponibilidad'
-  }
-
   loadAvailability = () => {
     const token = ++this.fetchToken
     this.setState({
       loading: true,
       loadError: null,
       saved: false,
-      copyHint: null,
       showShortRuns: false,
     })
 
-    Promise.all([fetchAvailabilityByTeacher(this.props.user.id), fetchSubjects()])
-      .then(([bySubject, subjects]) => {
+    fetchAvailabilityByTeacher(this.props.user.id)
+      .then((schedule) => {
         if (token !== this.fetchToken) return
-
-        const id = this.getSubjectId()
-        const lista = Array.isArray(subjects) ? subjects : []
-        const mine = rangesToSlotIds(bySubject?.[id])
-
-        // Los horarios ocupados son la unión de las OTRAS materias.
-        const blockedBySlot = {}
-        // Las claves de Object.entries son strings, igual que el id que sale
-        // de la URL, así que se comparan tal cual.
-        for (const [otherId, schedule] of Object.entries(bySubject || {})) {
-          if (otherId === id) continue
-          const subject = lista.find((item) => String(item.id) === otherId)
-          const name = subject ? subject.name : 'otra materia'
-          for (const slot of rangesToSlotIds(schedule)) {
-            // Si dos materias se pisan (no debería, pero el backend todavía no
-            // lo valida) gana la primera: el cartel nombra UNA materia.
-            if (!blockedBySlot[slot]) blockedBySlot[slot] = name
-          }
-        }
-
-        this.setState({
-          slotIds: mine,
-          savedSlotIds: mine,
-          blockedBySlot,
-          bySubject: bySubject || {},
-          subjects: lista,
-          loading: false,
-        })
+        const slotIds = rangesToSlotIds(schedule)
+        this.setState({ slotIds, savedSlotIds: slotIds, loading: false })
       })
       .catch((error) => {
         if (token !== this.fetchToken) return
@@ -195,36 +135,8 @@ class AvailabilityPage extends Component {
       })
   }
 
-  /**
-   * Volver de la grilla de una materia. A esta pantalla se llega por dos
-   * caminos (el perfil y el elegidor de materias), así que el botón deshace
-   * el último paso en vez de ir a un destino fijo — con `to="/perfil"` fijo,
-   * quien venía del elegidor terminaba en una pantalla en la que nunca
-   * estuvo.
-   *
-   * Si no hay historial propio (se entró pegando la URL de
-   * /disponibilidad/:materiaId), un -1 sacaría de la app: ahí se va al
-   * elegidor, que es el padre natural de esta pantalla.
-   */
-  handleBack = () => {
-    // `idx` lo mantiene react-router en el state del history: es la posición
-    // dentro de ESTA sesión de navegación, así que 0 (o sin dato) significa
-    // que no hay ninguna pantalla nuestra atrás a la que volver.
-    const primeraPantalla = !(window.history.state?.idx > 0)
-    this.props.router.navigate(primeraPantalla ? '/disponibilidad' : -1)
-  }
-
   handleChangeSlots = (slotIds) => {
     this.setState({ slotIds, saved: false })
-  }
-
-  handleCopyResult = (skipped) => {
-    this.setState({
-      copyHint:
-        skipped > 0
-          ? `No se copiaron ${skipped} ${skipped === 1 ? 'horario' : 'horarios'} porque ya los ocupa otra materia.`
-          : null,
-    })
   }
 
   handleCancel = () => {
@@ -232,7 +144,6 @@ class AvailabilityPage extends Component {
       slotIds: prev.savedSlotIds,
       saveError: null,
       saved: false,
-      copyHint: null,
       showShortRuns: false,
     }))
   }
@@ -241,7 +152,7 @@ class AvailabilityPage extends Component {
     event.preventDefault()
 
     // La regla es del dominio (una clase dura 1 h), así que se corta acá y no
-    // se manda: el backend todavía no valida nada.
+    // se manda: el backend lo rechazaría igual, pero sin decir cuál.
     const cortos = findShortRuns(this.state.slotIds)
     if (cortos.length > 0) {
       this.setState({ showShortRuns: true, saveError: null, saved: false })
@@ -251,7 +162,7 @@ class AvailabilityPage extends Component {
     const schedule = slotIdsToRanges(this.state.slotIds)
     this.setState({ saving: true, saveError: null, saved: false })
 
-    saveAvailability(this.getSubjectId(), schedule)
+    saveAvailability(schedule)
       .then(() => {
         this.setState((prev) => ({
           saving: false,
@@ -287,49 +198,8 @@ class AvailabilityPage extends Component {
     )
   }
 
-  renderSubjectChooser() {
-    const materias = this.getMySubjects()
-
-    if (materias.length === 0) {
-      return (
-        <div className="availability-empty">
-          <ClockIcon />
-          <h1 className="availability-title">Disponibilidad</h1>
-          <p className="availability-hint">
-            Todavía no elegiste qué materias das. Agregalas desde tu perfil y después volvé acá a
-            cargar tus horarios.
-          </p>
-          <Link className="auth-link" to="/perfil">
-            Ir a mi perfil
-          </Link>
-        </div>
-      )
-    }
-
-    return (
-      <div className="availability-chooser">
-        <h1 className="availability-title">Disponibilidad</h1>
-        <p className="availability-hint">
-          Elegí una materia para cargar los días y horarios en los que la das.
-        </p>
-        <ul className="availability-subject-list">
-          {materias.map((subject) => (
-            <li key={subject.id}>
-              <Link className="availability-subject-link" to={`/disponibilidad/${subject.id}`}>
-                <span className="availability-subject-name">{subject.name}</span>
-                <span className="availability-subject-total">
-                  {formatSlotTotal(countSlots(rangesToSlotIds(this.state.bySubject[subject.id])))}
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </div>
-    )
-  }
-
   renderScheduler() {
-    const { slotIds, blockedBySlot, saving, saveError, saved, copyHint, loadError } = this.state
+    const { slotIds, saving, saveError, saved, loadError } = this.state
     // El cartel se deriva en cada render y no se guarda en el estado: si se
     // guardara, seguiría nombrando un horario que el docente ya arregló.
     const { runs, ids } = this.getShortRuns()
@@ -338,40 +208,37 @@ class AvailabilityPage extends Component {
     return (
       <form className="availability-editor" onSubmit={this.handleSubmit}>
         <div className="availability-editor-head">
-          <div className="availability-titlebar">
-            {/* Se llega acá desde dos lados —el perfil y el elegidor de
-                materias— así que el destino no puede estar fijo: vuelve a la
-                pantalla de la que se vino (ver handleBack). */}
-            <button
-              type="button"
-              className="availability-back"
-              onClick={this.handleBack}
-              aria-label="Volver"
-            >
-              <ChevronLeftIcon />
-            </button>
-            <h1 className="availability-title">{this.getTitle()}</h1>
-          </div>
+          <h1 className="availability-title">Disponibilidad</h1>
           <p className="availability-hint">
-            Pintá las medias horas en las que das clase. Podés arrastrar para marcar un rato entero
-            y usar el botón de cada día para copiarlo a los demás.
+            Pintá las medias horas en las que podés dar clase. Podés arrastrar para marcar un rato
+            entero y usar el botón de cada día para copiarlo a los demás. Cuando un alumno reserve,
+            va a elegir para qué materia es.
           </p>
+          {/* Sin materias el backend no lo muestra en el tablero: no habría
+              nada que reservarle. Se avisa acá para que no piense que cargó
+              horarios y nadie los ve. */}
+          {this.hasSubjects() ? null : (
+            <p className="availability-warning">
+              Todavía no elegiste qué materias das, así que los alumnos no van a ver estos horarios.{' '}
+              <Link className="auth-link" to="/perfil">
+                Agregalas desde tu perfil
+              </Link>
+              .
+            </p>
+          )}
         </div>
 
         {loadError ? <Banner type="danger">{loadError}</Banner> : null}
         {saveError ? <Banner type="danger">{saveError}</Banner> : null}
         {shortRunsError ? <Banner type="danger">{shortRunsError}</Banner> : null}
         {saved ? <Banner type="success">Listo, guardamos tus horarios.</Banner> : null}
-        {copyHint ? <Banner type="danger">{copyHint}</Banner> : null}
 
         <WeekScheduler
           value={slotIds}
-          blockedBySlot={blockedBySlot}
           savedIds={this.state.savedSlotIds}
           invalidIds={ids}
           shortRuns={runs}
           onChange={this.handleChangeSlots}
-          onCopyResult={this.handleCopyResult}
           disabled={saving}
         />
 
@@ -416,26 +283,15 @@ class AvailabilityPage extends Component {
       )
     }
 
+    // Links viejos del perfil (una disponibilidad por materia): al docente
+    // la materia no le dice nada acá, así que se limpia la URL.
+    if (this.getSubjectId() !== null) return <Navigate to="/disponibilidad" replace />
+
     if (this.state.loading) {
       return (
         <div className="availability-empty">
           <SpinnerIcon className="spin" />
           <p className="availability-hint">Cargando tus horarios...</p>
-        </div>
-      )
-    }
-
-    if (this.getSubjectId() === null) return this.renderSubjectChooser()
-
-    if (!this.teachesSubject()) {
-      return (
-        <div className="availability-empty">
-          <ClockIcon />
-          <h1 className="availability-title">Disponibilidad</h1>
-          <p className="availability-warning">No estás dando esa materia.</p>
-          <Link className="auth-link" to="/disponibilidad">
-            Elegir otra materia
-          </Link>
         </div>
       )
     }

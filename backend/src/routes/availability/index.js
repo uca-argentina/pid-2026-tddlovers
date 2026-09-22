@@ -7,7 +7,8 @@ const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 export default async function availabilityRoutes(app) {
   /**
    * El tablero del alumno: la disponibilidad YA con fecha y YA neta de lo
-   * reservado. Una fila por (docente, materia, fecha).
+   * reservado. Una fila por (docente, fecha), con las materias del docente
+   * para que el alumno elija una al reservar.
    *
    * El alumno nunca ve una plantilla semanal: el puente entre "los lunes de
    * 13 a 15:30" y "el lunes 14 de septiembre" se hace acá.

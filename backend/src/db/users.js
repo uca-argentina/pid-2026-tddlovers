@@ -57,6 +57,18 @@ export async function findSubjectIdsByTeacher(teacherId) {
 }
 
 /**
+ * ¿Este docente da esta materia? La disponibilidad ya no dice de qué materia
+ * es, así que al reservar es lo único que ata la materia elegida al docente.
+ */
+export async function teacherTeachesSubject(teacherId, subjectId) {
+  const result = await getPool().query(
+    `SELECT 1 FROM teacher_subjects WHERE teacher_id = $1 AND subject_id = $2 LIMIT 1`,
+    [teacherId, subjectId]
+  );
+  return result.rowCount > 0;
+}
+
+/**
  * Actualiza el perfil y, si es docente, reemplaza sus materias por las que
  * llegan. Todo en una transacción: si falla el vínculo con las materias, el
  * teléfono tampoco se guarda, y nunca queda un docente a medio actualizar.

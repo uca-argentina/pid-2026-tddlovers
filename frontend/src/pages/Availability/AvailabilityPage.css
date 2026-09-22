@@ -1,7 +1,7 @@
 .availability-page {
   width: 100%;
-  /* El editor usa todo el ancho que le den: son 7 columnas por 48 filas. El
-     placeholder y el elegidor se limitan solos más abajo. */
+  /* El editor usa todo el ancho que le den: son 7 columnas por 48 filas. Los
+     carteles se limitan solos más abajo. */
   max-width: 1100px;
   margin-inline: auto;
 }
@@ -16,8 +16,7 @@
   max-width: none;
 }
 
-.availability-empty,
-.availability-chooser {
+.availability-empty {
   max-width: 720px;
   margin-inline: auto;
 }
@@ -69,57 +68,6 @@
   }
 }
 
-/* --- Elegir materia ------------------------------------------------------ */
-
-.availability-chooser {
-  border: 1.5px solid var(--color-border);
-  border-radius: 24px;
-  background: var(--color-surface-solid);
-  padding: 28px 24px;
-}
-
-.availability-chooser .availability-hint {
-  margin-top: 6px;
-}
-
-.availability-subject-list {
-  list-style: none;
-  margin: 18px 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.availability-subject-link {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 14px;
-  border: 1.5px solid var(--color-border);
-  border-radius: 14px;
-  background: var(--color-bg);
-  color: var(--color-text);
-  text-decoration: none;
-  transition: border-color 0.15s ease;
-}
-
-.availability-subject-link:hover {
-  border-color: var(--color-primary);
-}
-
-.availability-subject-name {
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.availability-subject-total {
-  flex-shrink: 0;
-  font-size: 12.5px;
-  color: var(--color-text-muted);
-}
-
 /* --- Editor -------------------------------------------------------------- */
 
 /* Acá no hay tarjeta: la grilla ya tiene su propio marco y meterla adentro de
@@ -137,33 +85,6 @@
   margin-top: 16px;
 }
 
-.availability-titlebar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.availability-back {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: 1.5px solid var(--color-border);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--color-text-muted);
-  text-decoration: none;
-  transition: border-color 0.15s ease, color 0.15s ease;
-}
-
-.availability-back:hover {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-}
-
-.availability-back svg {
-  width: 16px;
-  height: 16px;
+.availability-editor .availability-warning {
+  margin-top: 8px;
 }

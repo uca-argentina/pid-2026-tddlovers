@@ -110,20 +110,14 @@ export function fetchClasses({ from, to, status }) {
   )
 }
 
-/**
- * Un solo pedido con TODAS las materias de ESE docente, no una por materia.
- * La pantalla necesita las otras sí o sí —son las que bloquean horarios,
- * porque nadie puede dar dos clases a la vez— y pedirlas de a una sería un
- * N+1 con N estados de carga y una carrera entre promesas cada vez que se
- * cambia de materia.
- */
+/** La semana del docente: { lunes: [{ start, end }], ... }, sin materia. */
 export function fetchAvailabilityByTeacher(teacherId) {
   return request(`/api/teachers/${teacherId}/availability`)
 }
 
 /**
  * La disponibilidad YA con fecha y YA neta de lo reservado: una fila por
- * (docente, materia, fecha). La pantalla del alumno nunca ve una plantilla
+ * (docente, fecha), con las materias que da ese docente en `subjects`. La pantalla del alumno nunca ve una plantilla
  * semanal — el backend proyecta la semana sobre el rango pedido.
  */
 export function fetchAvailability({ from, to }) {
@@ -157,11 +151,12 @@ export function bookLesson(lesson) {
 }
 
 /**
- * Reemplaza la semana entera de esa materia: lo que no va en `schedule` se
- * borra. El docente sale de la sesión en el backend, no se manda.
+ * Reemplaza la semana entera del docente logueado: lo que no va en `schedule`
+ * se borra. Es una sola semana, sin materia — la materia la elige el alumno
+ * al reservar. El docente sale de la sesión en el backend, no se manda.
  */
-export function saveAvailability(subjectId, schedule) {
-  return request(`/api/subjects/${subjectId}/availability`, {
+export function saveAvailability(schedule) {
+  return request('/api/teachers/me/availability', {
     method: 'PUT',
     body: JSON.stringify({ schedule }),
   })

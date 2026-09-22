@@ -124,10 +124,10 @@ class App extends Component {
               }
             />
             <Route path="/buscar" element={<SearchResultsPage />} />
-            {/* Dos rutas para la misma pantalla: con materia (desde el botón
-                de cada materia del perfil) y sin materia (desde el ícono de
-                la barra). La v7 de react-router sacó los parámetros
-                opcionales, así que no se puede escribir en una sola. */}
+            {/* Dos rutas para la misma pantalla. La materia solo le sirve al
+                alumno (entra con esa materia filtrada); el docente tiene una
+                sola semana y la ignora. La v7 de react-router sacó los
+                parámetros opcionales, así que no se puede escribir en una. */}
             <Route
               path="/disponibilidad"
               element={<AvailabilityPage viewRole={viewRole} user={user} />}

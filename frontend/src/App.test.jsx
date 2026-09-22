@@ -165,9 +165,7 @@ describe('App', () => {
     expect(await screen.findByLabelText('Teléfono (opcional)')).toHaveValue('+54 9 11 4321-8765')
   })
 
-  it('desde el perfil como docente se llega a la disponibilidad de la materia', async () => {
-    // El usuario tiene que DAR la materia para que aparezca la fila con el
-    // botón: si no la da, cae en el bloque de "Agregar materia".
+  it('desde el perfil como docente se llega a la disponibilidad', async () => {
     loginAccount.mockResolvedValue({ ...user, subjectIds: [1] })
     fetchSubjects.mockResolvedValue([{ id: 1, name: 'Matemática' }])
     go('/ingresar')
@@ -177,12 +175,13 @@ describe('App', () => {
     // El usuario de prueba es docente, así que al loguearse viewRole queda
     // en docente y las materias se pueden editar.
     await userEvent.click(screen.getByLabelText('Mi perfil'))
-    await userEvent.click(await screen.findByRole('link', { name: 'Disponibilidad de Matemática' }))
+    await userEvent.click(await screen.findByRole('link', { name: 'Cargar mi disponibilidad' }))
 
-    expect(await screen.findByText('Disponibilidad de Matemática')).toBeInTheDocument()
+    // Por el título: la barra también dice "Disponibilidad" (ver abajo).
+    expect(await screen.findByRole('heading', { name: 'Disponibilidad' })).toBeInTheDocument()
   })
 
-  it('el ícono de la barra lleva a la disponibilidad sin materia', async () => {
+  it('el ícono de la barra lleva a la disponibilidad', async () => {
     fetchCurrentUser.mockResolvedValue(user)
     go('/')
     render(<App />)

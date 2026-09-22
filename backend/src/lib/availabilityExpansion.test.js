@@ -13,8 +13,7 @@ const MARTES = '2026-09-15';
 const entry = (over = {}) => ({
   teacherId: 't1',
   teacherName: 'Laura Gómez',
-  subjectId: 's1',
-  subjectName: 'Matemática',
+  subjects: [{ id: 's1', name: 'Matemática' }],
   schedule: { lunes: [{ start: '13:00', end: '15:30' }] },
   ...over,
 });
@@ -92,7 +91,7 @@ describe('expandAvailability', () => {
 
   it('builds the documented composite id', () => {
     const [row] = expandAvailability({ entries: [entry()], bookings: [], from: LUNES, to: LUNES });
-    expect(row.id).toBe(`${LUNES}|t1|s1`);
+    expect(row.id).toBe(`${LUNES}|t1`);
   });
 
   it('subtracts an hour booked with that teacher', () => {
@@ -105,8 +104,12 @@ describe('expandAvailability', () => {
     expect(row.ranges).toEqual([{ start: '14:00', end: '15:30' }]);
   });
 
-  it('subtracts across subjects — nobody teaches two at once', () => {
-    // La reserva es de OTRA materia del mismo docente y se resta igual.
+  it('carries the teacher subjects so the student can pick one', () => {
+    const [row] = expandAvailability({ entries: [entry()], bookings: [], from: LUNES, to: LUNES });
+    expect(row.subjects).toEqual([{ id: 's1', name: 'Matemática' }]);
+  });
+
+  it('subtracts a booking in the middle of the window', () => {
     const [row] = expandAvailability({
       entries: [entry()],
       bookings: [{ teacherId: 't1', date: LUNES, start: '14:00', end: '15:00' }],

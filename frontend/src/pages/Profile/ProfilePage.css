@@ -141,8 +141,10 @@
   font-weight: 600;
 }
 
-.profile-subject-link {
-  flex-shrink: 0;
+/* Uno solo, abajo de la lista: la disponibilidad ya no es por materia. */
+.profile-availability-link {
+  display: inline-block;
+  margin-top: 12px;
   border: 1.5px solid var(--color-primary);
   border-radius: 999px;
   background: color-mix(in srgb, var(--color-primary) 10%, transparent);
@@ -154,7 +156,7 @@
   transition: background-color 0.15s ease;
 }
 
-.profile-subject-link:hover {
+.profile-availability-link:hover {
   background: color-mix(in srgb, var(--color-primary) 18%, transparent);
 }
 

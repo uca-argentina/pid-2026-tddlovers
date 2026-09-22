@@ -38,9 +38,10 @@ const FALLBACK_SLOT_HEIGHT = 14
  * UNA VEZ POR GESTO, al soltar — no una vez por celda: si no, el padre
  * recalcularía todo cuarenta y ocho veces en un arrastre largo.
  *
- * `blockedBySlot` son los horarios que el docente ya ocupó con OTRA materia,
- * mapeados al nombre de esa materia: no se pueden tocar, porque nadie puede dar
- * dos clases a la vez.
+ * `blockedBySlot` mapea horarios que no se pueden tocar a lo que los ocupa
+ * (sale en el aria-label). Nació para las otras materias, cuando había una
+ * disponibilidad por materia; hoy la pantalla de disponibilidad no lo usa,
+ * pero la grilla lo sigue soportando.
  *
  * Sobre el arrastre, que es lo que tiene más filo:
  *   - Se escucha pointerover DELEGADO en cada columna, nunca pointerenter ni
@@ -391,17 +392,20 @@ class WeekScheduler extends Component {
   }
 
   /**
-   * La referencia de colores. Los tres primeros están siempre; "se va a
-   * borrar" y "menos de 1 h" aparecen SOLO cuando hay alguno en pantalla, para
-   * que en el caso normal la leyenda sea corta y no haya que leer estados que
-   * no existen.
+   * La referencia de colores. Los dos primeros están siempre; "ocupado", "se
+   * va a borrar" y "menos de 1 h" aparecen SOLO cuando hay alguno en
+   * pantalla, para que en el caso normal la leyenda sea corta y no haya que
+   * leer estados que no existen.
    */
   renderLegend() {
     const items = [
       { clase: 'is-selected', texto: 'Guardado' },
       { clase: 'is-selected is-pending', texto: 'Sin guardar' },
-      { clase: 'is-blocked', texto: 'Otra materia' },
     ]
+
+    if (Object.keys(this.props.blockedBySlot).length > 0) {
+      items.push({ clase: 'is-blocked', texto: 'Ocupado' })
+    }
 
     if (this.hasRemoved()) items.push({ clase: 'is-removed', texto: 'Se va a borrar' })
     if (this.props.shortRuns.length > 0) {

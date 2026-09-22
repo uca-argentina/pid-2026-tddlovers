@@ -14,8 +14,9 @@ import './ProfilePage.css'
  * teléfono, que además es opcional.
  *
  * Mirando como docente se administran las materias que da: se agregan y se
- * quitan de la lista fija que trae la base, y cada materia tiene su propio
- * botón que lleva a la disponibilidad DE ESA MATERIA. Como alumno no hay
+ * quitan de la lista fija que trae la base. La disponibilidad ya no es por
+ * materia (el alumno elige la materia al reservar), así que hay UN link a la
+ * disponibilidad y no uno por materia. Como alumno no hay
  * sección de materias — el alumno no elige materias en su perfil, así que ni
  * siquiera se pide el catálogo.
  *
@@ -213,22 +214,11 @@ class ProfilePage extends Component {
         ) : (
           <ul className="profile-subject-list">
             {mias.map((subject) => (
-              // Los tres son hermanos, NO están anidados: un <button> no puede
-              // ir adentro de otro <button>, que es justo lo que pasaría
-              // reusando los chips de SubjectPicker para esto.
+              // Hermanos, NO anidados: un <button> no puede ir adentro de
+              // otro <button>, que es justo lo que pasaría reusando los chips
+              // de SubjectPicker para esto.
               <li key={subject.id} className="profile-subject-row">
                 <span className="profile-subject-name">{subject.name}</span>
-                {/* El texto visible es corto, pero el nombre accesible tiene
-                    que decir de qué materia es: si no, hay tantos links
-                    llamados "Disponibilidad" como materias (y uno más en la
-                    barra), y quien use un lector de pantalla no los distingue. */}
-                <Link
-                  className="profile-subject-link"
-                  to={`/disponibilidad/${subject.id}`}
-                  aria-label={`Disponibilidad de ${subject.name}`}
-                >
-                  Disponibilidad
-                </Link>
                 <button
                   type="button"
                   className="profile-subject-remove"
@@ -241,6 +231,10 @@ class ProfilePage extends Component {
             ))}
           </ul>
         )}
+
+        <Link className="profile-availability-link" to="/disponibilidad">
+          Cargar mi disponibilidad
+        </Link>
 
         <h3 className="profile-subsection-title">Agregar materia</h3>
         {disponibles.length === 0 ? (
