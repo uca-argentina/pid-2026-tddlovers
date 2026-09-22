@@ -1,96 +1,304 @@
+/* Barra lateral oscura. Los colores salen de los tokens --color-sidebar-*,
+   que son los mismos en claro y en oscuro: la barra es oscura siempre, como
+   el diseño, mientras el contenido de al lado sí sigue el tema. */
+
 .navbar {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  background: color-mix(in srgb, var(--color-surface-solid) 88%, transparent);
-  backdrop-filter: blur(10px);
-  border-bottom: 1.5px solid var(--color-border);
-  padding-top: env(safe-area-inset-top);
+  flex-shrink: 0;
+  width: 232px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  background: var(--color-sidebar-bg);
+  color: var(--color-sidebar-text);
+  /* Sin safe-area en el padding: la barra ya no toca los bordes, de eso se
+     encarga el margen de abajo. */
+  padding: 20px 14px 18px;
+  overflow-y: auto;
+  /* La barra flota: despegada de los cuatro bordes, con todas las esquinas
+     redondeadas y una sombra que la levanta del fondo. El margen es lo que
+     la separa del borde de la pantalla; el contenido de al lado no pasa por
+     debajo, arranca después (ver .app-main).
+     El z-index hace que la sombra caiga sobre el contenido y no la tape el
+     fondo de .app-main, que viene después en el DOM. */
+  position: relative;
+  z-index: 5;
+  margin: 12px 0 12px 12px;
+  border-radius: 18px;
+  box-shadow: 0 8px 30px -8px rgba(0, 0, 0, 0.5);
 }
 
-.navbar-inner {
+.navbar-brand {
   display: flex;
   align-items: center;
   gap: 10px;
-  width: 100%;
-  /* Ancho del calendario, que ahora ocupa casi toda la pantalla. */
-  max-width: 1440px;
-  margin-inline: auto;
-  padding: 10px 16px;
+  padding: 0 8px 16px;
+  border-bottom: 1px solid var(--color-sidebar-border);
+  color: var(--color-sidebar-text-strong);
 }
 
-/* El buscador queda entre el perfil y los botones de la derecha, y es lo
-   único que se achica cuando falta lugar. */
-.navbar-inner .search-bar {
-  margin-right: auto;
-  max-width: 420px;
-}
-
-.navbar-icon-btn {
+.navbar-brand-mark {
   flex-shrink: 0;
-  width: 42px;
-  height: 42px;
+  width: 30px;
+  height: 30px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
-  color: var(--color-text-muted);
+  border-radius: 9px;
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.navbar-brand-mark svg {
+  width: 17px;
+  height: 17px;
+}
+
+.navbar-brand-name {
+  font-size: 15.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  /* Se come el espacio que sobra en el renglón y así empuja el botón de
+     tema —el último hijo de .navbar-brand— contra el borde derecho. */
+  margin-right: auto;
+}
+
+.navbar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.navbar-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 10px;
+  border-radius: 10px;
+  color: var(--color-sidebar-text);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  /* La barrita del item activo se dibuja siempre y se hace visible con
+     opacity: así el texto no se corre 3px al activarse. */
+  position: relative;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.navbar-item::before {
+  content: '';
+  position: absolute;
+  /* Adentro de la barra y no pegada a su borde: ahora que flota y tiene las
+     esquinas redondeadas, una barrita en el borde quedaría colgando afuera. */
+  left: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 20px;
+  border-radius: 3px;
+  background: var(--color-primary);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.navbar-item:hover {
+  color: var(--color-sidebar-text-strong);
+  background: var(--color-sidebar-active-bg);
+}
+
+.navbar-item.is-active {
+  color: var(--color-sidebar-text-strong);
+  background: var(--color-sidebar-active-bg);
+  font-weight: 600;
+}
+
+.navbar-item.is-active::before {
+  opacity: 1;
+}
+
+.navbar-item svg {
+  flex-shrink: 0;
+  width: 19px;
+  height: 19px;
+}
+
+/* El avatar con las iniciales, en el lugar donde los otros items tienen su
+   ícono. Es más grande que los íconos de 19px a propósito: el perfil es el
+   item del usuario y el círculo lleno lo distingue del resto del menú. */
+.navbar-avatar {
+  flex-shrink: 0;
+  width: 33px;
+  height: 33px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  /* Al ser más ancho que los íconos, el margen negativo lo recentra sobre la
+     columna que siguen los demás items y el padding del propio item absorbe
+     el alto extra. */
+  margin: -4px -7px;
+}
+
+/* El item del perfil muestra el nombre del usuario, que puede ser largo: se
+   corta con "..." en vez de desbordar la barra o partirse en dos renglones. */
+.navbar-item-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* El buscador vive en la barra oscura, así que acá se le pisa la paleta
+   clara que trae de SearchBar.css. */
+.navbar-search .search-bar input {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--color-sidebar-border);
+  color: var(--color-sidebar-text-strong);
+  border-radius: 10px;
+}
+
+.navbar-search .search-bar input::placeholder {
+  color: var(--color-sidebar-text);
+}
+
+.navbar-search .search-bar input:focus {
+  border-color: var(--color-primary);
+}
+
+.navbar-search .search-bar svg {
+  color: var(--color-sidebar-text);
+}
+
+/* `margin-top: auto` empuja el tema al piso de la barra. */
+.navbar-foot {
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-sidebar-border);
+}
+
+/* El botón de tema conserva su clase vieja (.navbar-icon-btn) porque lo
+   pone ThemeToggle, que no sabe dónde está montado. */
+.navbar-icon-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border-radius: 10px;
+  color: var(--color-sidebar-text);
   text-decoration: none;
   transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .navbar-icon-btn:hover {
-  color: var(--color-text);
-  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
-}
-
-.navbar-icon-btn.is-active {
-  color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+  color: var(--color-sidebar-text-strong);
+  background: var(--color-sidebar-active-bg);
 }
 
 .navbar-icon-btn svg {
-  width: 20px;
-  height: 20px;
+  width: 19px;
+  height: 19px;
 }
 
-/* Con cinco botones más el buscador hay que apretar el espaciado antes de
-   llegar al ancho de un teléfono. */
-@media (max-width: 600px) {
-  .navbar-inner {
+/* Teléfono y tablet angosta: la barra lateral pasa a ser una barra fija
+   abajo, solo con íconos. El orden visual lo fija `order` porque en el DOM
+   la marca y el buscador van antes que los links. */
+@media (max-width: 900px) {
+  .navbar {
+    width: auto;
+    flex-direction: row;
+    align-items: center;
     gap: 4px;
-    padding: 8px 10px;
+    padding: 6px 8px;
+    overflow: visible;
+    border-top: none;
+    /* Abajo también flota: se despega de los tres bordes que toca. El margen
+       inferior suma la safe area para no quedar debajo de la barra de gestos
+       del teléfono. */
+    margin: 0 12px calc(12px + env(safe-area-inset-bottom));
+    border-radius: 18px;
+    box-shadow: 0 6px 24px -6px rgba(0, 0, 0, 0.5);
+  }
+
+  /* La marca no aporta nada en un teléfono. */
+  .navbar-brand {
+    display: none;
+  }
+
+  /* El buscador es un solo componente con estado propio (lo tipeado), así
+     que no se puede duplicar arriba y abajo: se lo saca del flujo de la
+     barra de abajo y se lo fija arriba de la pantalla. */
+  .navbar-search {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 20;
+    padding: 8px 12px calc(8px + env(safe-area-inset-top));
+    padding-top: calc(8px + env(safe-area-inset-top));
+    background: var(--color-sidebar-bg);
+    border-bottom: 1px solid var(--color-sidebar-border);
+  }
+
+  /* Fuera del flex de la barra, el `flex: 1` de .search-bar no estira
+     nada: hay que darle el ancho a mano o el input se encoge al de su
+     contenido. */
+  .navbar-search .search-bar {
+    width: 100%;
+  }
+
+  .navbar-nav {
+    flex: 1;
+    flex-direction: row;
+    justify-content: space-around;
+    gap: 2px;
+  }
+
+  .navbar-item {
+    flex-direction: column;
+    gap: 3px;
+    flex: 1;
+    padding: 6px 4px;
+    font-size: 10.5px;
+    text-align: center;
+  }
+
+  /* Abajo la barrita del activo va arriba del ícono, no al costado. */
+  .navbar-item::before {
+    left: 50%;
+    top: 0;
+    transform: translateX(-50%);
+    width: 18px;
+    height: 3px;
+    border-radius: 0 0 3px 3px;
+  }
+
+  .navbar-foot {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+    flex-shrink: 0;
   }
 
   .navbar-icon-btn {
-    width: 36px;
-    height: 36px;
-  }
-
-  .navbar-icon-btn svg {
-    width: 18px;
-    height: 18px;
-  }
-}
-
-/* Con el quinto botón, de 480px para abajo el buscador se queda sin ancho
-   útil: le sobrarían 155px a 375px y 100px a 320px. Apretamos un escalón más
-   los botones y el padding lateral y vuelve a tener casi lo mismo que tenía
-   con cuatro. Nunca se desborda: .search-bar es flex:1 con min-width:0, así
-   que es él el que se achica. */
-@media (max-width: 480px) {
-  .navbar-inner {
-    gap: 2px;
+    width: 42px;
     padding: 8px;
   }
+}
 
-  .navbar-icon-btn {
-    width: 32px;
-    height: 32px;
+/* De 380px para abajo las etiquetas de tres palabras ("Disponibilidad") se
+   comen el ancho: quedan solo los íconos. */
+@media (max-width: 380px) {
+  .navbar-item-label {
+    display: none;
   }
 
-  .navbar-icon-btn svg {
-    width: 17px;
-    height: 17px;
+  .navbar-item {
+    padding: 9px 4px;
   }
 }

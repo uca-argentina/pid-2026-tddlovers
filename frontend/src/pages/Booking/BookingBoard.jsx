@@ -267,9 +267,13 @@ class BookingBoard extends Component {
     }))
   }
 
-  handleChangeTime = (field) => (event) => {
+  /**
+   * El slider manda las dos puntas juntas: no se puede mover una sin saber
+   * dónde quedó la otra (se empujan entre sí).
+   */
+  handleChangeRange = (fromTime, toTime) => {
     this.dropQuery()
-    this.setState({ [field]: event.target.value })
+    this.setState({ fromTime, toTime })
   }
 
   handleClearTeacher = () => {
@@ -322,21 +326,6 @@ class BookingBoard extends Component {
 
     return (
       <div className="booking-board">
-        <BookingFilters
-          subjects={this.getFilterSubjects()}
-          dayKeys={this.state.dayKeys}
-          subjectIds={this.state.subjectIds}
-          fromTime={this.state.fromTime}
-          toTime={this.state.toTime}
-          teacherQuery={this.state.teacherQuery}
-          hasFilters={this.hasFilters()}
-          onToggleDay={this.handleToggleDay}
-          onToggleSubject={this.handleToggleSubject}
-          onChangeTime={this.handleChangeTime}
-          onClearTeacher={this.handleClearTeacher}
-          onClear={this.handleClear}
-        />
-
         <div className="booking-panes">
           <MonthPane
             eventsByDate={this.getLessonsByDate()}
@@ -350,8 +339,24 @@ class BookingBoard extends Component {
           </MonthPane>
 
           {/* Igual que en el calendario: va después en el DOM y el CSS lo manda
-              a la izquierda, porque el calendario es el contenido principal. */}
+              a la izquierda, porque el calendario es el contenido principal.
+              Adentro, los filtros arriba y los horarios del día abajo. */}
           <aside className="booking-aside">
+            <BookingFilters
+              subjects={this.getFilterSubjects()}
+              dayKeys={this.state.dayKeys}
+              subjectIds={this.state.subjectIds}
+              fromTime={this.state.fromTime}
+              toTime={this.state.toTime}
+              teacherQuery={this.state.teacherQuery}
+              hasFilters={this.hasFilters()}
+              onToggleDay={this.handleToggleDay}
+              onToggleSubject={this.handleToggleSubject}
+              onChangeRange={this.handleChangeRange}
+              onClearTeacher={this.handleClearTeacher}
+              onClear={this.handleClear}
+            />
+
             <BookingResults
               date={fromISODate(selectedIso)}
               cards={porFecha[selectedIso] || []}

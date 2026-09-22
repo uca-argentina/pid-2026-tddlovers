@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import BookingBoard from './BookingBoard.jsx'
@@ -63,6 +63,16 @@ function renderBoard(path = '/disponibilidad', props = {}) {
 
 function esperarCarga() {
   return waitFor(() => expect(screen.queryByText('Buscando horarios...')).not.toBeInTheDocument())
+}
+
+/**
+ * Los filtros viven en secciones plegables que arrancan cerradas, así que hay
+ * que abrirlas antes de llegar a los chips — igual que el alumno. Si ya está
+ * abierta (porque el filtro venía elegido) no la toca.
+ */
+async function abrirFiltro(nombre) {
+  const head = screen.getByRole('button', { name: new RegExp(`^${nombre}`) })
+  if (head.getAttribute('aria-expanded') === 'false') await userEvent.click(head)
 }
 
 describe('BookingBoard', () => {
@@ -130,6 +140,7 @@ describe('BookingBoard', () => {
 
     // Elegimos un día que NO es el de la tarjeta.
     const otroDia = DIA_HOY === 'lunes' ? 'Martes' : 'Lunes'
+    await abrirFiltro('Días')
     await userEvent.click(screen.getByRole('button', { name: otroDia }))
 
     expect(screen.queryByText('13:00 – 17:00')).not.toBeInTheDocument()
@@ -150,6 +161,7 @@ describe('BookingBoard', () => {
     renderBoard()
     await esperarCarga()
 
+    await abrirFiltro('Materias')
     await userEvent.click(await screen.findByRole('button', { name: 'Física' }))
 
     expect(screen.getByText('09:00 – 11:00')).toBeInTheDocument()
@@ -161,6 +173,7 @@ describe('BookingBoard', () => {
     // en este mes, no tiene sentido poder filtrarla.
     renderBoard()
     await esperarCarga()
+    await abrirFiltro('Materias')
 
     expect(await screen.findByRole('button', { name: 'Matemática' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Física' })).not.toBeInTheDocument()
@@ -169,14 +182,34 @@ describe('BookingBoard', () => {
   it('filtra por hora de arranque', async () => {
     renderBoard()
     await esperarCarga()
+    await abrirFiltro('Horario')
+    // El slider es un <input type="range">: se cambia con fireEvent porque
+    // userEvent no sabe arrastrar una manija.
     const desde = screen.getByLabelText('Desde')
 
     // 13:00–17:00 ofrece arrancar hasta las 16:00.
-    await userEvent.selectOptions(desde, '15:00')
+    fireEvent.change(desde, { target: { value: '15' } })
     expect(screen.getByText('13:00 – 17:00')).toBeInTheDocument()
 
-    await userEvent.selectOptions(desde, '17:00')
+    fireEvent.change(desde, { target: { value: '17' } })
     expect(screen.queryByText('13:00 – 17:00')).not.toBeInTheDocument()
+  })
+
+  it('las manijas del horario no se cruzan', async () => {
+    // Sin esto se podría armar un rango invertido, que no devuelve nada y
+    // obligaba a un cartel de advertencia.
+    renderBoard()
+    await esperarCarga()
+    await abrirFiltro('Horario')
+
+    const desde = screen.getByLabelText('Desde')
+    const hasta = screen.getByLabelText('Hasta')
+
+    fireEvent.change(hasta, { target: { value: '10' } })
+    // Se la empuja más allá de "hasta": queda una hora antes, no después.
+    fireEvent.change(desde, { target: { value: '20' } })
+
+    expect(Number(desde.value)).toBeLessThan(Number(hasta.value))
   })
 
   it('el número verde del día es cuántas tarjetas hay', async () => {
@@ -228,6 +261,7 @@ describe('BookingBoard', () => {
     await esperarCarga()
 
     const otroDia = DIA_HOY === 'lunes' ? 'Martes' : 'Lunes'
+    await abrirFiltro('Días')
     await userEvent.click(screen.getByRole('button', { name: otroDia }))
     expect(screen.queryByText('13:00 – 17:00')).not.toBeInTheDocument()
 
@@ -242,6 +276,7 @@ describe('BookingBoard', () => {
     expect(screen.getByText('No hay horarios libres ese día.')).toBeInTheDocument()
 
     const otroDia = DIA_HOY === 'lunes' ? 'Martes' : 'Lunes'
+    await abrirFiltro('Días')
     await userEvent.click(screen.getByRole('button', { name: otroDia }))
     expect(
       screen.getByText('Ningún horario libre de ese día coincide con los filtros.'),

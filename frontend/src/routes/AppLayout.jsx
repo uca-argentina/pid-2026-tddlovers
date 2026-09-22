@@ -22,11 +22,11 @@ import './AppLayout.css'
  */
 class AppLayout extends Component {
   render() {
-    const { viewRole, onToggleRole } = this.props
+    const { viewRole, onToggleRole, user } = this.props
 
     return (
       <div className="app-shell">
-        <NavBar viewRole={viewRole} onToggleRole={onToggleRole} />
+        <NavBar viewRole={viewRole} onToggleRole={onToggleRole} user={user} />
         <main className="app-main">
           <Outlet />
         </main>

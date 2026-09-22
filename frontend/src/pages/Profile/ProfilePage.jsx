@@ -4,6 +4,7 @@ import Banner from '../../components/Banner.jsx'
 import FormField from '../../components/FormField.jsx'
 import { PlusIcon, SpinnerIcon } from '../../components/icons.jsx'
 import { isValidPhone } from '../../utils/validation.js'
+import { getInitials } from '../../utils/user.js'
 import { fetchSubjects, updateProfile } from '../../api/client.js'
 import './ProfilePage.css'
 
@@ -86,11 +87,6 @@ class ProfilePage extends Component {
   /** El rol que se está mirando no es el de la cuenta (culpa del andamio). */
   rolDesalineado() {
     return Boolean(this.props.user) && this.props.user.role !== this.props.viewRole
-  }
-
-  getInitials() {
-    const { nombre, apellido } = this.props.user
-    return `${nombre?.charAt(0) || ''}${apellido?.charAt(0) || ''}`.toUpperCase()
   }
 
   getTelefonoError() {
@@ -294,7 +290,7 @@ class ProfilePage extends Component {
         <form className="profile-card" onSubmit={this.handleSubmit} noValidate>
           <div className="profile-identity">
             <span className="profile-avatar" aria-hidden="true">
-              {this.getInitials()}
+              {getInitials(user)}
             </span>
             <div>
               <h1 className="profile-name">

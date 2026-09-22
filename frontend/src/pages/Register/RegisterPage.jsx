@@ -229,8 +229,8 @@ class RegisterPage extends Component {
 
     return (
       <div className="auth-page">
-        <div className="auth-shell">
-          <AuthHero showBack={canGoBack} onBack={this.handleBack} />
+        <AuthHero showBack={canGoBack} onBack={this.handleBack} />
+        <div className="auth-panel">
           <div className="auth-card">
             <h1 className="auth-title">Crear cuenta</h1>
             <ProgressSteps total={totalSteps} current={step} />

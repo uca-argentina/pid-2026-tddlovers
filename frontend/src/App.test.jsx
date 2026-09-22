@@ -115,7 +115,9 @@ describe('App', () => {
     await screen.findByText(formatMonthTitle(new Date()))
 
     await userEvent.click(screen.getByLabelText('Mi perfil'))
-    expect(await screen.findByText('Agustín Klos')).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: 'Agustín Klos' }),
+    ).toBeInTheDocument()
   })
 
   it('sin sesión el perfil pide iniciar sesión', async () => {
@@ -129,7 +131,9 @@ describe('App', () => {
     fetchCurrentUser.mockResolvedValue(user)
     go('/perfil')
     render(<App />)
-    expect(await screen.findByText('Agustín Klos')).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: 'Agustín Klos' }),
+    ).toBeInTheDocument()
   })
 
   it('se puede entrar al login aunque ya haya un usuario cargado', async () => {
@@ -183,14 +187,17 @@ describe('App', () => {
     go('/')
     render(<App />)
     await userEvent.click(screen.getByLabelText('Disponibilidad'))
-    expect(await screen.findByText('Disponibilidad')).toBeInTheDocument()
+    // Por el título de la pantalla y no por texto suelto: el usuario de
+    // prueba es docente y en ese rol la barra también dice "Disponibilidad",
+    // así que un getByText encontraría dos.
+    expect(await screen.findByRole('heading', { name: 'Disponibilidad' })).toBeInTheDocument()
   })
 
   it('cerrar sesión lleva al login y se olvida del usuario', async () => {
     fetchCurrentUser.mockResolvedValue(user)
     go('/perfil')
     render(<App />)
-    await screen.findByText('Agustín Klos')
+    await screen.findByRole('heading', { name: 'Agustín Klos' })
 
     await userEvent.click(screen.getByRole('link', { name: 'Cerrar sesión' }))
 

@@ -1,9 +1,10 @@
 /* Dos columnas, igual que el calendario de "mis clases" (ver
-   CalendarPage.css): el detalle a la izquierda y el calendario a la derecha,
-   con el calendario primero en el DOM y mandado a la derecha con `order`.
+   CalendarPage.css): el calendario a la derecha —primero en el DOM y mandado
+   ahí con `order`— y a la izquierda una columna con dos tarjetas apiladas,
+   los filtros arriba y los horarios del día abajo.
    Van duplicadas y no compartidas a propósito: son veinte líneas declarativas
-   y las dos pantallas difieren de verdad (acá el panel es más ancho porque las
-   tarjetas tienen botón, y arriba hay una fila de filtros). */
+   y las dos pantallas difieren de verdad (acá el panel es más ancho porque
+   las tarjetas tienen botón, y la columna lleva dos paneles). */
 
 .booking-board {
   display: flex;
@@ -24,6 +25,21 @@
   width: 360px;
   flex-shrink: 0;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Los filtros ocupan lo que necesitan (flex-shrink: 0) y los horarios se
+   quedan con el resto de la columna, scrolleando adentro si hay muchos. Sin
+   el shrink, abrir una sección de filtros apretaría la lista de abajo. */
+.booking-aside > .booking-filters {
+  flex-shrink: 0;
+}
+
+.booking-aside > .booking-results {
+  flex: 1;
+  min-height: 0;
 }
 
 @media (max-width: 900px) {
@@ -31,6 +47,10 @@
     height: auto;
   }
 
+  /* Apilado: primero el calendario, después los horarios del día y al final
+     los filtros, para no empujar el contenido hacia abajo. El orden del DOM
+     ya es calendario → filtros → horarios, así que solo se reubican esos dos
+     con `order`. */
   .booking-panes {
     flex-direction: column;
     gap: 20px;
@@ -39,5 +59,14 @@
   .booking-aside {
     order: 0;
     width: 100%;
+    display: contents;
+  }
+
+  .booking-aside > .booking-filters {
+    order: 2;
+  }
+
+  .booking-aside > .booking-results {
+    order: 1;
   }
 }

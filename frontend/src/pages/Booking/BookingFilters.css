@@ -1,20 +1,59 @@
+/* Panel de filtros de la columna izquierda: una tarjeta como las demás de la
+   app (ver MonthPane/DayAgenda), con las secciones una abajo de la otra. */
+
 .booking-filters {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 14px 24px;
-  padding: 12px 14px;
-  margin-bottom: 14px;
-  border: 1.5px solid var(--color-border);
-  border-radius: 14px;
+  flex-direction: column;
+  gap: 2px;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
   background: var(--color-surface-solid);
+  box-shadow: var(--shadow-panel);
+}
+
+.booking-filters-title {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+  margin-bottom: 8px;
 }
 
 .booking-filter {
   display: flex;
   flex-direction: column;
-  gap: 6px;
   min-width: 0;
+}
+
+/* El encabezado de la sección es el botón que la pliega: ocupa todo el ancho
+   para que se pueda tocar cómodo en un teléfono. */
+.booking-filter-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 8px 6px;
+  border-radius: 8px;
+  text-align: left;
+  color: var(--color-text);
+  transition: background-color 0.15s ease;
+}
+
+.booking-filter-head:hover {
+  background: color-mix(in srgb, var(--color-primary) 7%, transparent);
+}
+
+.booking-filter-caret {
+  flex-shrink: 0;
+  width: 13px;
+  height: 13px;
+  color: var(--color-text-muted);
+  transition: transform 0.15s ease;
+}
+
+.booking-filter-caret.is-open {
+  transform: rotate(90deg);
 }
 
 .booking-filter-label {
@@ -25,29 +64,75 @@
   letter-spacing: 0.4px;
 }
 
+/* Cuántos filtros tiene elegidos la sección: es lo único que se ve de su
+   contenido cuando está plegada, así que va en el color de acento. Va al
+   lado del título y no contra el borde derecho: ahí se leía como un badge
+   suelto en vez de como parte de la sección. */
+.booking-filter-count {
+  margin-right: auto;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.booking-filter-body {
+  padding: 2px 6px 10px;
+}
+
 .booking-filter-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
 
-/* Los chips de la barra son más chicos que los del registro: acá hay muchos
-   más y tienen que entrar en una fila. */
-.booking-filters .subject-chip {
-  padding: 6px 12px;
-  font-size: 12.5px;
+/* Los siete días en columnas parejas (4 + 3): son etiquetas de largo
+   similar, así que una grilla se lee más ordenada que el envuelto. */
+.booking-filter-days {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
 }
 
+/* Los chips de este panel son más chicos que los del registro: acá hay
+   muchos más y entran en una columna angosta. El borde de 1px los alinea
+   con el resto de las superficies de la app (las tarjetas también son 1px). */
+.booking-filters .subject-chip {
+  padding: 7px 12px;
+  font-size: 12.5px;
+  border-width: 1px;
+  justify-content: center;
+}
+
+.booking-filters .subject-chip:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* En columna los dos selects no entran uno al lado del otro: van apilados,
+   cada uno con su etiqueta arriba y ocupando el ancho completo. */
 .booking-filter-times {
   display: flex;
+  flex-direction: column;
   gap: 10px;
 }
 
 .booking-filter-time {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12.5px;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.booking-filter-time-label {
+  font-size: 11.5px;
+  font-weight: 600;
   color: var(--color-text-muted);
 }
 
@@ -56,63 +141,76 @@
    que el desplegable nativo siga el tema solo. */
 .booking-filter-time select {
   appearance: none;
-  border: 1.5px solid var(--color-border);
+  width: 100%;
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   background-color: var(--color-bg);
   color: var(--color-text);
   font-family: inherit;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
-  padding: 7px 26px 7px 10px;
+  padding: 9px 30px 9px 12px;
   cursor: pointer;
-  transition: border-color 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 
   background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
     linear-gradient(135deg, currentColor 50%, transparent 50%);
-  background-position: calc(100% - 14px) calc(50% + 1px), calc(100% - 9px) calc(50% + 1px);
+  background-position: calc(100% - 16px) calc(50% + 1px), calc(100% - 11px) calc(50% + 1px);
   background-size: 5px 5px, 5px 5px;
   background-repeat: no-repeat;
 }
 
-.booking-filter-time select:hover,
-.booking-filter-time select:focus-visible {
-  border-color: var(--color-primary);
+.booking-filter-time select:hover {
+  border-color: var(--color-text-muted);
 }
 
+/* El mismo anillo de foco que los inputs del resto de la app (ver
+   FormField.css): así el panel no inventa su propio estado de foco. */
+.booking-filter-time select:focus-visible {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 20%, transparent);
+}
+
+/* El chip del docente buscado, que llega desde el buscador de la barra. */
 .booking-filters-foot {
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
-  margin-left: auto;
-  align-self: flex-end;
+  padding: 6px 6px 0;
+}
+
+/* Este chip lleva un nombre entero, así que a diferencia de los de días y
+   materias se deja crecer y corta con "..." en vez de desbordar. */
+.booking-filters-foot .subject-chip {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .booking-filters-clear {
-  width: auto;
-  padding: 8px 14px;
+  width: 100%;
+  margin-top: 10px;
+  padding: 9px 14px;
   font-size: 12.5px;
   border-radius: 10px;
+  /* 1px como el resto del panel: .btn-ghost trae 1px, pero los chips y los
+     selects se declaran acá, así que se deja explícito para que los tres
+     controles se vean del mismo peso. */
+  border-width: 1px;
 }
 
 .booking-filters-hint {
-  flex-basis: 100%;
+  padding: 6px 6px 0;
   font-size: 12.5px;
   color: var(--color-warning);
 }
 
-@media (max-width: 900px) {
-  .booking-filters-foot {
-    margin-left: 0;
-  }
-}
-
 @media (max-width: 600px) {
   .booking-filters {
-    gap: 12px 16px;
-    padding: 10px 12px;
-  }
-
-  .booking-filter-times {
-    flex-wrap: wrap;
+    padding: 14px;
+    border-radius: 14px;
   }
 }

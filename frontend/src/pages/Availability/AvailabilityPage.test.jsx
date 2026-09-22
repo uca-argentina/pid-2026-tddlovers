@@ -48,6 +48,23 @@ function renderAt(path, props) {
   )
 }
 
+/**
+ * Como renderAt pero con /perfil montado: hace falta para los tests de la
+ * flecha de volver, que ahora navegan de verdad en vez de ser un <Link> a un
+ * destino fijo.
+ */
+function renderConDestinos(path, props) {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path="/perfil" element={<p>Pantalla de perfil</p>} />
+        <Route path="/disponibilidad" element={<AvailabilityPage {...props} />} />
+        <Route path="/disponibilidad/:materiaId" element={<AvailabilityPage {...props} />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+}
+
 // La carga llega por promesa: esperarla evita que el setState caiga fuera del
 // test (el warning de act()).
 function esperarCarga() {
@@ -184,18 +201,37 @@ describe('AvailabilityPage — vista de docente', () => {
     expect(screen.queryByLabelText(/ocupado por Matemática/)).not.toBeInTheDocument()
   })
 
-  it('tiene una flecha para volver al perfil', async () => {
-    renderAt('/disponibilidad/1', { viewRole: 'teacher', user: docente })
+  it('la flecha vuelve a la pantalla de la que se vino', async () => {
+    // A la grilla se llega desde dos lados, así que la flecha deshace el
+    // último paso en vez de ir siempre al perfil: quien entró desde el
+    // elegidor tiene que volver al elegidor.
+    renderConDestinos('/disponibilidad', { viewRole: 'teacher', user: docente })
     await esperarCarga()
 
-    expect(screen.getByLabelText('Volver al perfil')).toHaveAttribute('href', '/perfil')
+    await userEvent.click(await screen.findByRole('link', { name: /Matemática/ }))
+    await esperarCarga()
+
+    await userEvent.click(screen.getByLabelText('Volver'))
+
+    expect(await screen.findByText('Elegí una materia para cargar los días y horarios en los que la das.')).toBeInTheDocument()
+  })
+
+  it('entrando directo por la URL la flecha lleva al elegidor', async () => {
+    // Sin historial propio un -1 saldría de la app, así que cae al elegidor,
+    // que es el padre natural de esta pantalla.
+    renderConDestinos('/disponibilidad/1', { viewRole: 'teacher', user: docente })
+    await esperarCarga()
+
+    await userEvent.click(screen.getByLabelText('Volver'))
+
+    expect(await screen.findByText('Elegí una materia para cargar los días y horarios en los que la das.')).toBeInTheDocument()
   })
 
   it('el elegidor no tiene flecha: ya está en el listado', async () => {
     renderAt('/disponibilidad', { viewRole: 'teacher', user: docente })
     await esperarCarga()
 
-    expect(screen.queryByLabelText('Volver al perfil')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Volver')).not.toBeInTheDocument()
   })
 
   it('guardar arranca apagado y se prende al tocar una celda', async () => {

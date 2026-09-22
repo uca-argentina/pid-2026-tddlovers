@@ -1,26 +1,55 @@
 /* Altura fija (no min-height): el calendario ocupa exactamente lo que sobra
-   abajo de la barra y no hace scrollear la página. Las pantallas que sí son
+   al lado de la barra y no hace scrollear la página. Las pantallas que sí son
    largas (perfil) scrollean adentro de .app-main. */
 .app-shell {
   height: 100svh;
   width: 100%;
   display: flex;
-  flex-direction: column;
+  /* La barra lateral a la izquierda y el contenido a la derecha. */
+  flex-direction: row;
   background: var(--color-bg);
 }
 
+/* El contenido va liso y al ras: es la barra la que se le monta encima (ver
+   .navbar en NavBar.css), no al revés. El fondo del shell es el del tema
+   porque ya no se ve ningún marco oscuro alrededor del contenido. */
 .app-main {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow-y: auto;
-  width: 100%;
-  max-width: 1440px;
-  margin-inline: auto;
-  padding: 16px;
+  padding: 24px;
+  background: var(--color-bg);
+}
+
+/* En teléfono la barra va abajo: column-reverse la manda al piso sin tocar
+   el orden del DOM (que es el que leen el teclado y el lector de pantalla:
+   primero navegar, después el contenido). */
+@media (max-width: 900px) {
+  .app-shell {
+    flex-direction: column-reverse;
+  }
+
+  /* En column-reverse los hijos ya no se reparten el ancho por flex, así
+     que sin esto un contenido ancho (la grilla de 7 columnas) estira la
+     página y aparece scroll horizontal. */
+  .app-shell > * {
+    max-width: 100%;
+  }
+
+  /* El padding de arriba deja lugar al buscador, que en este ancho está
+     fijo arriba de todo (ver NavBar.css) y por lo tanto fuera del flujo. */
+  .app-main {
+    padding: 14px;
+    padding-top: calc(62px + env(safe-area-inset-top));
+  }
 }
 
 @media (max-width: 600px) {
+  /* Solo los laterales: el de arriba lo fija el bloque de 900px, que
+     reserva el alto del buscador. */
   .app-main {
-    padding: 12px;
+    padding-inline: 12px;
+    padding-bottom: 12px;
   }
 }

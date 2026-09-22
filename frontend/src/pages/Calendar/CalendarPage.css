@@ -12,7 +12,7 @@
 
 .calendar-aside {
   order: -1;
-  width: 320px;
+  width: 290px;
   flex-shrink: 0;
   min-height: 0;
 }

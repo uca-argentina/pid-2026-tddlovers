@@ -110,7 +110,7 @@ class App extends Component {
 
           {/* Ruta sin path: solo aporta el layout (barra superior) a las de
               adentro, y así el NavBar no se remonta al cambiar de pantalla. */}
-          <Route element={<AppLayout viewRole={viewRole} />}>
+          <Route element={<AppLayout viewRole={viewRole} user={user} />}>
             <Route path="/" element={<CalendarPage viewRole={viewRole} />} />
             <Route
               path="/perfil"
