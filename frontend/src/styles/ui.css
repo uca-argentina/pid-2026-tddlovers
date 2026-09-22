@@ -18,48 +18,58 @@
 }
 
 .auth-page {
-  /* El flujo de registro se diseñó calcado a un mockup en paleta clara —
-     lo fijamos siempre así acá, sin importar el modo claro/oscuro del
-     sistema, para no perder ese contraste. El resto de la app (si en el
-     futuro tiene más pantallas) puede seguir respetando el modo del
-     sistema normalmente, ya que esto solo pisa las variables dentro de
-     este contenedor. */
-  --color-bg: #eff6ff;
-  --color-surface: #dbeafe;
+  /* El flujo de auth se diseñó calcado a un mockup en paleta clara — lo
+     fijamos siempre así acá, sin importar el modo claro/oscuro del sistema,
+     para no perder ese contraste. El resto de la app sí sigue el modo del
+     sistema (ver el comentario en index.css); esto solo pisa las variables
+     dentro de este contenedor. */
+  --color-bg: #f4f5f7;
+  --color-surface: #eef1f6;
   --color-surface-solid: #ffffff;
   --color-primary: #2563eb;
   --color-primary-hover: #1d4ed8;
   --color-text: #0f172a;
   --color-text-muted: #64748b;
-  --color-border: #cbd5e1;
+  --color-border: #e4e8ef;
   --color-success: #16a34a;
   --color-success-bg: rgba(22, 163, 74, 0.1);
   --color-danger: #dc2626;
   --color-danger-bg: rgba(220, 38, 38, 0.1);
   --color-warning: #d97706;
   --color-warning-bg: rgba(217, 119, 6, 0.1);
-  --shadow-card: 0 20px 45px -15px rgba(37, 99, 235, 0.35);
+  --shadow-card: 0 24px 60px -20px rgba(15, 23, 42, 0.28);
   --shadow-soft: 0 10px 25px -8px rgba(15, 23, 42, 0.15);
 
+  /* min-height y no height: cuando el formulario es más alto que la ventana
+     (el registro en una pantalla baja) la página tiene que poder crecer y
+     scrollear. Con height fijo el final de la tarjeta quedaba inalcanzable. */
   min-height: 100svh;
   width: 100%;
+  /* Dos columnas: la ilustración a la izquierda sobre el fondo claro y, a la
+     derecha, el bloque oscuro que sostiene la tarjeta del formulario. */
+  display: grid;
+  grid-template-columns: 1fr minmax(520px, 1fr);
+  background: var(--color-surface-solid);
+}
+
+/* El bloque oscuro de la derecha. El radio grande solo del lado izquierdo es
+   lo que le da la forma del diseño: se recuesta contra el borde derecho de
+   la pantalla. */
+.auth-panel {
   display: flex;
-  align-items: center;
+  /* `safe center` y no `center` a secas: cuando la tarjeta es más alta que
+     el panel, el centrado común la recorta por ARRIBA (queda con top
+     negativo, fuera de alcance). Con `safe` se alinea al principio y todo
+     el formulario queda accesible scrolleando la página. */
+  align-items: safe center;
   justify-content: center;
-  padding: 24px;
+  padding: 40px;
+  background: var(--color-sidebar-bg);
+  border-radius: 40px 0 0 40px;
   position: relative;
+  /* Recorta el arco decorativo contra el borde del panel. El scroll lo hace
+     la página, así que esto no encierra el formulario. */
   overflow: hidden;
-  background: radial-gradient(
-      circle at 15% 20%,
-      color-mix(in srgb, var(--color-primary) 35%, transparent) 0%,
-      transparent 55%
-    ),
-    radial-gradient(
-      circle at 85% 80%,
-      color-mix(in srgb, var(--color-primary) 25%, transparent) 0%,
-      transparent 50%
-    ),
-    var(--color-bg);
 }
 
 .btn {
@@ -69,8 +79,9 @@
   gap: 8px;
   font-size: 15px;
   font-weight: 600;
-  border-radius: 16px;
-  padding: 14px 20px;
+  /* Pastilla, como el botón del diseño. */
+  border-radius: 999px;
+  padding: 15px 20px;
   border: none;
   cursor: pointer;
   transition: background-color 0.15s ease, transform 0.1s ease, opacity 0.15s ease;
@@ -184,74 +195,121 @@
 }
 
 /* Estructura compartida por las pantallas de auth (Registro, Login):
-   encabezado azul decorativo + tarjeta blanca superpuesta. */
-
-.auth-shell {
-  width: 100%;
-  max-width: 400px;
-}
+   columna izquierda con la marca y la ilustración, columna derecha oscura
+   con la tarjeta del formulario. */
 
 .auth-hero {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 16px;
+  /* El padding derecho es mayor: el texto no tiene que llegar a tocar el
+     borde del panel oscuro. */
+  padding: 48px 72px 48px 64px;
   position: relative;
-  height: 180px;
-  border-radius: 32px 32px 0 0;
-  overflow: hidden;
-  background: linear-gradient(
-    160deg,
-    var(--color-primary) 0%,
-    color-mix(in srgb, var(--color-primary) 55%, #0b1436) 100%
-  );
 }
 
-.auth-hero-circle {
-  position: absolute;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.14);
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
 }
 
-.auth-hero-circle-a {
-  width: 220px;
-  height: 220px;
-  top: -120px;
-  right: -60px;
+.auth-brand-mark {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 11px;
+  background: var(--color-primary);
+  color: #fff;
 }
 
-.auth-hero-circle-b {
-  width: 140px;
-  height: 140px;
-  bottom: -75px;
-  right: 30px;
-  background: rgba(255, 255, 255, 0.2);
+.auth-brand-mark svg {
+  width: 20px;
+  height: 20px;
 }
 
-.auth-hero-circle-c {
-  width: 90px;
-  height: 90px;
-  top: 24px;
-  left: -35px;
-  background: rgba(255, 255, 255, 0.1);
+.auth-brand-name {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--color-text);
 }
 
+.auth-tagline {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.02em;
+  color: var(--color-text);
+  max-width: 17ch;
+}
+
+.auth-art {
+  width: 100%;
+  max-width: 400px;
+  height: auto;
+  margin-top: 8px;
+}
+
+/* Los colores de la ilustración salen de la paleta: el azul fuerte para lo
+   que importa (la persona, los días reservados) y grises para el resto. */
+.auth-art-shadow {
+  fill: color-mix(in srgb, var(--color-text) 6%, transparent);
+}
+
+.auth-art-screen {
+  fill: color-mix(in srgb, var(--color-primary) 12%, var(--color-surface-solid));
+}
+
+.auth-art-screen-bar {
+  fill: color-mix(in srgb, var(--color-primary) 28%, transparent);
+}
+
+.auth-art-grid rect,
+.auth-art-grid-fill {
+  fill: color-mix(in srgb, var(--color-primary) 20%, var(--color-surface-solid));
+}
+
+.auth-art-accent {
+  fill: var(--color-primary);
+}
+
+.auth-art-desk {
+  fill: color-mix(in srgb, var(--color-text) 22%, transparent);
+}
+
+.auth-art-line {
+  stroke: color-mix(in srgb, var(--color-text) 30%, transparent);
+  stroke-linecap: round;
+}
+
+/* Vuelve al registro, que es el único que lo muestra. No va pegado a la
+   esquina de la ventana: se alinea con la marca y el texto de al lado, que es
+   donde el ojo ya está mirando. */
 .auth-back {
   position: absolute;
-  top: 18px;
-  left: 18px;
+  top: 48px;
+  left: 64px;
   z-index: 1;
   width: 38px;
   height: 38px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: none;
+  border: 1px solid var(--color-border);
   border-radius: 50%;
-  background: rgba(10, 15, 40, 0.28);
-  color: #fff;
+  background: var(--color-surface-solid);
+  color: var(--color-text-muted);
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition: border-color 0.15s ease, color 0.15s ease;
 }
 
 .auth-back:hover {
-  background: rgba(10, 15, 40, 0.4);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
 }
 
 .auth-back svg {
@@ -259,28 +317,24 @@
   height: 18px;
 }
 
+/* La tarjeta blanca del formulario, flotando sobre el bloque oscuro. */
 .auth-card {
   position: relative;
+  width: 100%;
+  max-width: 420px;
   background: var(--color-surface-solid);
-  border-radius: 28px;
-  margin: -34px 8px 0;
-  padding: 32px 24px 28px;
+  border-radius: 18px;
+  padding: 40px 36px;
   box-shadow: var(--shadow-card);
 }
 
-@media (max-width: 420px) {
-  .auth-card {
-    margin-inline: 0;
-    border-radius: 24px;
-  }
-}
-
 .auth-title {
-  font-size: 23px;
+  font-size: 27px;
   font-weight: 700;
+  letter-spacing: -0.02em;
   color: var(--color-text);
   text-align: left;
-  margin: 0 0 20px;
+  margin: 0 0 22px;
 }
 
 .auth-switch {
@@ -306,4 +360,54 @@
 .auth-link:hover {
   color: var(--color-primary-hover);
   text-decoration: underline;
+}
+
+/* Abajo de 1000px no entran dos columnas: queda solo el formulario, sobre
+   el fondo oscuro, y el panel de la ilustración se esconde. La marca se
+   recupera arriba de la tarjeta para no perder el contexto. */
+@media (max-width: 1000px) {
+  /* Una sola columna: queda el formulario sobre el fondo oscuro. */
+  .auth-page {
+    grid-template-columns: 1fr;
+    /* Filas y no columnas: la marca arriba y el panel abajo, cada uno con su
+       alto. `auto 1fr` deja que el panel se quede con lo que sobre. */
+    grid-template-rows: auto 1fr;
+    background: var(--color-sidebar-bg);
+  }
+
+  /* El panel de la ilustración desaparece, pero la marca no: se la rescata
+     arriba de la tarjeta para no dejar la pantalla sin identificar. Va en el
+     flujo (no absoluta): si flota, el formulario largo del registro le pasa
+     por debajo y la marca termina encima del título. */
+  .auth-hero {
+    padding: 24px 20px 0;
+    align-items: center;
+  }
+
+  .auth-tagline,
+  .auth-art {
+    display: none;
+  }
+
+  .auth-brand-name {
+    color: var(--color-sidebar-text-strong);
+  }
+
+  /* El "Volver" del registro sí queda absoluto, alineado con la marca. */
+  .auth-back {
+    top: 22px;
+    left: 16px;
+  }
+
+  .auth-panel {
+    border-radius: 0;
+    padding: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .card {
+    border-radius: 20px;
+    padding: 28px 20px;
+  }
 }

@@ -195,6 +195,25 @@ class AvailabilityPage extends Component {
       })
   }
 
+  /**
+   * Volver de la grilla de una materia. A esta pantalla se llega por dos
+   * caminos (el perfil y el elegidor de materias), así que el botón deshace
+   * el último paso en vez de ir a un destino fijo — con `to="/perfil"` fijo,
+   * quien venía del elegidor terminaba en una pantalla en la que nunca
+   * estuvo.
+   *
+   * Si no hay historial propio (se entró pegando la URL de
+   * /disponibilidad/:materiaId), un -1 sacaría de la app: ahí se va al
+   * elegidor, que es el padre natural de esta pantalla.
+   */
+  handleBack = () => {
+    // `idx` lo mantiene react-router en el state del history: es la posición
+    // dentro de ESTA sesión de navegación, así que 0 (o sin dato) significa
+    // que no hay ninguna pantalla nuestra atrás a la que volver.
+    const primeraPantalla = !(window.history.state?.idx > 0)
+    this.props.router.navigate(primeraPantalla ? '/disponibilidad' : -1)
+  }
+
   handleChangeSlots = (slotIds) => {
     this.setState({ slotIds, saved: false })
   }
@@ -320,15 +339,17 @@ class AvailabilityPage extends Component {
       <form className="availability-editor" onSubmit={this.handleSubmit}>
         <div className="availability-editor-head">
           <div className="availability-titlebar">
-            {/* Se llega acá desde el perfil (elegís la materia ahí), así que
-                volver al perfil es el camino de vuelta natural. */}
-            <Link
+            {/* Se llega acá desde dos lados —el perfil y el elegidor de
+                materias— así que el destino no puede estar fijo: vuelve a la
+                pantalla de la que se vino (ver handleBack). */}
+            <button
+              type="button"
               className="availability-back"
-              to="/perfil"
-              aria-label="Volver al perfil"
+              onClick={this.handleBack}
+              aria-label="Volver"
             >
               <ChevronLeftIcon />
-            </Link>
+            </button>
             <h1 className="availability-title">{this.getTitle()}</h1>
           </div>
           <p className="availability-hint">
