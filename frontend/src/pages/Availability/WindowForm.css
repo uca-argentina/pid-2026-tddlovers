@@ -1,0 +1,189 @@
+/* El formulario de una ventana. Vive adentro de su tarjeta en el modal del
+   día, así que es compacto: etiquetas chicas arriba, campos pastilla como los
+   de FormField pero más bajos. */
+
+.window-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.window-form-title {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.window-form-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+/* Un campo con "$" adelante o "min" atrás, adentro de la pastilla. */
+.window-form-affix {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.window-form-prefix,
+.window-form-suffix {
+  position: absolute;
+  font-size: 14px;
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+
+.window-form-prefix {
+  left: 14px;
+}
+
+.window-form-suffix {
+  right: 16px;
+}
+
+.window-form-affix .window-form-input {
+  padding-right: 44px;
+}
+
+.window-form-affix .window-form-input.has-prefix {
+  padding-left: 28px;
+  padding-right: 14px;
+}
+
+.window-form-field,
+.window-form-fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.window-form-fieldset {
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.window-form-label {
+  padding: 0;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.window-form-select,
+.window-form-input {
+  width: 100%;
+  font: inherit;
+  font-size: 14.5px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1.5px solid var(--color-border);
+  background: var(--color-surface-solid);
+  color: var(--color-text);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* La flecha propia: la del sistema cambia de lugar entre Mac y Windows y se
+   pega al borde redondeado. */
+.window-form-select {
+  appearance: none;
+  padding-right: 34px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--color-text-muted) 50%),
+    linear-gradient(135deg, var(--color-text-muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) 50%,
+    calc(100% - 13px) 50%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+}
+
+.window-form-select:focus,
+.window-form-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 20%, transparent);
+}
+
+.window-form-select[aria-invalid='true'],
+.window-form-input[aria-invalid='true'] {
+  border-color: var(--color-danger);
+}
+
+.window-form-error {
+  font-size: 12.5px;
+  color: var(--color-danger);
+}
+
+.window-form-hint {
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+}
+
+.window-form-segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.window-form-capacity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.window-form-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--color-text);
+}
+
+.window-form-number {
+  width: 76px;
+  padding-inline: 12px;
+  text-align: center;
+}
+
+.window-form-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.window-form-check input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-primary);
+}
+
+.window-form-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* .btn es width:100% en ui.css, pensado para los formularios del login. */
+.window-form-actions .btn {
+  flex: 1 1 0;
+  padding: 11px 16px;
+  font-size: 14px;
+}
+
+.window-form .banner {
+  margin-bottom: 0;
+}
+
+@media (max-width: 600px) {
+  .window-form-actions {
+    flex-direction: column-reverse;
+  }
+}

@@ -1,4 +1,5 @@
 import { getPool } from './pool.js';
+import { toMinutes, toTime } from '../lib/availabilityExpansion.js';
 
 // La fila tal como la espera el front (ver PID-Front/CLAUDE.md): fechas
 // 'YYYY-MM-DD' y horas 'HH:MM', sin zona horaria. Mandar un timestamp UTC
@@ -14,7 +15,13 @@ const CLASS_COLUMNS = `
   t.nombre || ' ' || t.apellido AS "teacherName",
   c.student_id AS "studentId",
   a.nombre || ' ' || a.apellido AS "studentName",
-  c.status
+  c.status,
+  c.availability_id AS "availabilityId",
+  c.modality,
+  c.max_students AS "maxStudents",
+  c.meeting_url AS "meetingUrl",
+  c.address,
+  c.price
 `;
 
 const CLASS_JOINS = `
@@ -44,18 +51,22 @@ export async function findClassesForUser({ userId, role, from, to, status }) {
 }
 
 /**
- * Todas las clases reservadas de un rango, de cualquiera. NO va a una ruta:
- * la usa la expansión de disponibilidad para restar los horarios ya tomados.
- * Devuelve lo mínimo, no datos de nadie.
+ * Los turnos ya tomados de un rango, de cualquier docente. NO va a una ruta:
+ * la usa la expansión de disponibilidad para restar lo reservado. Una grupal
+ * con tres alumnos es UN turno con enrolled 3 — el mismo docente, la misma
+ * hora. Devuelve lo mínimo, no datos de nadie.
  */
-export async function findBookedSlots({ from, to }) {
+export async function findTakenSlots({ from, to }) {
   const result = await getPool().query(
     `SELECT teacher_id AS "teacherId",
             to_char(class_date, 'YYYY-MM-DD') AS date,
             to_char(start_time, 'HH24:MI') AS start,
-            to_char(end_time, 'HH24:MI') AS "end"
+            to_char(end_time, 'HH24:MI') AS "end",
+            subject_id AS "subjectId",
+            count(*)::int AS enrolled
      FROM classes
-     WHERE status = 'reservada' AND class_date BETWEEN $1::date AND $2::date`,
+     WHERE status = 'reservada' AND class_date BETWEEN $1::date AND $2::date
+     GROUP BY teacher_id, class_date, start_time, end_time, subject_id`,
     [from, to]
   );
   return result.rows;
@@ -90,30 +101,97 @@ export async function findClassById(id) {
   return result.rows[0] ?? null;
 }
 
+const TAKEN_BY_SOMEONE_ELSE = 'Ese horario ya fue reservado por otra persona.';
+
 /**
- * Reserva. Puede fallar por las restricciones de exclusión de la tabla: dos
- * alumnos pueden apretar el botón a la vez y validar antes no alcanza, así
- * que el error de la base se traduce y se muestra tal cual en el modal.
+ * Reserva un turno de una ventana. Si ya hay una clase del docente a esa hora
+ * es sumarse a ella (solo en una grupal, de la misma materia y con cupo); si
+ * no, es arrancar una nueva con la duración de la ventana.
+ *
+ * El cupo no lo puede cuidar una restricción de la tabla (no cuenta filas),
+ * así que todo va en una transacción con un lock por docente y fecha: dos
+ * alumnos sumándose al último lugar a la vez no pueden pasar los dos.
+ *
+ * Los datos de la clase (modalidad, link, dirección, precio) se copian de la ventana:
+ * si el docente la cambia después, lo que el alumno ya reservó no se mueve.
+ *
+ * Devuelve { id } o { conflict } con el mensaje para el alumno.
  */
-export async function createClass({ teacherId, studentId, subjectId, date, startTime, endTime }) {
+export async function bookClass({ window, studentId, date, startTime }) {
+  const client = await getPool().connect();
   try {
-    const result = await getPool().query(
-      `INSERT INTO classes (teacher_id, student_id, subject_id, class_date, start_time, end_time)
-       VALUES ($1, $2, $3, $4::date, $5::time, $6::time)
-       RETURNING id`,
-      [teacherId, studentId, subjectId, date, startTime, endTime]
+    await client.query('BEGIN');
+    await client.query(`SELECT pg_advisory_xact_lock(hashtext('classes:' || $1 || $2))`, [
+      window.teacherId,
+      date,
+    ]);
+
+    const existing = await client.query(
+      `SELECT to_char(end_time, 'HH24:MI') AS "end", subject_id AS "subjectId",
+              count(*)::int AS enrolled
+       FROM classes
+       WHERE teacher_id = $1 AND class_date = $2::date AND start_time = $3::time
+         AND status = 'reservada'
+       GROUP BY end_time, subject_id`,
+      [window.teacherId, date, startTime]
     );
+    const group = existing.rows[0];
+
+    let endTime;
+    if (group) {
+      if (window.maxStudents <= 1 || String(group.subjectId) !== String(window.subjectId)) {
+        await client.query('ROLLBACK');
+        return { conflict: TAKEN_BY_SOMEONE_ELSE };
+      }
+      if (group.enrolled >= window.maxStudents) {
+        await client.query('ROLLBACK');
+        return { conflict: 'La clase grupal ya se llenó.' };
+      }
+      // Se usa el fin de la clase ya armada y no el de la ventana: si el
+      // docente cambió la duración, el grupo sigue siendo el mismo turno.
+      endTime = group.end;
+    } else {
+      endTime = toTime(toMinutes(startTime) + window.durationMinutes);
+      if (toMinutes(endTime) > toMinutes(window.end)) {
+        await client.query('ROLLBACK');
+        return { conflict: 'Ese horario no entra en la disponibilidad del docente.' };
+      }
+    }
+
+    const result = await client.query(
+      `INSERT INTO classes (
+         teacher_id, student_id, subject_id, class_date, start_time, end_time,
+         availability_id, modality, max_students, meeting_url, address, price
+       )
+       VALUES ($1, $2, $3, $4::date, $5::time, $6::time, $7, $8::class_modality, $9, $10, $11, $12)
+       RETURNING id`,
+      [
+        window.teacherId,
+        studentId,
+        window.subjectId,
+        date,
+        startTime,
+        endTime,
+        window.id,
+        window.modality,
+        window.maxStudents,
+        window.meetingUrl,
+        window.address,
+        window.price,
+      ]
+    );
+
+    await client.query('COMMIT');
     return { id: result.rows[0].id };
   } catch (err) {
+    await client.query('ROLLBACK');
     // 23P01 = exclusion_violation: alguien ya tiene ese horario.
     if (err.code === '23P01') {
       const mine = err.constraint === 'classes_student_no_overlap';
-      return {
-        conflict: mine
-          ? 'Ya tenés una clase reservada en ese horario.'
-          : 'Ese horario ya fue reservado por otra persona.',
-      };
+      return { conflict: mine ? 'Ya tenés una clase reservada en ese horario.' : TAKEN_BY_SOMEONE_ELSE };
     }
     throw err;
+  } finally {
+    client.release();
   }
 }

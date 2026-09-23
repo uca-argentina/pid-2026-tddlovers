@@ -1,84 +1,65 @@
 import { Component } from 'react'
 import Modal from '../../components/Modal.jsx'
 import Banner from '../../components/Banner.jsx'
-import HourTimeline from './HourTimeline.jsx'
 import { SpinnerIcon } from '../../components/icons.jsx'
 import { bookLesson } from '../../api/client.js'
 import { formatDayLongWithYear, fromISODate } from '../../utils/calendar.js'
-import { formatRangeLabel, slotIndexToTime, SLOTS_PER_CLASS } from '../../utils/availability.js'
-import { preselectedSubjectId, startOptions } from '../../utils/booking.js'
+import { formatRangeLabel } from '../../utils/availability.js'
+import { formatEnrolled } from '../../utils/booking.js'
+import {
+  capacityLabel,
+  formatMinutes,
+  formatPrice,
+  modalityLabel,
+  needsAddress,
+  needsMeetingUrl,
+  toMinutes,
+} from '../../utils/windows.js'
 import './BookingDialog.css'
 
 /**
- * El paso final: elegir la materia, a qué hora arranca la clase y confirmar.
+ * El paso final: elegir a qué hora y confirmar. La materia, la duración y la
+ * modalidad ya vienen de la clase que ofrece el docente; acá no se eligen.
  *
- * La materia se elige acá porque el docente no ofrece horarios por materia:
- * ofrece horas, y la tarjeta trae las materias que da. Si no hay duda (da una
- * sola, o el alumno filtró por una) llega ya elegida — ver
- * preselectedSubjectId.
+ * Los horarios son botones y no una línea de tiempo: con duraciones
+ * distintas y turnos grupales a los que sumarse, lo que el alumno decide es
+ * "cuál de estos", y una lista de opciones lo dice más claro que una barra.
+ * Van en dos grupos cuando hay grupales armadas — sumarse a una clase que ya
+ * tiene gente no es lo mismo que abrir una nueva.
  *
- * Acá NO se vuelve a calcular qué está libre. La tarjeta ya trae `free` (los
- * tramos que quedan después de sacar lo reservado con ese docente y lo que el
- * alumno tiene con otros) y `ranges` (lo que el docente ofrece ese día); de
- * esos dos sale todo lo que se pinta. Una segunda cuenta acá sería una segunda
- * verdad, que es justo lo que se evitó al poner el puente en booking.js.
- *
- * La hora se guarda como ÍNDICE de media hora y recién se pasa a 'HH:MM' al
- * confirmar, porque la línea de tiempo dibuja por índice.
+ * Acá NO se vuelve a calcular qué está libre: la tarjeta ya trae los turnos
+ * (del backend) marcados con lo que choca con clases propias (de
+ * annotateClashes). Una segunda cuenta sería una segunda verdad.
  */
 class BookingDialog extends Component {
-  state = {
-    subjectId: preselectedSubjectId(this.props.card, this.props.filterSubjectIds),
-    start: null,
-    saving: false,
-    error: null,
+  constructor(props) {
+    super(props)
+    const libres = props.card.slots.filter((slot) => !slot.blocked)
+    // Si hay un solo horario posible no tiene sentido hacerlo elegir.
+    this.state = {
+      start: libres.length === 1 ? libres[0].start : null,
+      saving: false,
+      error: null,
+    }
   }
 
-  componentDidMount() {
-    // Si hay un solo arranque posible no tiene sentido hacerlo elegir: se
-    // marca solo y el modal queda listo para confirmar.
-    const opciones = startOptions(this.props.card.free)
-    if (opciones.length === 1) this.setState({ start: opciones[0] })
+  getSelected() {
+    return this.props.card.slots.find((slot) => slot.start === this.state.start) || null
   }
 
-  /** Las clases que el alumno ya tiene ese día, sean de quien sean. */
-  getBusy() {
-    return this.props.myLessons.filter((lesson) => lesson.date === this.props.card.date)
-  }
-
-  getSubject() {
-    const { subjectId } = this.state
-    if (subjectId === null) return null
-    return this.props.card.subjects.find((subject) => String(subject.id) === String(subjectId))
-  }
-
-  handleSelectSubject = (subjectId) => () => {
-    this.setState({ subjectId, error: null })
-  }
-
-  handleSelect = (index) => {
-    this.setState({ start: index, error: null })
+  handleSelect = (start) => () => {
+    this.setState({ start, error: null })
   }
 
   handleConfirm = () => {
     const { card, onBooked } = this.props
     const { start, saving } = this.state
-    const subject = this.getSubject()
-    if (start === null || !subject || saving) return
+    if (start === null || saving) return
 
     this.setState({ saving: true, error: null })
 
-    bookLesson({
-      date: card.date,
-      teacherId: card.teacherId,
-      teacherName: card.teacherName,
-      subjectId: subject.id,
-      subjectName: subject.name,
-      startTime: slotIndexToTime(start),
-      endTime: slotIndexToTime(start + SLOTS_PER_CLASS),
-      status: 'reservada',
-    })
-      .then(() => onBooked({ ...card, subjectId: subject.id, subjectName: subject.name }))
+    bookLesson({ windowId: card.windowId, date: card.date, startTime: start })
+      .then(() => onBooked({ subjectName: card.subject.name, teacherName: card.teacherName }))
       .catch((error) => {
         this.setState({
           saving: false,
@@ -87,31 +68,42 @@ class BookingDialog extends Component {
       })
   }
 
-  /**
-   * Chips y no un <select>: son pocas materias, se ven todas de un vistazo y
-   * en el teléfono un toque alcanza. Con una sola no se muestra nada para
-   * elegir: queda escrita en los detalles.
-   */
-  renderSubjectPicker() {
-    const { subjects } = this.props.card
-    if (subjects.length <= 1) return null
+  /** Por qué un horario no se puede tomar, para el lector de pantalla. */
+  describeSlot(slot) {
+    const rango = `${slot.start} a ${slot.end}`
+    const grupo =
+      slot.enrolled > 0 ? `, ${formatEnrolled(slot.enrolled, this.props.card.maxStudents)}` : ''
+    if (slot.joined) return `${rango}${grupo}, ya estás anotado`
+    if (slot.blocked) return `${rango}${grupo}, ya tenés otra clase`
+    return `${rango}${grupo}`
+  }
+
+  renderSlots(title, slots) {
+    if (slots.length === 0) return null
+    const { card } = this.props
 
     return (
-      <fieldset className="booking-dialog-subjects">
-        <legend>¿Para qué materia es la clase?</legend>
-        <div className="booking-dialog-subject-chips">
-          {subjects.map((subject) => {
-            const activo = String(subject.id) === String(this.state.subjectId)
+      <fieldset className="booking-dialog-slots">
+        <legend>{title}</legend>
+        <div className="booking-dialog-slot-list">
+          {slots.map((slot) => {
+            const elegido = slot.start === this.state.start
             return (
               <button
+                key={slot.start}
                 type="button"
-                key={subject.id}
-                className={`subject-chip ${activo ? 'selected' : ''}`}
-                aria-pressed={activo}
-                onClick={this.handleSelectSubject(subject.id)}
-                disabled={this.state.saving}
+                className={`booking-slot ${elegido ? 'is-selected' : ''} ${slot.enrolled > 0 ? 'is-group' : ''}`}
+                aria-pressed={elegido}
+                aria-label={this.describeSlot(slot)}
+                onClick={this.handleSelect(slot.start)}
+                disabled={slot.blocked || this.state.saving}
               >
-                {subject.name}
+                <span className="booking-slot-time">{formatRangeLabel(slot.start, slot.end)}</span>
+                {slot.enrolled > 0 ? (
+                  <span className="booking-slot-note">
+                    {slot.joined ? 'Ya estás anotado' : formatEnrolled(slot.enrolled, card.maxStudents)}
+                  </span>
+                ) : null}
               </button>
             )
           })}
@@ -120,18 +112,22 @@ class BookingDialog extends Component {
     )
   }
 
-  renderSummary(subject) {
-    const { start } = this.state
-    if (start === null) {
-      return <p className="booking-dialog-hint">Elegí en qué hora querés que arranque la clase.</p>
+  renderSummary() {
+    const slot = this.getSelected()
+    const { card } = this.props
+    if (!slot) {
+      return <p className="booking-dialog-hint">Elegí a qué hora querés la clase.</p>
     }
 
+    // Del turno y no de la ventana: una grupal armada antes de que el docente
+    // cambiara la duración conserva la suya.
+    const duracion = formatMinutes(toMinutes(slot.end) - toMinutes(slot.start))
     return (
       <p className="booking-dialog-pick">
-        {formatRangeLabel(slotIndexToTime(start), slotIndexToTime(start + SLOTS_PER_CLASS))}
+        {formatRangeLabel(slot.start, slot.end)}
         <span className="booking-dialog-duration">
-          {' · 1 h'}
-          {subject ? ` · ${subject.name}` : ''}
+          {` · ${duracion} · ${card.subject.name}`}
+          {slot.enrolled > 0 ? ' · te sumás a una clase grupal' : ''}
         </span>
       </p>
     )
@@ -140,41 +136,56 @@ class BookingDialog extends Component {
   render() {
     const { card, onClose } = this.props
     const { start, saving, error } = this.state
-    const subject = this.getSubject()
+    const grupos = card.slots.filter((slot) => slot.enrolled > 0)
+    const nuevos = card.slots.filter((slot) => slot.enrolled === 0)
 
-    // Ancho: con las 24 h del día en una sola línea, cada media hora es una
-    // franja finita y cuanto más lugar tenga, más fácil es leerla.
     return (
-      <Modal title="Reservar clase" onClose={onClose} wide>
+      <Modal title="Reservar clase" onClose={onClose}>
         <div className="booking-dialog">
           <dl className="booking-dialog-details">
+            <div>
+              <dt>Materia</dt>
+              <dd>{card.subject.name}</dd>
+            </div>
             <div>
               <dt>Docente</dt>
               <dd>{card.teacherName}</dd>
             </div>
-            {card.subjects.length === 1 ? (
-              <div>
-                <dt>Materia</dt>
-                <dd>{card.subjects[0].name}</dd>
-              </div>
-            ) : null}
             <div>
               <dt>Día</dt>
               <dd>{formatDayLongWithYear(fromISODate(card.date))}</dd>
             </div>
+            <div>
+              <dt>Modalidad</dt>
+              <dd>{modalityLabel(card.modality)}</dd>
+            </div>
+            <div>
+              <dt>Cupo</dt>
+              <dd>{capacityLabel(card.maxStudents)}</dd>
+            </div>
+            <div>
+              <dt>Precio</dt>
+              <dd>{formatPrice(card.price)}</dd>
+            </div>
+            {needsAddress(card.modality) && card.address ? (
+              <div className="booking-dialog-wide">
+                <dt>Dirección</dt>
+                <dd>{card.address}</dd>
+              </div>
+            ) : null}
           </dl>
 
-          {this.renderSubjectPicker()}
+          {/* El link no viaja en la disponibilidad: se lo lleva el que reserva. */}
+          {needsMeetingUrl(card.modality) ? (
+            <p className="booking-dialog-note">
+              El link de la videollamada te aparece en tu calendario cuando reserves.
+            </p>
+          ) : null}
 
-          <HourTimeline
-            ranges={card.ranges}
-            free={card.free}
-            busy={this.getBusy()}
-            value={start}
-            onSelect={this.handleSelect}
-          />
+          {this.renderSlots('Sumate a una clase grupal', grupos)}
+          {this.renderSlots(grupos.length > 0 ? 'O empezá una nueva' : 'Elegí el horario', nuevos)}
 
-          {this.renderSummary(subject)}
+          {this.renderSummary()}
 
           {error ? <Banner type="danger">{error}</Banner> : null}
 
@@ -186,7 +197,7 @@ class BookingDialog extends Component {
               type="button"
               className="btn btn-primary"
               onClick={this.handleConfirm}
-              disabled={start === null || !subject || saving}
+              disabled={start === null || saving}
             >
               {saving ? <SpinnerIcon className="spin" /> : null}
               {saving ? 'Reservando...' : 'Confirmar reserva'}
@@ -196,11 +207,6 @@ class BookingDialog extends Component {
       </Modal>
     )
   }
-}
-
-BookingDialog.defaultProps = {
-  myLessons: [],
-  filterSubjectIds: [],
 }
 
 export default BookingDialog

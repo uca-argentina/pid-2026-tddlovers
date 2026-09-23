@@ -1,6 +1,7 @@
 import { Component } from 'react'
-import { SpinnerIcon } from '../../components/icons.jsx'
+import { PinIcon, SpinnerIcon, VideoIcon } from '../../components/icons.jsx'
 import { formatDayLong, formatDuration } from '../../utils/calendar.js'
+import { formatPrice, modalityLabel, needsAddress, needsMeetingUrl } from '../../utils/windows.js'
 import './DayAgenda.css'
 
 /**
@@ -20,6 +21,16 @@ import './DayAgenda.css'
 class DayAgenda extends Component {
   /** El nombre de la contraparte, según desde qué rol se esté mirando. */
   getCounterpart(item) {
+    const alumnos = (item.students || []).filter(Boolean)
+    if (this.props.viewRole === 'teacher' && item.maxStudents > 1 && alumnos.length > 0) {
+      // Una grupal: todos los anotados y cuánto lugar queda, aunque por ahora
+      // haya uno solo.
+      return {
+        label: `Alumnos (${alumnos.length} de ${item.maxStudents})`,
+        name: alumnos.join(', '),
+        empty: false,
+      }
+    }
     if (this.props.viewRole === 'teacher') {
       return {
         label: 'Alumno',
@@ -33,6 +44,40 @@ class DayAgenda extends Component {
     return { label: 'Docente', name: item.teacherName, empty: false }
   }
 
+  /**
+   * Dónde es la clase. Las clases de antes de que existiera la modalidad no
+   * la tienen, y ahí no se muestra nada.
+   */
+  renderPlace(item) {
+    if (!item.modality) return null
+    const link = needsMeetingUrl(item.modality) && item.meetingUrl
+    const direccion = needsAddress(item.modality) && item.address
+
+    return (
+      <ul className="day-agenda-place">
+        {link ? (
+          <li>
+            <VideoIcon />
+            <a href={item.meetingUrl} target="_blank" rel="noreferrer">
+              {item.modality === 'hybrid' ? 'Entrar a la videollamada' : 'Entrar a la clase'}
+            </a>
+          </li>
+        ) : null}
+        {direccion ? (
+          <li>
+            <PinIcon />
+            <span>{item.address}</span>
+          </li>
+        ) : null}
+        {!link && !direccion ? <li>{modalityLabel(item.modality)}</li> : null}
+        {/* Nulo en las clases de antes de que existiera el precio. */}
+        {item.price !== null && item.price !== undefined ? (
+          <li className="day-agenda-price">{formatPrice(item.price)}</li>
+        ) : null}
+      </ul>
+    )
+  }
+
   renderItem(item) {
     const counterpart = this.getCounterpart(item)
 
@@ -41,11 +86,15 @@ class DayAgenda extends Component {
         <div className="day-agenda-head">
           <span className="day-agenda-time">{item.startTime}</span>
           <span className="day-agenda-duration">{formatDuration(item.startTime, item.endTime)}</span>
+          {item.modality ? (
+            <span className="day-agenda-modality">{modalityLabel(item.modality)}</span>
+          ) : null}
         </div>
         <p className="day-agenda-subject">{item.subjectName}</p>
         <p className={`day-agenda-person ${counterpart.empty ? 'is-empty' : ''}`}>
           <span className="day-agenda-person-label">{counterpart.label}:</span> {counterpart.name}
         </p>
+        {this.renderPlace(item)}
       </li>
     )
   }

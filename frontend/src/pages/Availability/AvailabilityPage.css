@@ -1,7 +1,7 @@
 .availability-page {
   width: 100%;
-  /* El editor usa todo el ancho que le den: son 7 columnas por 48 filas. Los
-     carteles se limitan solos más abajo. */
+  /* La semana usa todo el ancho que le den: son 7 columnas. Los carteles se
+     limitan solos más abajo. */
   max-width: 1100px;
   margin-inline: auto;
 }
@@ -68,23 +68,44 @@
   }
 }
 
-/* --- Editor -------------------------------------------------------------- */
+/* --- Docente ------------------------------------------------------------- */
 
-/* Acá no hay tarjeta: la grilla ya tiene su propio marco y meterla adentro de
-   otra caja le come ancho, que es justo lo que más necesita. */
+/* El título y la explicación a la izquierda, "Agregar clase" a la derecha. */
 .availability-editor-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
   margin-bottom: 16px;
 }
 
-.availability-editor .availability-hint {
+.teacher-availability .availability-hint {
   margin-top: 4px;
-  max-width: none;
+  max-width: 60ch;
 }
 
-.availability-editor .btn-row {
-  margin-top: 16px;
-}
-
-.availability-editor .availability-warning {
+.teacher-availability .availability-warning {
   margin-top: 8px;
+}
+
+/* .btn es width:100% en ui.css; acá es un botón al lado del título. */
+.availability-add {
+  width: auto;
+  flex-shrink: 0;
+  padding: 12px 20px;
+}
+
+.availability-add svg {
+  width: 16px;
+  height: 16px;
+}
+
+@media (max-width: 600px) {
+  .availability-editor-head {
+    flex-direction: column;
+  }
+
+  .availability-add {
+    width: 100%;
+  }
 }

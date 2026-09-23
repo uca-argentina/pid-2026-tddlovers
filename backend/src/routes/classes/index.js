@@ -1,12 +1,8 @@
-import {
-  createClass,
-  findClassById,
-  findClassesForUser,
-  hasOverlappingClass,
-} from '../../db/classes.js';
-import { isWithinAvailability } from '../../db/availability.js';
+import { bookClass, findClassById, findClassesForUser, hasOverlappingClass } from '../../db/classes.js';
+import { findWindowById } from '../../db/availability.js';
 import { teacherTeachesSubject } from '../../db/users.js';
-import { dayKeyFromIso, toMinutes, toTime } from '../../lib/availabilityExpansion.js';
+import { occursOn, toMinutes, toTime } from '../../lib/availabilityExpansion.js';
+import { now } from '../../lib/clock.js';
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^(?:[01]\d|2[0-3]):(?:00|30)$/;
@@ -14,16 +10,7 @@ const STATUSES = ['reservada', 'cancelada'];
 // Los ids son UUID: validarlo acá evita que un id cualquiera llegue a la base
 // y vuelva como un 500 en vez de un 400.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/** 'YYYY-MM-DD' y 'HH:MM' de ahora, en hora local del server. */
-function now() {
-  const d = new Date();
-  const pad = (n) => String(n).padStart(2, '0');
-  return {
-    iso: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
-    time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
-  };
-}
+const NO_LONGER_OFFERED = 'Ese horario ya no está disponible.';
 
 export default async function classesRoutes(app) {
   /**
@@ -52,19 +39,20 @@ export default async function classesRoutes(app) {
   });
 
   /**
-   * Reservar. El alumno sale de la sesión, no del body.
+   * Reservar un turno de una ventana. El alumno sale de la sesión; docente,
+   * materia, duración y modalidad salen de la ventana — el body solo dice
+   * cuál, qué día y a qué hora.
    *
    * Se valida de nuevo todo lo que ya valida la pantalla, porque la pantalla
-   * se puede saltear; y la última palabra la tienen las restricciones de
-   * exclusión de la tabla, que son las que resuelven el empate cuando dos
-   * alumnos reservan el mismo horario al mismo tiempo.
+   * se puede saltear. El empate entre dos alumnos que reservan a la vez lo
+   * resuelven bookClass (cupo) y las restricciones de la tabla (horarios).
    */
   app.post('/', { onRequest: [app.requireAuth, app.csrfProtection] }, async (request, reply) => {
     if (request.user.role !== 'student') {
       return reply.code(403).send({ message: 'Solo los alumnos pueden reservar clases' });
     }
 
-    const { date, teacherId, subjectId, startTime } = request.body ?? {};
+    const { windowId, date, startTime } = request.body ?? {};
 
     if (!ISO_DATE_RE.test(date ?? '')) {
       return reply.code(400).send({ message: 'Fecha inválida', fields: { date: 'invalid' } });
@@ -74,72 +62,52 @@ export default async function classesRoutes(app) {
         .code(400)
         .send({ message: 'La clase tiene que empezar en punto o y media.', fields: { startTime: 'invalid' } });
     }
-    if (!teacherId) {
-      return reply.code(400).send({ message: 'Falta el docente', fields: { teacherId: 'required' } });
+    if (!windowId) {
+      return reply.code(400).send({ message: 'Falta la clase', fields: { windowId: 'required' } });
     }
-    // La disponibilidad no dice de qué materia es: la elige el alumno acá.
-    if (!subjectId) {
-      return reply
-        .code(400)
-        .send({ message: 'Elegí la materia de la clase.', fields: { subjectId: 'required' } });
+    if (!UUID_RE.test(String(windowId))) {
+      return reply.code(400).send({ message: 'Clase inválida', fields: { windowId: 'invalid' } });
     }
-    if (!UUID_RE.test(String(teacherId)) || !UUID_RE.test(String(subjectId))) {
-      return reply.code(400).send({ message: 'Docente o materia inválidos' });
-    }
-    if (teacherId === request.user.id) {
-      return reply.code(400).send({ message: 'No podés reservarte una clase a vos mismo.' });
-    }
-
-    // La clase dura siempre 1 h: el fin se calcula, no se confía en el body.
-    const endTime = toTime(toMinutes(startTime) + 60);
 
     const { iso, time } = now();
     if (date < iso || (date === iso && startTime <= time)) {
       return reply.code(400).send({ message: 'Ese horario ya pasó.' });
     }
 
+    const window = await findWindowById(windowId);
+    // Borrada, de otro día, o de una materia que el docente ya no da: para el
+    // alumno es lo mismo, ese turno ya no se ofrece.
+    if (!window || !occursOn(window, date)) {
+      return reply.code(409).send({ message: NO_LONGER_OFFERED });
+    }
+    if (window.teacherId === request.user.id) {
+      return reply.code(400).send({ message: 'No podés reservarte una clase a vos mismo.' });
+    }
+    if (!(await teacherTeachesSubject(window.teacherId, window.subjectId))) {
+      return reply.code(409).send({ message: NO_LONGER_OFFERED });
+    }
+
+    const start = toMinutes(startTime);
+    if (start < toMinutes(window.start) || start >= toMinutes(window.end)) {
+      return reply.code(409).send({ message: NO_LONGER_OFFERED });
+    }
+
     // Antes que nada, el choque del propio alumno: si no, salta primero la
     // restricción del docente y el mensaje diría "lo reservó otra persona"
-    // cuando en realidad se está pisando con una clase suya.
+    // cuando en realidad se está pisando con una clase suya. Es aproximado
+    // para una grupal armada con otra duración; ahí decide la tabla.
     const clashesWithMine = await hasOverlappingClass({
       userId: request.user.id,
       role: 'student',
       date,
       startTime,
-      endTime,
+      endTime: toTime(start + window.durationMinutes),
     });
     if (clashesWithMine) {
       return reply.code(409).send({ message: 'Ya tenés una clase reservada en ese horario.' });
     }
 
-    // Cualquier materia no: solo una de las que da ese docente.
-    const teaches = await teacherTeachesSubject(teacherId, subjectId);
-    if (!teaches) {
-      return reply.code(400).send({
-        message: 'Ese docente no da esa materia.',
-        fields: { subjectId: 'invalid' },
-      });
-    }
-
-    const offered = await isWithinAvailability({
-      teacherId,
-      dayKey: dayKeyFromIso(date),
-      startTime,
-      endTime,
-    });
-    if (!offered) {
-      return reply.code(409).send({ message: 'Ese horario ya no está disponible.' });
-    }
-
-    const created = await createClass({
-      teacherId,
-      studentId: request.user.id,
-      subjectId,
-      date,
-      startTime,
-      endTime,
-    });
-
+    const created = await bookClass({ window, studentId: request.user.id, date, startTime });
     if (created.conflict) {
       return reply.code(409).send({ message: created.conflict });
     }

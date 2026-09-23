@@ -101,6 +101,51 @@
   font-style: italic;
 }
 
+.day-agenda-modality {
+  margin-left: auto;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: var(--color-primary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.day-agenda-place {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.day-agenda-place li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--color-text);
+}
+
+.day-agenda-place svg {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  color: var(--color-text-muted);
+}
+
+.day-agenda-place .day-agenda-price {
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.day-agenda-place a {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
 @media (max-width: 900px) {
   .day-agenda {
     height: auto;

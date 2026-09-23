@@ -93,13 +93,6 @@ export function formatDayLongWithYear(date) {
   return capitalize(DAY_FULL_FORMAT.format(date))
 }
 
-/** Las clases duran 1 hora fija (ver CLAUDE.md). '16:30' -> '17:30'. */
-export function addOneHour(time) {
-  const [hours, minutes] = time.split(':').map(Number)
-  const next = (hours + 1) % 24
-  return `${String(next).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
-}
-
 /**
  * Minutos entre dos horas 'HH:MM'. Si la segunda es menor que la primera se
  * asume que cruzó la medianoche (una clase que arranca 23:30 termina 00:30).
@@ -112,7 +105,7 @@ export function minutesBetween(startTime, endTime) {
   return end >= start ? end - start : end + 24 * 60 - start
 }
 
-/** '09:00' + '10:00' -> '1 h'. Hoy siempre da 1 h, pero no lo damos por hecho. */
+/** '09:00' + '10:30' -> '1 h 30 min'. Cada docente elige cuánto duran sus clases. */
 export function formatDuration(startTime, endTime) {
   const total = minutesBetween(startTime, endTime)
   const hours = Math.floor(total / 60)

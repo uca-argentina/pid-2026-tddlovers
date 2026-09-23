@@ -13,8 +13,7 @@ const {
   fetchSubjects,
   registerAccount,
   updateProfile,
-  fetchAvailabilityByTeacher,
-  saveAvailability,
+  fetchMyWindows,
   fetchAvailability,
   fetchMyLessons,
   fetchCurrentUser,
@@ -25,8 +24,7 @@ const {
   fetchSubjects: vi.fn(),
   registerAccount: vi.fn(),
   updateProfile: vi.fn(),
-  fetchAvailabilityByTeacher: vi.fn(),
-  saveAvailability: vi.fn(),
+  fetchMyWindows: vi.fn(),
   fetchAvailability: vi.fn(),
   fetchMyLessons: vi.fn(),
   fetchCurrentUser: vi.fn(),
@@ -39,8 +37,7 @@ vi.mock('./api/client.js', () => ({
   fetchSubjects,
   registerAccount,
   updateProfile,
-  fetchAvailabilityByTeacher,
-  saveAvailability,
+  fetchMyWindows,
   fetchAvailability,
   fetchMyLessons,
   fetchCurrentUser,
@@ -67,8 +64,7 @@ describe('App', () => {
     fetchSubjects.mockReset().mockResolvedValue([])
     registerAccount.mockReset().mockResolvedValue({ user })
     updateProfile.mockReset().mockImplementation((payload) => Promise.resolve(payload))
-    fetchAvailabilityByTeacher.mockReset().mockResolvedValue({})
-    saveAvailability.mockReset().mockResolvedValue({})
+    fetchMyWindows.mockReset().mockResolvedValue([])
     fetchAvailability.mockReset().mockResolvedValue([])
     fetchMyLessons.mockReset().mockResolvedValue([])
     // App pregunta por la sesión al montar. Por defecto no hay nadie

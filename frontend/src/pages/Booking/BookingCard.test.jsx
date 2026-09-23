@@ -2,27 +2,30 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import BookingCard from './BookingCard.jsx'
 
+// Una fila ya pasada por annotateClashes, que es lo que recibe la tarjeta.
 function card(overrides = {}) {
   return {
-    id: '2026-09-14|2',
+    id: 'w1|2026-09-14',
+    windowId: 'w1',
     date: '2026-09-14',
     dayKey: 'lunes',
     teacherId: 2,
     teacherName: 'Laura Gómez',
-    subjects: [
-      { id: 1, name: 'Matemática' },
-      { id: 3, name: 'Álgebra' },
+    subject: { id: 1, name: 'Matemática' },
+    start: '13:00',
+    end: '15:30',
+    durationMinutes: 90,
+    price: 15000,
+    modality: 'virtual',
+    maxStudents: 1,
+    address: null,
+    slots: [
+      { start: '13:00', end: '14:30', enrolled: 0, joined: false, blocked: false },
+      { start: '13:30', end: '15:00', enrolled: 0, joined: false, blocked: false },
+      { start: '14:00', end: '15:30', enrolled: 0, joined: false, blocked: false },
     ],
-    ranges: [
-      { start: '13:00', end: '15:30' },
-      { start: '16:00', end: '17:00' },
-    ],
-    totalSlots: 7,
     clashes: [],
-    free: [
-      { start: '13:00', end: '15:30' },
-      { start: '16:00', end: '17:00' },
-    ],
+    joined: [],
     bookable: true,
     ...overrides,
   }
@@ -36,67 +39,89 @@ function renderCard(overrides, onReservar = () => {}) {
   )
 }
 
-// El botón se llama por el docente, no solo "Reservar": en un día con varias
-// tarjetas todos dirían lo mismo. La materia no va: se elige en el modal.
-const BOTON = 'Reservar con Laura Gómez'
-
-const choqueConLaura = {
-  id: 'sl-1',
-  subjectName: 'Matemática',
-  teacherName: 'Laura Gómez',
-  startTime: '14:00',
-  endTime: '15:00',
-}
+// El botón nombra materia y docente: en un día con varias tarjetas todos
+// dirían "Reservar".
+const reservar = () =>
+  screen.getByRole('button', { name: 'Reservar Matemática con Laura Gómez' })
 
 describe('BookingCard', () => {
-  it('junta todos los tramos del día en una sola tarjeta', () => {
+  it('la materia manda, y abajo con quién', () => {
     renderCard()
-    expect(screen.getByText('13:00 – 15:30 · 16:00 – 17:00')).toBeInTheDocument()
+    expect(screen.getByText('Matemática')).toBeInTheDocument()
+    expect(screen.getByText('con Laura Gómez')).toBeInTheDocument()
   })
 
-  it('dice de qué docente es y qué materias da', () => {
+  it('dice el horario, cuánto dura cada clase y la modalidad', () => {
     renderCard()
-    expect(screen.getByText('Laura Gómez')).toBeInTheDocument()
-    expect(screen.getByText('Matemática · Álgebra')).toBeInTheDocument()
+    expect(screen.getByText('13:00 – 15:30')).toBeInTheDocument()
+    expect(screen.getByText(/clases de 1 h 30 min/)).toBeInTheDocument()
+    expect(screen.getByText('Virtual')).toBeInTheDocument()
+    expect(screen.getByText('Individual')).toBeInTheDocument()
   })
 
-  it('muestra cuánto hay libre', () => {
-    renderCard()
-    expect(screen.getByText('3 h 30 min libres')).toBeInTheDocument()
+  it('una presencial muestra la dirección', () => {
+    renderCard({ modality: 'in_person', address: 'Aula 3' })
+    expect(screen.getByText('Presencial · Aula 3')).toBeInTheDocument()
   })
 
-  it('sin superposiciones no hay aviso', () => {
+  it('muestra el precio y cuántos horarios le quedan libres', () => {
     renderCard()
-    expect(screen.queryByText(/Se superpone/)).not.toBeInTheDocument()
+    expect(screen.getByText(/15\.000/)).toBeInTheDocument()
+    expect(screen.getByText('· 3 horarios', { exact: false })).toBeInTheDocument()
   })
 
-  it('avisa en gris con qué clase se superpone', () => {
-    renderCard({ clashes: [choqueConLaura] })
+  it('una clase de precio 0 dice sin cargo', () => {
+    renderCard({ price: 0 })
+    expect(screen.getByText('Sin cargo', { exact: false })).toBeInTheDocument()
+  })
+
+  it('entiende duraciones libres', () => {
+    renderCard({ durationMinutes: 45 })
+    expect(screen.getByText(/clases de 45 min/)).toBeInTheDocument()
+  })
+
+  it('invita a sumarse a una grupal con lugar', () => {
+    renderCard({
+      maxStudents: 4,
+      slots: [{ start: '13:00', end: '14:30', enrolled: 3, joined: false, blocked: false }],
+    })
+    expect(screen.getByText('Grupal · hasta 4')).toBeInTheDocument()
+    expect(screen.getByText('Sumate a la de las 13:00: 3 de 4 anotados.')).toBeInTheDocument()
+  })
+
+  it('avisa si ya está anotado en esa grupal', () => {
+    const anotado = { start: '13:00', end: '14:30', enrolled: 2, joined: true, blocked: true }
+    renderCard({ maxStudents: 4, slots: [anotado], joined: [anotado], bookable: false })
+    expect(screen.getByText('Ya estás anotado a las 13:00.')).toBeInTheDocument()
+  })
+
+  it('avisa en gris con qué clase se superpone, y sigue siendo reservable', () => {
+    renderCard({
+      clashes: [
+        {
+          id: 'c1',
+          subjectName: 'Física',
+          teacherName: 'Carla Benítez',
+          startTime: '13:00',
+          endTime: '14:00',
+        },
+      ],
+    })
     expect(
-      screen.getByText('Se superpone con Matemática con Laura Gómez (14:00 – 15:00).'),
+      screen.getByText('Se superpone con Física con Carla Benítez (13:00 – 14:00).'),
     ).toBeInTheDocument()
+    expect(reservar()).toBeEnabled()
   })
 
-  it('una superposición parcial sigue siendo reservable', () => {
-    // Solo choca un pedazo: el modal deja elegir adentro de lo que queda, así
-    // que negarlo sería esconder disponibilidad de verdad.
-    renderCard({ clashes: [choqueConLaura] })
-    expect(screen.getByRole('button', { name: BOTON })).toBeEnabled()
-  })
-
-  it('si no queda una hora entera no se puede reservar', () => {
-    renderCard({ clashes: [choqueConLaura], free: [], bookable: false })
-
-    expect(screen.getByRole('button', { name: BOTON })).toBeDisabled()
-    expect(screen.getByText(/^No te queda una hora libre/)).toBeInTheDocument()
+  it('sin ningún horario libre no se puede reservar', () => {
+    renderCard({ bookable: false })
+    expect(reservar()).toBeDisabled()
   })
 
   it('el botón avisa que se quiere reservar esta tarjeta', async () => {
     const onReservar = vi.fn()
     renderCard({}, onReservar)
-
-    await userEvent.click(screen.getByRole('button', { name: BOTON }))
-
+    await userEvent.click(reservar())
     expect(onReservar).toHaveBeenCalledTimes(1)
   })
 })

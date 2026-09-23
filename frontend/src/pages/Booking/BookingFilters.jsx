@@ -1,13 +1,21 @@
 import { Component } from 'react'
 import { ChevronRightIcon, ErrorIcon } from '../../components/icons.jsx'
-import TimeRangeSlider from './TimeRangeSlider.jsx'
+import TimeRangeSlider from '../../components/TimeRangeSlider.jsx'
 import { DAY_KEYS, DAY_LABELS } from '../../utils/availability.js'
 import { WEEKDAY_LABELS } from '../../utils/calendar.js'
+import { MODALITIES } from '../../utils/windows.js'
 import './BookingFilters.css'
 
+// El tipo de clase, con las mismas claves que cardKind en utils/booking.js.
+const KINDS = [
+  { key: 'individual', label: 'Individual' },
+  { key: 'group', label: 'Grupal' },
+]
+
 /**
- * El panel de filtros: días, materias y las dos horas. Todo se combina con Y,
- * y también con lo que se haya buscado en la barra de arriba.
+ * El panel de filtros: días, materias, modalidad, individual o grupal, y el
+ * horario. Todo se combina con Y, y también con lo que se haya buscado en la
+ * barra de arriba.
  *
  * Vive en la columna angosta al lado del calendario, así que cada grupo es una
  * sección que se puede plegar: los tres abiertos a la vez no entran sin
@@ -32,6 +40,8 @@ class BookingFilters extends Component {
     abiertas: {
       dias: this.props.dayKeys.length > 0,
       materias: this.props.subjectIds.length > 0,
+      modalidad: this.props.modalities.length > 0,
+      tipo: this.props.kinds.length > 0,
       horario: Boolean(this.props.fromTime || this.props.toTime),
     },
   }
@@ -146,6 +156,31 @@ class BookingFilters extends Component {
     )
   }
 
+  /** Chips de una lista fija: modalidad y tipo tienen la misma forma. */
+  renderChoices(key, title, items, selected, onToggle) {
+    return this.renderSection(
+      key,
+      title,
+      selected.length,
+      <div className="booking-filter-chips" role="group" aria-label={title}>
+        {items.map((item) => {
+          const activo = selected.includes(item.key)
+          return (
+            <button
+              key={item.key}
+              type="button"
+              className={`subject-chip ${activo ? 'selected' : ''}`}
+              aria-pressed={activo}
+              onClick={onToggle(item.key)}
+            >
+              {item.label}
+            </button>
+          )
+        })}
+      </div>,
+    )
+  }
+
   renderHours() {
     const { fromTime, toTime, onChangeRange } = this.props
     // Cuenta como UN filtro aunque estén las dos puntas: es un solo rango.
@@ -168,6 +203,14 @@ class BookingFilters extends Component {
 
         {this.renderDays()}
         {this.renderSubjects()}
+        {this.renderChoices(
+          'modalidad',
+          'Modalidad',
+          MODALITIES,
+          this.props.modalities,
+          this.props.onToggleModality,
+        )}
+        {this.renderChoices('tipo', 'Tipo de clase', KINDS, this.props.kinds, this.props.onToggleKind)}
         {this.renderHours()}
 
         {/* El docente buscado no es una sección: viene de la barra de la
@@ -200,6 +243,8 @@ BookingFilters.defaultProps = {
   subjects: [],
   dayKeys: [],
   subjectIds: [],
+  modalities: [],
+  kinds: [],
   fromTime: '',
   toTime: '',
   teacherQuery: '',

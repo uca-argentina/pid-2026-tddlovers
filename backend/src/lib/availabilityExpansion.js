@@ -1,7 +1,7 @@
-// El puente entre la plantilla semanal del docente y las fechas que reserva
-// el alumno. Esta es la pieza que el front tenía en utils/booking.js contra
-// los mocks y que siempre estuvo pensada para vivir acá (ver
-// PID-Front/CLAUDE.md, "weekly template → dated availability").
+// El puente entre las ventanas que carga el docente y las fechas que reserva
+// el alumno (ver CLAUDE.md, "weekly template → dated availability"). Una
+// ventana tiene una fecha y puede repetirse todas las semanas; acá se
+// proyecta sobre el rango pedido y se resta lo ya reservado.
 //
 // Todo se hace en minutos desde medianoche: comparar 'HH:MM' como texto
 // funciona de casualidad y se rompe con '24:00'.
@@ -15,6 +15,9 @@ const DAY_KEYS = [
   'sabado',
   'domingo',
 ];
+
+// Los arranques van de a media hora; los finales, donde caiga la duración.
+const STEP_MINUTES = 30;
 
 export function toMinutes(time) {
   const [h, m] = time.split(':').map(Number);
@@ -46,60 +49,91 @@ export function datesBetween(from, to) {
 }
 
 /**
- * Los pedazos de `ranges` que no toca ninguno de `busy`. Un hueco en el medio
- * parte un rango en dos; si lo tapan entero, desaparece.
- *
- * Tocarse en el borde NO es pisarse: 14:00-15:00 y 15:00-16:00 conviven.
+ * ¿La ventana cae en esa fecha? La fecha misma, o —si se repite— cualquier
+ * fecha posterior del mismo día de la semana. Nunca antes: una clase semanal
+ * que se cargó hoy no aparece en las semanas que ya pasaron.
  */
-export function subtractRanges(ranges, busy) {
-  let spans = ranges.map((r) => ({ from: toMinutes(r.start), to: toMinutes(r.end) }));
-
-  for (const b of busy) {
-    const taken = { from: toMinutes(b.start), to: toMinutes(b.end) };
-    const next = [];
-    for (const span of spans) {
-      if (taken.to <= span.from || taken.from >= span.to) {
-        next.push(span);
-        continue;
-      }
-      if (span.from < taken.from) next.push({ from: span.from, to: taken.from });
-      if (taken.to < span.to) next.push({ from: taken.to, to: span.to });
-    }
-    spans = next;
-  }
-
-  return spans
-    .sort((a, b) => a.from - b.from)
-    .map((s) => ({ start: toTime(s.from), end: toTime(s.to) }));
+export function occursOn(window, iso) {
+  if (iso === window.date) return true;
+  return (
+    window.repeatsWeekly && iso > window.date && dayKeyFromIso(iso) === dayKeyFromIso(window.date)
+  );
 }
 
-/** ¿Entra una clase de 1 h? Un resto de media hora no sirve para nada. */
-function fitsAClass(range) {
-  return toMinutes(range.end) - toMinutes(range.start) >= 60;
+function overlaps(fromA, toA, fromB, toB) {
+  return fromA < toB && fromB < toA;
 }
 
 /**
- * Proyecta las plantillas semanales sobre las fechas del rango y resta lo ya
- * reservado. Devuelve una fila por (docente, fecha) con los rangos libres de
- * ese día y las materias del docente — la materia no es parte del horario, la
- * elige el alumno al reservar.
+ * Los turnos que el alumno puede tomar en UNA ocurrencia de una ventana:
+ *
+ *  - Sumarse a una clase grupal que ya arrancó alguien, mientras quede cupo.
+ *    Es la misma hora y la misma materia; `enrolled` dice cuántos hay.
+ *  - Arrancar una clase nueva en cualquier :00/:30 donde entre la duración
+ *    entera sin pisar ninguna clase del docente (de esta ventana o de otra:
+ *    el docente no da dos clases a la vez). La duración es libre, así que el
+ *    fin puede caer en cualquier minuto: 13:00 + 45 min termina 13:45.
+ *
+ * `taken` son las clases del docente ese día, agrupadas por turno.
+ * `cutoff` (minutos) descarta lo que ya empezó; null si el día es futuro.
+ */
+export function slotsForWindow(window, taken, cutoff = null) {
+  const winFrom = toMinutes(window.start);
+  const winTo = toMinutes(window.end);
+  const alreadyStarted = (minutes) => cutoff !== null && minutes <= cutoff;
+
+  const slots = [];
+
+  if (window.maxStudents > 1) {
+    for (const group of taken) {
+      const from = toMinutes(group.start);
+      const joinable =
+        from >= winFrom &&
+        from < winTo &&
+        // Si el docente cambió la materia de la ventana, un grupo armado con
+        // la materia vieja no es la clase que la ventana ofrece ahora.
+        String(group.subjectId) === String(window.subjectId) &&
+        group.enrolled < window.maxStudents &&
+        !alreadyStarted(from);
+      if (joinable) slots.push({ start: group.start, end: group.end, enrolled: group.enrolled });
+    }
+  }
+
+  for (let from = winFrom; from + window.durationMinutes <= winTo; from += STEP_MINUTES) {
+    if (alreadyStarted(from)) continue;
+    const to = from + window.durationMinutes;
+    const clashes = taken.some((group) =>
+      overlaps(from, to, toMinutes(group.start), toMinutes(group.end))
+    );
+    if (!clashes) slots.push({ start: toTime(from), end: toTime(to), enrolled: 0 });
+  }
+
+  return slots.sort((a, b) => toMinutes(a.start) - toMinutes(b.start));
+}
+
+/**
+ * Proyecta las ventanas sobre las fechas del rango. Devuelve una fila por
+ * (ventana, fecha) con los turnos que quedan; las que se quedan sin ninguno
+ * no salen.
  *
  * Dos sentidos distintos de "reservado", y solo uno se resta:
- *  - Reservado CON ESE DOCENTE: la hora deja de existir para todos, así que
- *    se resta, sea de la materia que sea.
- *  - Reservado por el alumno con OTRO docente: la hora del docente sigue
- *    existiendo, este alumno no puede tomarla. NO se resta acá — el front la
+ *  - Reservado CON ESE DOCENTE: ese rato deja de existir para todos (salvo
+ *    el lugar que quede en una grupal), así que se resta.
+ *  - Reservado por el alumno con OTRO docente: el turno del docente sigue
+ *    existiendo, este alumno no puede tomarlo. NO se resta acá — el front lo
  *    pinta en gris con lo que devuelve /api/classes.
  *
- * `nowIso`/`nowTime` recortan lo que ya pasó: una hora de hoy que ya arrancó
- * no se ofrece más.
+ * `taken`: [{ teacherId, date, start, end, subjectId, enrolled }], un
+ * elemento por turno (una grupal con 3 alumnos es UNO con enrolled 3).
+ *
+ * El link de las virtuales no sale: se lo lleva el alumno recién al reservar.
  */
-export function expandAvailability({ entries, bookings, from, to, nowIso, nowTime }) {
-  const bookingsByTeacherDate = new Map();
-  for (const b of bookings) {
-    const key = `${b.teacherId}|${b.date}`;
-    if (!bookingsByTeacherDate.has(key)) bookingsByTeacherDate.set(key, []);
-    bookingsByTeacherDate.get(key).push({ start: b.start, end: b.end });
+export function expandAvailability({ windows, taken, from, to, nowIso, nowTime }) {
+  const takenByTeacherDate = new Map();
+  for (const group of taken) {
+    const key = `${group.teacherId}|${group.date}`;
+    if (!takenByTeacherDate.has(key)) takenByTeacherDate.set(key, []);
+    takenByTeacherDate.get(key).push(group);
   }
 
   const rows = [];
@@ -107,38 +141,31 @@ export function expandAvailability({ entries, bookings, from, to, nowIso, nowTim
   for (const iso of datesBetween(from, to)) {
     // Un día entero ya pasado no aporta nada.
     if (nowIso && iso < nowIso) continue;
-    const dayKey = dayKeyFromIso(iso);
+    const cutoff = nowIso && iso === nowIso && nowTime ? toMinutes(nowTime) : null;
 
-    for (const entry of entries) {
-      const ranges = entry.schedule[dayKey];
-      if (!ranges || ranges.length === 0) continue;
+    for (const window of windows) {
+      if (!occursOn(window, iso)) continue;
 
-      const busy = bookingsByTeacherDate.get(`${entry.teacherId}|${iso}`) ?? [];
-      let free = subtractRanges(ranges, busy);
-
-      // Hoy: se corta lo que ya empezó. Se deja el rango que todavía permite
-      // arrancar una clase completa más adelante.
-      if (nowIso && iso === nowIso && nowTime) {
-        const cutoff = toMinutes(nowTime);
-        free = free
-          .map((r) => {
-            const start = Math.max(toMinutes(r.start), cutoff);
-            return { start: toTime(start), end: r.end };
-          })
-          .filter((r) => toMinutes(r.start) < toMinutes(r.end));
-      }
-
-      free = free.filter(fitsAClass);
-      if (free.length === 0) continue;
+      const busy = takenByTeacherDate.get(`${window.teacherId}|${iso}`) ?? [];
+      const slots = slotsForWindow(window, busy, cutoff);
+      if (slots.length === 0) continue;
 
       rows.push({
-        id: `${iso}|${entry.teacherId}`,
+        id: `${window.id}|${iso}`,
+        windowId: window.id,
         date: iso,
-        dayKey,
-        teacherId: entry.teacherId,
-        teacherName: entry.teacherName,
-        subjects: entry.subjects,
-        ranges: free,
+        dayKey: dayKeyFromIso(iso),
+        teacherId: window.teacherId,
+        teacherName: window.teacherName,
+        subject: { id: window.subjectId, name: window.subjectName },
+        start: window.start,
+        end: window.end,
+        durationMinutes: window.durationMinutes,
+        price: window.price,
+        modality: window.modality,
+        maxStudents: window.maxStudents,
+        address: window.address ?? null,
+        slots,
       });
     }
   }

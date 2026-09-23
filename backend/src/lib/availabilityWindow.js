@@ -1,0 +1,144 @@
+// Valida una ventana de disponibilidad tal como la manda el modal del
+// docente. La UI ya valida todo esto, pero la UI se puede saltear: acá se
+// vuelve a chequear antes de tocar la base. Los CHECK de la tabla son la
+// última red, pero un error de constraint no se le puede mostrar a nadie.
+//
+// Lo que necesita la base (que la materia sea del docente, que no se pise
+// con otra ventana) no va acá: lo resuelven la ruta y db/availability.js.
+
+import { toMinutes } from './availabilityExpansion.js';
+
+export const MODALITIES = ['virtual', 'in_person', 'hybrid'];
+export const MAX_STUDENTS_LIMIT = 50;
+// El mismo techo que el CHECK de la base: frena un typo con ceros de más.
+export const MAX_PRICE = 10000000;
+export const MIN_DURATION = 30;
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+// 'HH:MM' en :00 o :30. '24:00' vale solo como fin (ver CLAUDE.md).
+const TIME_RE = /^(?:[01]\d|2[0-3]):(?:00|30)$/;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MAX_URL_LENGTH = 500;
+const MAX_ADDRESS_LENGTH = 200;
+
+function isRealDate(iso) {
+  if (!ISO_DATE_RE.test(iso ?? '')) return false;
+  // '2026-02-31' pasa la regex pero no existe: Date la corre al 3 de marzo.
+  const date = new Date(`${iso}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === iso;
+}
+
+function isHttpUrl(text) {
+  try {
+    const url = new URL(text);
+    return url.protocol === 'https:' || url.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
+function fail(field, message) {
+  return { message, fields: { [field]: 'invalid' } };
+}
+
+/**
+ * Devuelve { value } con la ventana normalizada, o { message, fields } con el
+ * primer problema. Un solo mensaje y no una lista: el modal muestra uno.
+ *
+ * `allowPastDate`: al EDITAR una ventana semanal, su fecha es la de la primera
+ * vez y puede haber quedado atrás; eso no la invalida. Una ventana suelta en
+ * el pasado, o una nueva, sí.
+ */
+export function validateWindow(body, { today, allowPastDate = false }) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return { message: 'La clase tiene un formato inválido.', fields: {} };
+  }
+
+  const repeatsWeekly = body.repeatsWeekly === true;
+
+  if (!isRealDate(body.date)) return fail('date', 'Elegí un día válido.');
+  if (body.date < today && !(allowPastDate && repeatsWeekly)) {
+    return fail('date', 'No se puede cargar una clase en un día que ya pasó.');
+  }
+
+  if (!body.subjectId) {
+    return { message: 'Elegí la materia de la clase.', fields: { subjectId: 'required' } };
+  }
+  if (!UUID_RE.test(String(body.subjectId))) return fail('subjectId', 'Materia inválida.');
+
+  if (!TIME_RE.test(body.start ?? '')) {
+    return fail('start', 'El horario tiene que empezar en punto o y media.');
+  }
+  if (body.end !== '24:00' && !TIME_RE.test(body.end ?? '')) {
+    return fail('end', 'El horario tiene que terminar en punto o y media.');
+  }
+  const start = toMinutes(body.start);
+  const end = toMinutes(body.end);
+  if (start >= end) return fail('end', 'El horario termina antes de empezar.');
+
+  // Libre (45, 50, 75...), pero no menos de media hora.
+  const duration = body.durationMinutes;
+  if (!Number.isInteger(duration) || duration < MIN_DURATION) {
+    return fail('durationMinutes', `Las clases duran como mínimo ${MIN_DURATION} minutos.`);
+  }
+  // La única regla entre la ventana y la clase: que entre al menos una.
+  if (duration > end - start) {
+    return fail('durationMinutes', 'La clase dura más que el horario que cargaste.');
+  }
+
+  // En pesos enteros, por alumno. 0 es sin cargo.
+  const price = body.price;
+  if (!Number.isInteger(price) || price < 0 || price > MAX_PRICE) {
+    return fail('price', 'El precio tiene que ser un monto en pesos, sin centavos.');
+  }
+
+  if (!MODALITIES.includes(body.modality)) {
+    return fail('modality', 'Elegí si la clase es virtual, presencial o híbrida.');
+  }
+
+  const maxStudents = body.maxStudents;
+  if (!Number.isInteger(maxStudents) || maxStudents < 1 || maxStudents > MAX_STUDENTS_LIMIT) {
+    return fail('maxStudents', `El cupo tiene que ser entre 1 y ${MAX_STUDENTS_LIMIT} alumnos.`);
+  }
+
+  // Solo se guarda lo que la modalidad usa: un link que quedó escrito antes
+  // de pasar a presencial no tiene que aparecerle a nadie.
+  const needsUrl = body.modality !== 'in_person';
+  const needsAddress = body.modality !== 'virtual';
+
+  const meetingUrl = needsUrl ? String(body.meetingUrl ?? '').trim() : null;
+  if (needsUrl) {
+    if (!meetingUrl) {
+      return { message: 'Falta el link de la clase virtual.', fields: { meetingUrl: 'required' } };
+    }
+    if (meetingUrl.length > MAX_URL_LENGTH || !isHttpUrl(meetingUrl)) {
+      return fail('meetingUrl', 'El link tiene que ser una dirección web (https://...).');
+    }
+  }
+
+  const address = needsAddress ? String(body.address ?? '').trim() : null;
+  if (needsAddress) {
+    if (!address) {
+      return { message: 'Falta la dirección de la clase presencial.', fields: { address: 'required' } };
+    }
+    if (address.length > MAX_ADDRESS_LENGTH) {
+      return fail('address', `La dirección puede tener hasta ${MAX_ADDRESS_LENGTH} caracteres.`);
+    }
+  }
+
+  return {
+    value: {
+      date: body.date,
+      repeatsWeekly,
+      start: body.start,
+      end: body.end,
+      subjectId: body.subjectId,
+      durationMinutes: duration,
+      price,
+      modality: body.modality,
+      maxStudents,
+      meetingUrl,
+      address,
+    },
+  };
+}

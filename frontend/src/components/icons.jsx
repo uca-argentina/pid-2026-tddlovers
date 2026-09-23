@@ -184,15 +184,86 @@ export function PlusIcon(props) {
   )
 }
 
-export function CopyIcon(props) {
+/** Dos flechas en círculo: la clase se repite todas las semanas. */
+export function RepeatIcon(props) {
   return (
     <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" {...props}>
-      <rect x="7" y="7" width="9" height="9" rx="2" stroke="currentColor" strokeWidth="1.8" />
       <path
-        d="M13 4.5H6a1.5 1.5 0 00-1.5 1.5v7"
+        d="M4 9a6 6 0 0110.2-4.2L16 6.5M16 3v3.5h-3.5M16 11a6 6 0 01-10.2 4.2L4 13.5M4 17v-3.5h3.5"
         stroke="currentColor"
-        strokeWidth="1.8"
+        strokeWidth="1.7"
         strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+/** Cámara: clase virtual. */
+export function VideoIcon(props) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" {...props}>
+      <rect x="2.5" y="5.5" width="10.5" height="9" rx="2" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M13 8.5l4.5-2.5v8L13 11.5" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+/** Pin de mapa: clase presencial. */
+export function PinIcon(props) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M10 17.5s5.5-4.8 5.5-9a5.5 5.5 0 00-11 0c0 4.2 5.5 9 5.5 9z"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+      <circle cx="10" cy="8.5" r="2" stroke="currentColor" strokeWidth="1.7" />
+    </svg>
+  )
+}
+
+/** Dos personas: cupo de la clase. */
+export function UsersIcon(props) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" {...props}>
+      <circle cx="7.5" cy="7" r="2.8" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M2.5 16.5a5 5 0 0110 0" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <path
+        d="M13 4.5a2.8 2.8 0 010 5.2M14.5 12a5 5 0 013 4.5"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
+/** Tacho: borrar. */
+export function TrashIcon(props) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M4 6h12M8 6V4.5h4V6M5.5 6l.8 10h7.4l.8-10"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+/** Lápiz: editar. */
+export function PencilIcon(props) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M4 16l.7-3.3 8.6-8.6a1.6 1.6 0 012.3 2.3L7 15.3 4 16z"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
       />
     </svg>
   )

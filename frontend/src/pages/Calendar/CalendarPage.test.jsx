@@ -116,6 +116,35 @@ describe('CalendarPage', () => {
     expect(await screen.findByText(/Sin reservar/)).toBeInTheDocument()
   })
 
+  it('una grupal se ve una sola vez con todos sus alumnos', async () => {
+    const iso = toISODate(today)
+    const grupal = { teacherId: 't1', maxStudents: 4, subjectName: 'Física' }
+    fetchClasses.mockResolvedValue([
+      classOn(iso, { ...grupal, id: 'a', studentName: 'Sofía Ramírez' }),
+      classOn(iso, { ...grupal, id: 'b', studentName: 'Tomás Díaz' }),
+    ])
+
+    render(<CalendarPage viewRole="teacher" />)
+
+    expect(await screen.findByText('Sofía Ramírez, Tomás Díaz')).toBeInTheDocument()
+    expect(screen.getByText('Alumnos (2 de 4):')).toBeInTheDocument()
+    expect(screen.getByText('1 clase')).toBeInTheDocument()
+  })
+
+  it('una clase virtual trae el link para entrar', async () => {
+    const iso = toISODate(today)
+    fetchClasses.mockResolvedValue([
+      classOn(iso, { modality: 'virtual', meetingUrl: 'https://meet.example.com/abc' }),
+    ])
+
+    render(<CalendarPage />)
+
+    expect(await screen.findByRole('link', { name: 'Entrar a la clase' })).toHaveAttribute(
+      'href',
+      'https://meet.example.com/abc',
+    )
+  })
+
   it('ordena las clases del día por hora', async () => {
     const iso = toISODate(today)
     fetchClasses.mockResolvedValue([

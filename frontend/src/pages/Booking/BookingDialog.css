@@ -31,14 +31,24 @@
   color: var(--color-text);
 }
 
-.booking-dialog-subjects {
+.booking-dialog-details .booking-dialog-wide {
+  flex-basis: 100%;
+}
+
+.booking-dialog-note {
+  margin-top: -6px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.booking-dialog-slots {
   margin: 0;
   padding: 0;
   border: none;
   min-width: 0;
 }
 
-.booking-dialog-subjects legend {
+.booking-dialog-slots legend {
   padding: 0;
   margin-bottom: 8px;
   font-size: 12px;
@@ -48,10 +58,62 @@
   color: var(--color-text-muted);
 }
 
-.booking-dialog-subject-chips {
-  display: flex;
-  flex-wrap: wrap;
+/* Columnas del mismo ancho y no chips que se envuelven: los horarios tienen
+   todos el mismo largo y en grilla se leen como una tabla de horas. */
+.booking-dialog-slot-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
   gap: 8px;
+}
+
+.booking-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 8px;
+  border: 1.5px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.booking-slot:hover:not(:disabled) {
+  border-color: var(--color-primary);
+}
+
+.booking-slot.is-group {
+  border-color: color-mix(in srgb, var(--color-success) 45%, var(--color-border));
+}
+
+.booking-slot.is-selected {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: #fff;
+}
+
+/* Un horario que choca con otra clase propia se sigue viendo —existe— pero
+   no se puede tocar: mismo gris que el aviso de la tarjeta. */
+.booking-slot:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+.booking-slot-time {
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.booking-slot-note {
+  font-size: 11.5px;
+  color: var(--color-success);
+}
+
+.booking-slot.is-selected .booking-slot-note {
+  color: inherit;
 }
 
 .booking-dialog-hint,

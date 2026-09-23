@@ -45,21 +45,38 @@ class CalendarPage extends Component {
     this.fetchToken += 1
   }
 
-  /** Las clases agrupadas por fecha ISO, cada lista ordenada por hora. */
+  /**
+   * Las clases agrupadas por fecha ISO, cada lista ordenada por hora.
+   *
+   * Una grupal llega como una fila por alumno (así está en la base), pero es
+   * UNA clase: el docente la ve una sola vez con todos sus alumnos en
+   * `students`. Al alumno nunca le llegan dos filas del mismo turno, así que
+   * para él no cambia nada.
+   */
   getClassesByDate() {
     const map = {}
+    const porTurno = {}
 
     for (const item of this.state.classes) {
-      // Se las pedimos al backend con ?status=reservada, pero mientras el
-      // endpoint no exista no queremos depender de que respete el filtro: un
-      // turno libre acá se leería como una clase que nadie reservó.
+      // Se las pedimos al backend con ?status=reservada, pero no queremos
+      // depender de que respete el filtro: un turno libre acá se leería como
+      // una clase que nadie reservó.
       if (item.status && item.status !== CALENDAR_STATUS) continue
+
+      const turno = `${item.teacherId}|${item.date}|${item.startTime}`
+      if (porTurno[turno]) {
+        porTurno[turno].students.push(item.studentName)
+        continue
+      }
+
+      const clase = { ...item, students: [item.studentName] }
+      porTurno[turno] = clase
       if (!map[item.date]) map[item.date] = []
-      map[item.date].push(item)
+      map[item.date].push(clase)
     }
 
-    // Las clases duran 1 h y arrancan :00 o :30, así que comparar los
-    // strings 'HH:MM' alcanza para ordenarlas.
+    // Todo arranca :00 o :30, así que comparar los strings 'HH:MM' alcanza
+    // para ordenarlas.
     for (const iso of Object.keys(map)) {
       map[iso].sort((a, b) => a.startTime.localeCompare(b.startTime))
     }

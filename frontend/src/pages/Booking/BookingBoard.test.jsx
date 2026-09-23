@@ -27,34 +27,61 @@ const MATERIAS = [
   { id: 2, name: 'Física' },
 ]
 
-// Carla da las dos: el horario es uno solo y la materia se elige al reservar.
-const carla = (overrides = {}) =>
-  slot({
-    id: `${HOY}|4`,
-    teacherId: 4,
-    teacherName: 'Carla Benítez',
-    subjects: MATERIAS,
-    ...overrides,
-  })
-
 const alumno = { id: 7, nombre: 'Sofía', role: 'student' }
 
 // Todo se arma sobre HOY, que es el día que la pantalla trae seleccionado.
 const HOY = toISODate(new Date())
 const DIA_HOY = dayKeyFromIso(HOY)
 
+/** Los turnos de a media hora de una ventana, como los arma el backend. */
+function turnos(start, end, duracion = 60) {
+  const aMin = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3))
+  const aHora = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+  const lista = []
+  for (let m = aMin(start); m + duracion <= aMin(end); m += 30) {
+    lista.push({ start: aHora(m), end: aHora(m + duracion), enrolled: 0 })
+  }
+  return lista
+}
+
+// Una fila de /api/availability: una clase de Laura, hoy, de 13 a 17.
 function slot(overrides = {}) {
   return {
-    id: `${HOY}|2`,
+    id: `w-laura|${HOY}`,
+    windowId: 'w-laura',
     date: HOY,
     dayKey: DIA_HOY,
     teacherId: 2,
     teacherName: 'Laura Gómez',
-    subjects: [{ id: 1, name: 'Matemática' }],
-    ranges: [{ start: '13:00', end: '17:00' }],
+    subject: { id: 1, name: 'Matemática' },
+    start: '13:00',
+    end: '17:00',
+    durationMinutes: 60,
+    price: 15000,
+    modality: 'virtual',
+    maxStudents: 1,
+    address: null,
+    slots: turnos('13:00', '17:00'),
     ...overrides,
   }
 }
+
+// Carla da Física presencial y grupal, a la mañana.
+const carla = (overrides = {}) =>
+  slot({
+    id: `w-carla|${HOY}`,
+    windowId: 'w-carla',
+    teacherId: 4,
+    teacherName: 'Carla Benítez',
+    subject: { id: 2, name: 'Física' },
+    start: '09:00',
+    end: '11:00',
+    modality: 'in_person',
+    address: 'Aula 3',
+    maxStudents: 4,
+    slots: turnos('09:00', '11:00'),
+    ...overrides,
+  })
 
 // BookingBoard recibe `router` por props, así que para el test lo envolvemos
 // igual que hace AvailabilityPage.
@@ -106,16 +133,33 @@ describe('BookingBoard', () => {
     await esperarCarga()
 
     expect(await screen.findByText('13:00 – 17:00')).toBeInTheDocument()
-    expect(screen.getByText('Laura Gómez')).toBeInTheDocument()
+    // Dentro de la tarjeta: "Individual" también es un chip de los filtros.
+    const tarjeta = screen.getByText('con Laura Gómez').closest('li')
+    expect(within(tarjeta).getByText('Individual')).toBeInTheDocument()
   })
 
-  it('una tarjeta por docente, aunque dé varias materias', async () => {
+  it('una tarjeta por clase ofrecida, con su materia, modalidad y cupo', async () => {
     fetchAvailability.mockResolvedValue([slot(), carla()])
     renderBoard()
     await esperarCarga()
 
     expect(await screen.findAllByRole('button', { name: /^Reservar / })).toHaveLength(2)
-    expect(screen.getByText('Matemática · Física')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Reservar Física con Carla Benítez' })).toBeEnabled()
+    expect(screen.getByText('Grupal · hasta 4')).toBeInTheDocument()
+    expect(screen.getByText('Presencial · Aula 3')).toBeInTheDocument()
+  })
+
+  it('una grupal con lugar invita a sumarse', async () => {
+    const [primero, ...resto] = turnos('09:00', '11:00')
+    fetchAvailability.mockResolvedValue([
+      carla({ slots: [{ ...primero, enrolled: 2 }, ...resto.slice(2)] }),
+    ])
+    renderBoard()
+    await esperarCarga()
+
+    expect(
+      await screen.findByText('Sumate a la de las 09:00: 2 de 4 anotados.'),
+    ).toBeInTheDocument()
   })
 
   it('avisa cuando se superpone con una clase propia', async () => {
@@ -153,10 +197,7 @@ describe('BookingBoard', () => {
   })
 
   it('filtra por materia', async () => {
-    fetchAvailability.mockResolvedValue([
-      slot(),
-      carla({ ranges: [{ start: '09:00', end: '11:00' }] }),
-    ])
+    fetchAvailability.mockResolvedValue([slot(), carla()])
     renderBoard()
     await esperarCarga()
 
@@ -165,6 +206,21 @@ describe('BookingBoard', () => {
 
     expect(screen.getByText('09:00 – 11:00')).toBeInTheDocument()
     expect(screen.queryByText('13:00 – 17:00')).not.toBeInTheDocument()
+  })
+
+  it('filtra por modalidad y por tipo de clase', async () => {
+    fetchAvailability.mockResolvedValue([slot(), carla()])
+    renderBoard()
+    await esperarCarga()
+
+    await abrirFiltro('Modalidad')
+    await userEvent.click(screen.getByRole('button', { name: 'Presencial' }))
+    expect(screen.getByText('09:00 – 11:00')).toBeInTheDocument()
+    expect(screen.queryByText('13:00 – 17:00')).not.toBeInTheDocument()
+
+    await abrirFiltro('Tipo de clase')
+    await userEvent.click(screen.getByRole('button', { name: 'Individual' }))
+    expect(screen.queryByText('09:00 – 11:00')).not.toBeInTheDocument()
   })
 
   it('solo ofrece chips de materias que están en el rango cargado', async () => {
@@ -297,23 +353,18 @@ describe('BookingBoard', () => {
     expect(modal).toHaveTextContent('Laura Gómez')
   })
 
-  it('confirmar reserva manda la clase y recarga el mes', async () => {
+  it('confirmar reserva manda la ventana, el día y la hora, y recarga el mes', async () => {
     renderBoard()
     await esperarCarga()
     await userEvent.click(await screen.findByRole('button', { name: /^Reservar / }))
 
-    // 13:00–17:00 ofrece 7 arranques, así que hay que elegir uno.
+    // 13:00–17:00 con clases de 1 h ofrece 7 arranques: hay que elegir uno.
     await userEvent.click(screen.getByRole('button', { name: '14:00 a 15:00' }))
     await userEvent.click(screen.getByRole('button', { name: 'Confirmar reserva' }))
 
     await waitFor(() => expect(bookLesson).toHaveBeenCalledTimes(1))
-    expect(bookLesson.mock.calls[0][0]).toMatchObject({
-      date: HOY,
-      teacherId: 2,
-      subjectId: 1,
-      startTime: '14:00',
-      endTime: '15:00',
-    })
+    // La materia no se manda: es de la ventana.
+    expect(bookLesson).toHaveBeenCalledWith({ windowId: 'w-laura', date: HOY, startTime: '14:00' })
     // Se vuelve a pedir todo: ese horario puede pasar a chocar con las
     // tarjetas de otros docentes.
     await waitFor(() => expect(fetchAvailability).toHaveBeenCalledTimes(2))
@@ -332,43 +383,63 @@ describe('BookingBoard', () => {
     )
   })
 
-  it('si el docente da varias materias, hay que elegir una para confirmar', async () => {
-    fetchAvailability.mockResolvedValue([carla()])
+  it('en una grupal se puede sumar a un turno armado', async () => {
+    fetchAvailability.mockResolvedValue([
+      carla({
+        slots: [
+          { start: '09:00', end: '10:00', enrolled: 3 },
+          { start: '10:00', end: '11:00', enrolled: 0 },
+        ],
+      }),
+    ])
     renderBoard()
     await esperarCarga()
-    await userEvent.click(await screen.findByRole('button', { name: 'Reservar con Carla Benítez' }))
-    await userEvent.click(screen.getByRole('button', { name: '14:00 a 15:00' }))
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Reservar Física con Carla Benítez' }),
+    )
 
-    const confirmar = screen.getByRole('button', { name: 'Confirmar reserva' })
-    expect(confirmar).toBeDisabled()
+    const modal = screen.getByRole('dialog')
+    expect(within(modal).getByText('Sumate a una clase grupal')).toBeInTheDocument()
+    await userEvent.click(
+      within(modal).getByRole('button', { name: '09:00 a 10:00, 3 de 4 anotados' }),
+    )
+    expect(within(modal).getByText(/te sumás a una clase grupal/)).toBeInTheDocument()
+    await userEvent.click(within(modal).getByRole('button', { name: 'Confirmar reserva' }))
 
-    await userEvent.click(screen.getByRole('button', { name: 'Física' }))
-    expect(screen.getByRole('button', { name: 'Física' })).toHaveAttribute('aria-pressed', 'true')
-    await userEvent.click(confirmar)
-
-    await waitFor(() => expect(bookLesson).toHaveBeenCalledTimes(1))
-    expect(bookLesson.mock.calls[0][0]).toMatchObject({ teacherId: 4, subjectId: 2 })
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      'Reservaste Física con Carla Benítez',
+    await waitFor(() =>
+      expect(bookLesson).toHaveBeenCalledWith({ windowId: 'w-carla', date: HOY, startTime: '09:00' }),
     )
   })
 
-  it('si el alumno filtró por una materia, llega elegida al modal', async () => {
-    fetchAvailability.mockResolvedValue([carla()])
-    renderBoard('/disponibilidad?q=fisica')
+  it('los horarios que chocan con una clase propia no se pueden elegir', async () => {
+    fetchMyLessons.mockResolvedValue([
+      {
+        id: 'mia',
+        date: HOY,
+        teacherId: 4,
+        teacherName: 'Carla Benítez',
+        subjectName: 'Física',
+        startTime: '14:00',
+        endTime: '15:00',
+      },
+    ])
+    renderBoard()
     await esperarCarga()
+    await userEvent.click(await screen.findByRole('button', { name: /^Reservar / }))
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Reservar con Carla Benítez' }))
+    expect(
+      screen.getByRole('button', { name: '14:00 a 15:00, ya tenés otra clase' }),
+    ).toBeDisabled()
+    expect(screen.getByRole('button', { name: '15:00 a 16:00' })).toBeEnabled()
+  })
 
-    const modal = screen.getByRole('dialog')
-    expect(within(modal).getByRole('button', { name: 'Física' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    )
-    expect(within(modal).getByRole('button', { name: 'Matemática' })).toHaveAttribute(
-      'aria-pressed',
-      'false',
-    )
+  it('con un solo horario posible llega elegido', async () => {
+    fetchAvailability.mockResolvedValue([slot({ slots: turnos('13:00', '14:00') })])
+    renderBoard()
+    await esperarCarga()
+    await userEvent.click(await screen.findByRole('button', { name: /^Reservar / }))
+
+    expect(screen.getByRole('button', { name: 'Confirmar reserva' })).toBeEnabled()
   })
 
   it('si falla la reserva el modal se queda con el error', async () => {
