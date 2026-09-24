@@ -1,5 +1,4 @@
 import { getPool } from './pool.js';
-import { toMinutes, toTime } from '../lib/availabilityExpansion.js';
 
 // La fila tal como la espera el front (ver PID-Front/CLAUDE.md): fechas
 // 'YYYY-MM-DD' y horas 'HH:MM', sin zona horaria. Mandar un timestamp UTC
@@ -22,7 +21,7 @@ const CLASS_COLUMNS = `
   c.meeting_url AS "meetingUrl",
   c.address,
   c.locality,
-  c.price,
+  c.price_cents AS "priceCents",
   (
     -- Cuántos hay anotados en ese turno (una grupal son varias filas con el
     -- mismo docente, fecha e inicio). Un número y no nombres: el alumno ve
@@ -63,19 +62,22 @@ export async function findClassesForUser({ userId, role, from, to, status }) {
  * Los turnos ya tomados de un rango, de cualquier docente. NO va a una ruta:
  * la usa la expansión de disponibilidad para restar lo reservado. Una grupal
  * con tres alumnos es UN turno con enrolled 3 — el mismo docente, la misma
- * hora. Devuelve lo mínimo, no datos de nadie.
+ * hora, la misma materia y duración. Devuelve lo mínimo, no datos de nadie:
+ * el nombre de la materia hace falta para ofrecer sumarse a una grupal.
  */
 export async function findTakenSlots({ from, to }) {
   const result = await getPool().query(
-    `SELECT teacher_id AS "teacherId",
-            to_char(class_date, 'YYYY-MM-DD') AS date,
-            to_char(start_time, 'HH24:MI') AS start,
-            to_char(end_time, 'HH24:MI') AS "end",
-            subject_id AS "subjectId",
+    `SELECT c.teacher_id AS "teacherId",
+            to_char(c.class_date, 'YYYY-MM-DD') AS date,
+            to_char(c.start_time, 'HH24:MI') AS start,
+            to_char(c.end_time, 'HH24:MI') AS "end",
+            c.subject_id AS "subjectId",
+            s.name AS "subjectName",
             count(*)::int AS enrolled
-     FROM classes
-     WHERE status = 'reservada' AND class_date BETWEEN $1::date AND $2::date
-     GROUP BY teacher_id, class_date, start_time, end_time, subject_id`,
+     FROM classes c
+     JOIN subjects s ON s.id = c.subject_id
+     WHERE c.status = 'reservada' AND c.class_date BETWEEN $1::date AND $2::date
+     GROUP BY c.teacher_id, c.class_date, c.start_time, c.end_time, c.subject_id, s.name`,
     [from, to]
   );
   return result.rows;
@@ -113,20 +115,24 @@ export async function findClassById(id) {
 const TAKEN_BY_SOMEONE_ELSE = 'Ese horario ya fue reservado por otra persona.';
 
 /**
- * Reserva un turno de una ventana. Si ya hay una clase del docente a esa hora
- * es sumarse a ella (solo en una grupal, de la misma materia y con cupo); si
- * no, es arrancar una nueva con la duración de la ventana.
+ * Reserva una clase en una ventana. El alumno eligió materia, inicio y
+ * duración; si ya hay una clase del docente que arranca a esa hora, es
+ * sumarse a ella, y eso solo se puede en una grupal, con cupo, y eligiendo la
+ * MISMA materia y duración (es la misma clase, no otra a la misma hora).
  *
- * El cupo no lo puede cuidar una restricción de la tabla (no cuenta filas),
- * así que todo va en una transacción con un lock por docente y fecha: dos
- * alumnos sumándose al último lugar a la vez no pueden pasar los dos.
+ * La restricción de exclusión de la tabla deja pasar dos filas del docente
+ * con el mismo inicio aunque terminen distinto, y el cupo tampoco lo puede
+ * cuidar (no cuenta filas): todo eso va en una transacción con un lock por
+ * docente y fecha, así dos alumnos sumándose al último lugar a la vez no
+ * pueden pasar los dos.
  *
- * Los datos de la clase (modalidad, link, dirección, precio) se copian de la ventana:
- * si el docente la cambia después, lo que el alumno ya reservó no se mueve.
+ * Modalidad, link y dirección se copian de la ventana, y el precio es el que
+ * calculó la ruta con la tarifa de ese momento: si el docente cambia algo
+ * después, lo que el alumno ya reservó no se mueve.
  *
  * Devuelve { id } o { conflict } con el mensaje para el alumno.
  */
-export async function bookClass({ window, studentId, date, startTime }) {
+export async function bookClass({ window, studentId, date, startTime, endTime, subjectId, priceCents }) {
   const client = await getPool().connect();
   try {
     await client.query('BEGIN');
@@ -146,38 +152,35 @@ export async function bookClass({ window, studentId, date, startTime }) {
     );
     const group = existing.rows[0];
 
-    let endTime;
     if (group) {
-      if (window.maxStudents <= 1 || String(group.subjectId) !== String(window.subjectId)) {
+      if (window.maxStudents <= 1) {
         await client.query('ROLLBACK');
         return { conflict: TAKEN_BY_SOMEONE_ELSE };
+      }
+      if (String(group.subjectId) !== String(subjectId) || group.end !== endTime) {
+        await client.query('ROLLBACK');
+        return {
+          conflict:
+            'A esa hora ya hay una clase grupal de otra materia o duración. Sumate a esa o elegí otro horario.',
+        };
       }
       if (group.enrolled >= window.maxStudents) {
         await client.query('ROLLBACK');
         return { conflict: 'La clase grupal ya se llenó.' };
-      }
-      // Se usa el fin de la clase ya armada y no el de la ventana: si el
-      // docente cambió la duración, el grupo sigue siendo el mismo turno.
-      endTime = group.end;
-    } else {
-      endTime = toTime(toMinutes(startTime) + window.durationMinutes);
-      if (toMinutes(endTime) > toMinutes(window.end)) {
-        await client.query('ROLLBACK');
-        return { conflict: 'Ese horario no entra en la disponibilidad del docente.' };
       }
     }
 
     const result = await client.query(
       `INSERT INTO classes (
          teacher_id, student_id, subject_id, class_date, start_time, end_time,
-         availability_id, modality, max_students, meeting_url, address, locality, price
+         availability_id, modality, max_students, meeting_url, address, locality, price_cents
        )
        VALUES ($1, $2, $3, $4::date, $5::time, $6::time, $7, $8::class_modality, $9, $10, $11, $12, $13)
        RETURNING id`,
       [
         window.teacherId,
         studentId,
-        window.subjectId,
+        subjectId,
         date,
         startTime,
         endTime,
@@ -187,7 +190,7 @@ export async function bookClass({ window, studentId, date, startTime }) {
         window.meetingUrl,
         window.address,
         window.locality,
-        window.price,
+        priceCents,
       ]
     );
 

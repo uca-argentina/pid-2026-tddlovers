@@ -9,8 +9,8 @@ vi.mock('../../db/availability.js', () => ({
   updateWindow: vi.fn(),
 }));
 
-vi.mock('../../db/users.js', () => ({
-  teacherTeachesSubject: vi.fn(),
+vi.mock('../../db/rates.js', () => ({
+  teacherHasRateFor: vi.fn(),
 }));
 
 vi.mock('../../db/sessions.js', () => ({
@@ -23,7 +23,7 @@ vi.mock('../../db/sessions.js', () => ({
 const { createWindow, deleteWindow, findTeacherWindows, updateWindow } = await import(
   '../../db/availability.js'
 );
-const { teacherTeachesSubject } = await import('../../db/users.js');
+const { teacherHasRateFor } = await import('../../db/rates.js');
 const { findValidSession } = await import('../../db/sessions.js');
 const { buildApp } = await import('../../app.js');
 
@@ -46,7 +46,6 @@ async function authedHeaders(app, role = 'teacher') {
   };
 }
 
-const MATE = '47ac9e88-4099-4ab4-b1fe-3898d7b279c4';
 const VENTANA_ID = '9f1c2d3e-4b5a-4c6d-8e7f-0a1b2c3d4e5f';
 
 // Una fecha que no pasa nunca, para no depender del reloj.
@@ -55,9 +54,6 @@ const ventana = (over = {}) => ({
   repeatsWeekly: true,
   start: '13:00',
   end: '15:30',
-  subjectId: MATE,
-  durationMinutes: 60,
-  price: 15000,
   modality: 'in_person',
   maxStudents: 4,
   meetingUrl: '',
@@ -71,7 +67,7 @@ describe('teacher availability windows', () => {
 
   beforeEach(() => {
     app = buildApp({ logger: false });
-    teacherTeachesSubject.mockResolvedValue(true);
+    teacherHasRateFor.mockResolvedValue(true);
     createWindow.mockImplementation(async (_teacherId, w) => ({ window: { id: VENTANA_ID, ...w } }));
     updateWindow.mockImplementation(async (_teacherId, id, w) => ({ window: { id, ...w } }));
     deleteWindow.mockResolvedValue(true);
@@ -140,31 +136,17 @@ describe('teacher availability windows', () => {
     });
 
     expect(res.statusCode).toBe(201);
-    expect(teacherTeachesSubject).toHaveBeenCalledWith('user-1', MATE);
+    expect(teacherHasRateFor).toHaveBeenCalledWith('user-1', 'in_person');
     // Presencial: el link que haya quedado escrito no se guarda.
-    expect(createWindow).toHaveBeenCalledWith(
-      'user-1',
-      expect.objectContaining({ modality: 'in_person', meetingUrl: null, maxStudents: 4, price: 15000 })
-    );
+    const guardada = createWindow.mock.calls[0][1];
+    expect(guardada).toMatchObject({ modality: 'in_person', meetingUrl: null, maxStudents: 4 });
+    // Materia, duración y precio ya no son de la ventana.
+    expect(guardada).not.toHaveProperty('subjectId');
+    expect(guardada).not.toHaveProperty('price');
   });
 
-  it('POST rejects a class longer than the window', async () => {
-    const headers = await authedHeaders(app);
-
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/teachers/me/availability',
-      headers,
-      payload: ventana({ durationMinutes: 180 }),
-    });
-
-    expect(res.statusCode).toBe(400);
-    expect(res.json().fields).toEqual({ durationMinutes: 'invalid' });
-    expect(createWindow).not.toHaveBeenCalled();
-  });
-
-  it('POST rejects a subject that is not in the profile', async () => {
-    teacherTeachesSubject.mockResolvedValueOnce(false);
+  it('POST rejects a modality the teacher has no rates for', async () => {
+    teacherHasRateFor.mockResolvedValueOnce(false);
     const headers = await authedHeaders(app);
 
     const res = await app.inject({
@@ -175,8 +157,27 @@ describe('teacher availability windows', () => {
     });
 
     expect(res.statusCode).toBe(400);
-    expect(res.json().fields).toEqual({ subjectId: 'invalid' });
+    expect(res.json()).toEqual({
+      message: 'No tenés tarifas para clases presenciales. Cargalas desde Mi perfil.',
+      fields: { modality: 'invalid' },
+    });
     expect(createWindow).not.toHaveBeenCalled();
+  });
+
+  it('PUT also checks the rates of the new modality', async () => {
+    teacherHasRateFor.mockResolvedValueOnce(false);
+    const headers = await authedHeaders(app);
+
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/teachers/me/availability/${VENTANA_ID}`,
+      headers,
+      payload: ventana({ modality: 'virtual', meetingUrl: 'https://meet.example.com/abc' }),
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(teacherHasRateFor).toHaveBeenCalledWith('user-1', 'virtual');
+    expect(updateWindow).not.toHaveBeenCalled();
   });
 
   it('POST reports an overlap with another window as a conflict', async () => {

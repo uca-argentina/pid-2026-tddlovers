@@ -240,6 +240,21 @@ export function UsersIcon(props) {
   )
 }
 
+/** Libro abierto: las materias que se pueden reservar. */
+export function BookIcon(props) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M10 5.5C8.5 4.3 6.3 3.8 3 4v11c3.3-.2 5.5.3 7 1.5 1.5-1.2 3.7-1.7 7-1.5V4c-3.3-.2-5.5.3-7 1.5z"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+      <path d="M10 5.5v11" stroke="currentColor" strokeWidth="1.7" />
+    </svg>
+  )
+}
+
 /** Tacho: borrar. */
 export function TrashIcon(props) {
   return (

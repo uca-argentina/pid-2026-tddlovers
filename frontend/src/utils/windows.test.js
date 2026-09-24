@@ -4,10 +4,9 @@ import {
   draftToPayload,
   emptyDraft,
   formatMinutes,
-  formatPrice,
   formatWeekTitle,
+  modalityPlural,
   occursOn,
-  parsePrice,
   repeatLabel,
   startOfWeek,
   validateDraft,
@@ -24,10 +23,6 @@ const ventana = (over = {}) => ({
   repeatsWeekly: false,
   start: '13:00',
   end: '15:00',
-  subjectId: 's1',
-  subjectName: 'Matemática',
-  durationMinutes: 60,
-  price: 15000,
   modality: 'virtual',
   maxStudents: 1,
   meetingUrl: 'https://meet.example.com/abc',
@@ -37,9 +32,8 @@ const ventana = (over = {}) => ({
 })
 
 const borrador = (over = {}) => ({
-  ...emptyDraft({ date: '2026-09-14', subjectId: 's1' }),
+  ...emptyDraft({ date: '2026-09-14' }),
   meetingUrl: 'https://meet.example.com/abc',
-  price: '15000',
   ...over,
 })
 
@@ -108,29 +102,25 @@ describe('visibleHours', () => {
   })
 })
 
-describe('precio', () => {
-  it('se muestra en pesos, y 0 es sin cargo', () => {
-    // Intl separa el signo con un espacio duro: se compara sin espacios.
-    expect(formatPrice(15000).replace(/\s/g, ' ')).toBe('$ 15.000')
-    expect(formatPrice(0)).toBe('Sin cargo')
-  })
-
-  it('acepta como se escribe un monto acá, sin centavos', () => {
-    expect(parsePrice('15000')).toBe(15000)
-    expect(parsePrice('15.000')).toBe(15000)
-    expect(parsePrice('$ 15.000')).toBe(15000)
-    expect(parsePrice('1500,50')).toBeNaN()
-    expect(parsePrice('')).toBeNaN()
-  })
-})
-
 describe('borrador <-> ventana', () => {
-  it('duración y precio se editan como texto y se mandan como número', () => {
-    expect(draftFromWindow(ventana())).toMatchObject({ durationMinutes: '60', price: '15000' })
-    expect(draftToPayload(borrador({ durationMinutes: '45', price: '12.500' }))).toMatchObject({
-      durationMinutes: 45,
-      price: 12500,
-    })
+  it('la ventana no lleva materia, duración ni precio: los elige el alumno', () => {
+    const payload = draftToPayload(draftFromWindow(ventana()))
+    expect(Object.keys(payload).sort()).toEqual([
+      'address',
+      'date',
+      'end',
+      'locality',
+      'maxStudents',
+      'meetingUrl',
+      'modality',
+      'repeatsWeekly',
+      'start',
+    ])
+  })
+
+  it('un borrador nuevo arranca en la modalidad que se le pida', () => {
+    expect(emptyDraft({ date: '2026-09-14', modality: 'in_person' }).modality).toBe('in_person')
+    expect(emptyDraft({ date: '2026-09-14' }).modality).toBe('virtual')
   })
 
   it('una grupal conserva el cupo; una individual arranca con el mínimo de grupo', () => {
@@ -163,8 +153,7 @@ describe('validateDraft', () => {
     expect(validateDraft(borrador())).toEqual({})
   })
 
-  it('pide materia, link y dirección según la modalidad', () => {
-    expect(validateDraft(borrador({ subjectId: '' }))).toHaveProperty('subjectId')
+  it('pide link y dirección según la modalidad', () => {
     expect(validateDraft(borrador({ meetingUrl: '' }))).toHaveProperty('meetingUrl')
     expect(validateDraft(borrador({ meetingUrl: 'meet' }))).toHaveProperty('meetingUrl')
     const hibrida = validateDraft(borrador({ modality: 'hybrid', address: '' }))
@@ -178,19 +167,22 @@ describe('validateDraft', () => {
     expect(validateDraft(borrador({ group: true, groupSize: '4' }))).toEqual({})
   })
 
-  it('la duración es libre, desde 30 minutos y sin pasarse del horario', () => {
-    expect(validateDraft(borrador({ durationMinutes: '45' }))).toEqual({})
-    expect(validateDraft(borrador({ durationMinutes: '29' }))).toHaveProperty('durationMinutes')
-    expect(validateDraft(borrador({ durationMinutes: 'una hora' }))).toHaveProperty(
-      'durationMinutes',
-    )
-    const larga = validateDraft(borrador({ start: '09:00', end: '10:00', durationMinutes: '90' }))
-    expect(larga.durationMinutes).toBe('No entra en el horario, que dura 1 h.')
+  it('no deja una modalidad en la que el docente no tiene tarifas', () => {
+    const tarifas = { rateModalities: ['in_person'] }
+    expect(validateDraft(borrador(), tarifas).modality).toBe('No tenés tarifas para clases virtuales.')
+    const presencial = borrador({ modality: 'in_person', locality: 'Palermo', address: 'Aula 3' })
+    expect(validateDraft(presencial, tarifas)).toEqual({})
   })
 
-  it('pide el precio, que puede ser 0', () => {
-    expect(validateDraft(borrador({ price: '' }))).toHaveProperty('price')
-    expect(validateDraft(borrador({ price: 'mil' }))).toHaveProperty('price')
-    expect(validateDraft(borrador({ price: '0' }))).toEqual({})
+  it('sin la lista de tarifas no chequea la modalidad', () => {
+    expect(validateDraft(borrador())).toEqual({})
+  })
+})
+
+describe('modalityPlural', () => {
+  it('nombra la modalidad en plural', () => {
+    expect(modalityPlural('virtual')).toBe('virtuales')
+    expect(modalityPlural('in_person')).toBe('presenciales')
+    expect(modalityPlural('hybrid')).toBe('híbridas')
   })
 })

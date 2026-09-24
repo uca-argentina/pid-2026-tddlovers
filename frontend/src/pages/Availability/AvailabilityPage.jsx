@@ -8,8 +8,8 @@ import './AvailabilityPage.css'
 /**
  * Disponibilidad. Según el rol es una de dos pantallas:
  *   - Docente: su semana como calendario, y un modal por día para cargar
- *     clases (materia, horario, duración, modalidad y cupo). Ver
- *     TeacherAvailability.
+ *     horarios (cuándo, modalidad y cupo; la materia y la duración las elige
+ *     el alumno). Ver TeacherAvailability.
  *   - Alumno: el tablero para buscar horarios libres y reservar (ver
  *     pages/Booking). /disponibilidad/:materiaId solo tiene sentido ahí —
  *     deja esa materia filtrada.

@@ -5,8 +5,33 @@ import FormField from '../../components/FormField.jsx'
 import { PlusIcon, SpinnerIcon } from '../../components/icons.jsx'
 import { isValidPhone } from '../../utils/validation.js'
 import { getInitials } from '../../utils/user.js'
+import { centsToInput, MAX_HOURLY_RATE_CENTS, parseMoney } from '../../utils/rates.js'
+import { MODALITIES } from '../../utils/windows.js'
 import { fetchSubjects, updateProfile } from '../../api/client.js'
 import './ProfilePage.css'
+
+/**
+ * Las tarifas como las edita la pantalla: { [materia]: { virtual: '5000',
+ * in_person: '', hybrid: '' } }, texto tal cual se tipea. Vacío = no da esa
+ * materia en esa modalidad.
+ */
+function ratesToInputs(rates) {
+  const inputs = {}
+  for (const rate of rates || []) {
+    const clave = String(rate.subjectId)
+    if (!inputs[clave]) inputs[clave] = {}
+    inputs[clave][rate.modality] = centsToInput(rate.hourlyRateCents)
+  }
+  return inputs
+}
+
+/** Una firma comparable de una lista de tarifas, sin importar el orden. */
+function ratesSignature(rates) {
+  return rates
+    .map((rate) => `${rate.subjectId}|${rate.modality}|${rate.hourlyRateCents}`)
+    .sort()
+    .join(',')
+}
 
 /**
  * Perfil del usuario. Muestra email, nombre y apellido de solo lectura (esos
@@ -14,16 +39,19 @@ import './ProfilePage.css'
  * teléfono, que además es opcional.
  *
  * Mirando como docente se administran las materias que da: se agregan y se
- * quitan de la lista fija que trae la base. La disponibilidad ya no es por
- * materia (el alumno elige la materia al reservar), así que hay UN link a la
- * disponibilidad y no uno por materia. Como alumno no hay
+ * quitan de la lista fija que trae la base, y cada una tiene su TARIFA POR
+ * HORA en cada modalidad (tres campos: virtual, presencial, híbrida). Una
+ * modalidad vacía = no da esa materia así. De acá sale el precio de cada
+ * clase: el alumno elige materia y duración al reservar, y paga la parte
+ * proporcional de la tarifa. La disponibilidad no es por materia, así que
+ * hay UN link a la disponibilidad y no uno por materia. Como alumno no hay
  * sección de materias — el alumno no elige materias en su perfil, así que ni
  * siquiera se pide el catálogo.
  *
  * Un solo botón "Guardar cambios" (apagado hasta que algo realmente cambie)
- * manda teléfono y materias juntos en una sola llamada, y "Cancelar" vuelve
- * todo a como estaba. Se eligió así en vez de guardar campo por campo porque
- * son dos cosas chicas y una sola confirmación se entiende mejor.
+ * manda teléfono, materias y tarifas juntos en una sola llamada, y
+ * "Cancelar" vuelve todo a como estaba. Se eligió así en vez de guardar campo
+ * por campo porque una sola confirmación se entiende mejor.
  *
  * El rol sale de `viewRole` (el interruptor de la barra) y NO de `user.role`:
  * antes salía de user.role y quedaba incoherente con el calendario, que
@@ -45,6 +73,7 @@ class ProfilePage extends Component {
   state = {
     telefono: this.props.user?.telefono || '',
     subjectIds: this.props.user?.subjectIds || [],
+    rateInputs: ratesToInputs(this.props.user?.rates),
     touched: {},
     subjects: [],
     subjectsLoading: false,
@@ -106,8 +135,55 @@ class ProfilePage extends Component {
     return this.state.subjects.filter((subject) => !this.state.subjectIds.includes(subject.id))
   }
 
+  getRateInput(subjectId, modality) {
+    return this.state.rateInputs[String(subjectId)]?.[modality] ?? ''
+  }
+
+  /** El error de un campo de tarifa, o null. Vacío no es error: es "no la doy". */
+  getRateError(subjectId, modality) {
+    const texto = this.getRateInput(subjectId, modality).trim()
+    if (!texto) return null
+    const centavos = parseMoney(texto)
+    if (Number.isNaN(centavos) || centavos > MAX_HOURLY_RATE_CENTS) {
+      return 'Un monto en pesos, por ejemplo 5.000 o 5.000,50.'
+    }
+    return null
+  }
+
+  /** El primer error de tarifas de una materia (la fila muestra uno solo). */
+  getSubjectRateError(subjectId) {
+    for (const item of MODALITIES) {
+      const error = this.getRateError(subjectId, item.key)
+      if (error) return error
+    }
+    return null
+  }
+
+  /**
+   * Las tarifas como las espera el backend: solo de materias que da, solo
+   * los campos completos y válidos.
+   */
+  getRates() {
+    const rates = []
+    for (const subjectId of this.state.subjectIds) {
+      for (const item of MODALITIES) {
+        const texto = this.getRateInput(subjectId, item.key).trim()
+        const centavos = parseMoney(texto)
+        if (texto && !Number.isNaN(centavos)) {
+          rates.push({ subjectId, modality: item.key, hourlyRateCents: centavos })
+        }
+      }
+    }
+    return rates
+  }
+
+  hasRateErrors() {
+    return this.state.subjectIds.some((id) => this.getSubjectRateError(id) !== null)
+  }
+
   isValid() {
-    return !this.getTelefonoError()
+    if (this.getTelefonoError()) return false
+    return !(this.esDocente() && this.hasRateErrors())
   }
 
   /** Sin cambios reales el botón de guardar queda apagado. */
@@ -123,7 +199,12 @@ class ProfilePage extends Component {
     const originales = user.subjectIds || []
     const actuales = this.state.subjectIds
     if (originales.length !== actuales.length) return true
-    return actuales.some((id) => !originales.includes(id))
+    if (actuales.some((id) => !originales.includes(id))) return true
+
+    // Un campo con error también es un cambio: si no, el botón quedaría
+    // apagado y no se vería por qué no se puede guardar.
+    if (this.hasRateErrors()) return true
+    return ratesSignature(this.getRates()) !== ratesSignature(user.rates || [])
   }
 
   loadSubjects = () => {
@@ -162,11 +243,24 @@ class ProfilePage extends Component {
     }))
   }
 
+  handleRateChange = (subjectId, modality) => (event) => {
+    const value = event.target.value
+    const clave = String(subjectId)
+    this.setState((prev) => ({
+      rateInputs: {
+        ...prev.rateInputs,
+        [clave]: { ...prev.rateInputs[clave], [modality]: value },
+      },
+      saved: false,
+    }))
+  }
+
   handleCancel = () => {
     const { user } = this.props
     this.setState({
       telefono: user?.telefono || '',
       subjectIds: user?.subjectIds || [],
+      rateInputs: ratesToInputs(user?.rates),
       touched: {},
       saveError: null,
       saved: false,
@@ -185,6 +279,9 @@ class ProfilePage extends Component {
       telefono: this.state.telefono.trim(),
       subjectIds: this.state.subjectIds,
     }
+    // Las tarifas solo las edita el docente: como alumno no se mandan y el
+    // backend no toca las que haya.
+    if (this.esDocente()) payload.rates = this.getRates()
 
     this.setState({ saving: true, saveError: null, saved: false })
     updateProfile(payload)
@@ -203,6 +300,73 @@ class ProfilePage extends Component {
       })
   }
 
+  renderSubjectRow(subject) {
+    const error = this.getSubjectRateError(subject.id)
+    const errorId = `profile-rate-error-${subject.id}`
+    const sinTarifas =
+      !error && MODALITIES.every((item) => !this.getRateInput(subject.id, item.key).trim())
+
+    return (
+      // Hermanos, NO anidados: un <button> no puede ir adentro de otro
+      // <button>, que es justo lo que pasaría reusando los chips de
+      // SubjectPicker para esto.
+      <li key={subject.id} className="profile-subject-row">
+        <div className="profile-subject-head">
+          <span className="profile-subject-name">{subject.name}</span>
+          <button
+            type="button"
+            className="profile-subject-remove"
+            onClick={this.handleToggleSubject(subject.id)}
+            aria-label={`Dejar de dar ${subject.name}`}
+          >
+            Quitar
+          </button>
+        </div>
+        <div className="profile-rates">
+          {MODALITIES.map((item) => {
+            const invalido = Boolean(this.getRateError(subject.id, item.key))
+            return (
+              <label key={item.key} className="profile-rate">
+                <span className="profile-rate-label">{item.label}</span>
+                <span className="profile-rate-field">
+                  <span className="profile-rate-affix" aria-hidden="true">
+                    $
+                  </span>
+                  <input
+                    className="profile-rate-input"
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="No la doy"
+                    value={this.getRateInput(subject.id, item.key)}
+                    onChange={this.handleRateChange(subject.id, item.key)}
+                    aria-label={`Tarifa por hora de ${subject.name}, ${item.label.toLowerCase()}`}
+                    aria-invalid={invalido}
+                    aria-describedby={invalido ? errorId : undefined}
+                  />
+                  <span className="profile-rate-affix" aria-hidden="true">
+                    /h
+                  </span>
+                </span>
+              </label>
+            )
+          })}
+        </div>
+        {error ? (
+          <p className="profile-rate-error" id={errorId}>
+            {error}
+          </p>
+        ) : null}
+        {/* Sin ninguna tarifa la materia no se ofrece en ninguna clase: el
+            alumno no tendría precio para reservarla. */}
+        {sinTarifas ? (
+          <p className="profile-rate-warning">
+            Sin tarifas: los alumnos no pueden reservar {subject.name} con vos.
+          </p>
+        ) : null}
+      </li>
+    )
+  }
+
   renderMateriasDocente() {
     const mias = this.getMisMaterias()
     const disponibles = this.getMateriasDisponibles()
@@ -212,24 +376,13 @@ class ProfilePage extends Component {
         {mias.length === 0 ? (
           <p className="profile-meta">Todavía no elegiste materias.</p>
         ) : (
-          <ul className="profile-subject-list">
-            {mias.map((subject) => (
-              // Hermanos, NO anidados: un <button> no puede ir adentro de
-              // otro <button>, que es justo lo que pasaría reusando los chips
-              // de SubjectPicker para esto.
-              <li key={subject.id} className="profile-subject-row">
-                <span className="profile-subject-name">{subject.name}</span>
-                <button
-                  type="button"
-                  className="profile-subject-remove"
-                  onClick={this.handleToggleSubject(subject.id)}
-                  aria-label={`Dejar de dar ${subject.name}`}
-                >
-                  Quitar
-                </button>
-              </li>
-            ))}
-          </ul>
+          <>
+            <p className="profile-rates-hint">
+              Cuánto cobrás la hora de cada materia en cada modalidad. Dejá vacío lo que no das; 0
+              es sin cargo. Cada clase cuesta la parte proporcional a lo que dure.
+            </p>
+            <ul className="profile-subject-list">{mias.map((subject) => this.renderSubjectRow(subject))}</ul>
+          </>
         )}
 
         <Link className="profile-availability-link" to="/disponibilidad">

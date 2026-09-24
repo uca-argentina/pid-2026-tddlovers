@@ -19,6 +19,11 @@ vi.mock('../../db/sessions.js', () => ({
   deleteExpiredSessions: vi.fn().mockResolvedValue(undefined),
 }));
 
+// Las tarifas del docente también viajan en cada usuario (lib/publicUser).
+vi.mock('../../db/rates.js', () => ({
+  findRatesByTeacher: vi.fn(),
+}));
+
 vi.mock('../../db/subjects.js', () => ({
   listSubjects: vi.fn(),
   countExistingSubjectIds: vi.fn(),
@@ -30,6 +35,7 @@ const { createSession, findValidSession, deleteExpiredSessions } = await import(
   '../../db/sessions.js'
 );
 const { countExistingSubjectIds } = await import('../../db/subjects.js');
+const { findRatesByTeacher } = await import('../../db/rates.js');
 const { hashPassword } = await import('../../lib/password.js');
 const { buildApp } = await import('../../app.js');
 
@@ -56,6 +62,7 @@ describe('auth routes', () => {
     // Toda respuesta con un usuario adentro pasa por acá (ver lib/publicUser).
     // Por defecto sin materias; el test que las necesita lo pisa.
     findSubjectIdsByTeacher.mockResolvedValue([]);
+    findRatesByTeacher.mockResolvedValue([]);
   });
 
   afterEach(async () => {
@@ -209,6 +216,7 @@ describe('auth routes', () => {
         apellido: 'Lovelace',
         telefono: null,
         subjectIds: [],
+        rates: [],
       });
       expect(res.cookies.some((c) => c.name === 'sid')).toBe(true);
       expect(createUser).toHaveBeenCalledWith(
@@ -320,6 +328,7 @@ describe('auth routes', () => {
         apellido: 'Lovelace',
         telefono: null,
         subjectIds: [],
+        rates: [],
       });
       expect(res.cookies.some((c) => c.name === 'sid')).toBe(true);
     });
@@ -383,6 +392,7 @@ describe('auth routes', () => {
         apellido: 'Lovelace',
         telefono: null,
         subjectIds: [],
+        rates: [],
       });
     });
   });

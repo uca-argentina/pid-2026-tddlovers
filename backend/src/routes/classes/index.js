@@ -1,7 +1,8 @@
 import { bookClass, findClassById, findClassesForUser, hasOverlappingClass } from '../../db/classes.js';
 import { findWindowById } from '../../db/availability.js';
-import { teacherTeachesSubject } from '../../db/users.js';
+import { findRate } from '../../db/rates.js';
 import { occursOn, toMinutes, toTime } from '../../lib/availabilityExpansion.js';
+import { classPriceCents, isValidClassMinutes, MIN_CLASS_MINUTES } from '../../lib/teacherRates.js';
 import { now } from '../../lib/clock.js';
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -39,20 +40,22 @@ export default async function classesRoutes(app) {
   });
 
   /**
-   * Reservar un turno de una ventana. El alumno sale de la sesión; docente,
-   * materia, duración y modalidad salen de la ventana — el body solo dice
-   * cuál, qué día y a qué hora.
+   * Reservar una clase en una ventana. El alumno sale de la sesión; el
+   * docente, la modalidad y el lugar salen de la ventana. El body dice cuál,
+   * qué día, a qué hora, de qué materia y cuánto dura — y el precio lo
+   * calcula el backend con la tarifa del docente, nunca llega en el body.
    *
    * Se valida de nuevo todo lo que ya valida la pantalla, porque la pantalla
    * se puede saltear. El empate entre dos alumnos que reservan a la vez lo
-   * resuelven bookClass (cupo) y las restricciones de la tabla (horarios).
+   * resuelven bookClass (grupales y cupo) y las restricciones de la tabla
+   * (horarios).
    */
   app.post('/', { onRequest: [app.requireAuth, app.csrfProtection] }, async (request, reply) => {
     if (request.user.role !== 'student') {
       return reply.code(403).send({ message: 'Solo los alumnos pueden reservar clases' });
     }
 
-    const { windowId, date, startTime } = request.body ?? {};
+    const { windowId, date, startTime, subjectId, durationMinutes } = request.body ?? {};
 
     if (!ISO_DATE_RE.test(date ?? '')) {
       return reply.code(400).send({ message: 'Fecha inválida', fields: { date: 'invalid' } });
@@ -68,6 +71,20 @@ export default async function classesRoutes(app) {
     if (!UUID_RE.test(String(windowId))) {
       return reply.code(400).send({ message: 'Clase inválida', fields: { windowId: 'invalid' } });
     }
+    if (!subjectId) {
+      return reply
+        .code(400)
+        .send({ message: 'Elegí la materia de la clase.', fields: { subjectId: 'required' } });
+    }
+    if (!UUID_RE.test(String(subjectId))) {
+      return reply.code(400).send({ message: 'Materia inválida', fields: { subjectId: 'invalid' } });
+    }
+    if (!isValidClassMinutes(durationMinutes)) {
+      return reply.code(400).send({
+        message: `La clase dura como mínimo ${MIN_CLASS_MINUTES} minutos, de a 5.`,
+        fields: { durationMinutes: 'invalid' },
+      });
+    }
 
     const { iso, time } = now();
     if (date < iso || (date === iso && startTime <= time)) {
@@ -75,39 +92,63 @@ export default async function classesRoutes(app) {
     }
 
     const window = await findWindowById(windowId);
-    // Borrada, de otro día, o de una materia que el docente ya no da: para el
-    // alumno es lo mismo, ese turno ya no se ofrece.
+    // Borrada o de otro día: para el alumno es lo mismo, ya no se ofrece.
     if (!window || !occursOn(window, date)) {
       return reply.code(409).send({ message: NO_LONGER_OFFERED });
     }
     if (window.teacherId === request.user.id) {
       return reply.code(400).send({ message: 'No podés reservarte una clase a vos mismo.' });
     }
-    if (!(await teacherTeachesSubject(window.teacherId, window.subjectId))) {
-      return reply.code(409).send({ message: NO_LONGER_OFFERED });
+
+    // La tarifa es lo que ata la materia al docente y a la modalidad: sin
+    // ella, esa materia no se da así (o el docente la sacó del perfil).
+    const hourlyRateCents = await findRate({
+      teacherId: window.teacherId,
+      subjectId,
+      modality: window.modality,
+    });
+    if (hourlyRateCents === null) {
+      return reply
+        .code(409)
+        .send({ message: 'El docente ya no da esa materia en esta modalidad.' });
     }
 
     const start = toMinutes(startTime);
+    const end = start + durationMinutes;
     if (start < toMinutes(window.start) || start >= toMinutes(window.end)) {
       return reply.code(409).send({ message: NO_LONGER_OFFERED });
     }
+    if (end > toMinutes(window.end)) {
+      return reply.code(409).send({
+        message: 'La clase no entra en el horario del docente. Elegí una duración más corta.',
+        fields: { durationMinutes: 'invalid' },
+      });
+    }
+    const endTime = toTime(end);
 
     // Antes que nada, el choque del propio alumno: si no, salta primero la
     // restricción del docente y el mensaje diría "lo reservó otra persona"
-    // cuando en realidad se está pisando con una clase suya. Es aproximado
-    // para una grupal armada con otra duración; ahí decide la tabla.
+    // cuando en realidad se está pisando con una clase suya.
     const clashesWithMine = await hasOverlappingClass({
       userId: request.user.id,
       role: 'student',
       date,
       startTime,
-      endTime: toTime(start + window.durationMinutes),
+      endTime,
     });
     if (clashesWithMine) {
       return reply.code(409).send({ message: 'Ya tenés una clase reservada en ese horario.' });
     }
 
-    const created = await bookClass({ window, studentId: request.user.id, date, startTime });
+    const created = await bookClass({
+      window,
+      studentId: request.user.id,
+      date,
+      startTime,
+      endTime,
+      subjectId,
+      priceCents: classPriceCents(hourlyRateCents, durationMinutes),
+    });
     if (created.conflict) {
       return reply.code(409).send({ message: created.conflict });
     }

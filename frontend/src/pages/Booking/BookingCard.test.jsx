@@ -11,18 +11,20 @@ function card(overrides = {}) {
     dayKey: 'lunes',
     teacherId: 2,
     teacherName: 'Laura Gómez',
-    subject: { id: 1, name: 'Matemática' },
     start: '13:00',
     end: '15:30',
-    durationMinutes: 90,
-    price: 15000,
     modality: 'virtual',
     maxStudents: 1,
-    address: null,
-    slots: [
-      { start: '13:00', end: '14:30', enrolled: 0, joined: false, blocked: false },
-      { start: '13:30', end: '15:00', enrolled: 0, joined: false, blocked: false },
-      { start: '14:00', end: '15:30', enrolled: 0, joined: false, blocked: false },
+    locality: null,
+    subjects: [
+      { id: 2, name: 'Física', hourlyRateCents: 600000 },
+      { id: 1, name: 'Matemática', hourlyRateCents: 500000 },
+    ],
+    free: [{ start: '13:00', end: '15:30' }],
+    groups: [],
+    starts: [
+      { start: '13:00', maxMinutes: 150, blocked: false },
+      { start: '13:30', maxMinutes: 120, blocked: false },
     ],
     clashes: [],
     joined: [],
@@ -39,22 +41,22 @@ function renderCard(overrides, onReservar = () => {}) {
   )
 }
 
-// El botón nombra materia y docente: en un día con varias tarjetas todos
+// El botón nombra docente y horario: en un día con varias tarjetas todos
 // dirían "Reservar".
 const reservar = () =>
-  screen.getByRole('button', { name: 'Reservar Matemática con Laura Gómez' })
+  screen.getByRole('button', { name: 'Reservar con Laura Gómez, 13:00 – 15:30' })
 
 describe('BookingCard', () => {
-  it('la materia manda, y abajo con quién', () => {
+  it('las materias que se pueden reservar mandan, y abajo con quién', () => {
     renderCard()
-    expect(screen.getByText('Matemática')).toBeInTheDocument()
+    expect(screen.getByText('Física · Matemática')).toBeInTheDocument()
     expect(screen.getByText('con Laura Gómez')).toBeInTheDocument()
   })
 
-  it('dice el horario, cuánto dura cada clase y la modalidad', () => {
+  it('dice el horario, que la duración la elige el alumno, y la modalidad', () => {
     renderCard()
     expect(screen.getByText('13:00 – 15:30')).toBeInTheDocument()
-    expect(screen.getByText(/clases de 1 h 30 min/)).toBeInTheDocument()
+    expect(screen.getByText(/vos elegís cuánto dura/)).toBeInTheDocument()
     expect(screen.getByText('Virtual')).toBeInTheDocument()
     expect(screen.getByText('Individual')).toBeInTheDocument()
   })
@@ -64,35 +66,53 @@ describe('BookingCard', () => {
     expect(screen.getByText('Presencial · Palermo, CABA')).toBeInTheDocument()
   })
 
-  it('muestra el precio y cuántos horarios le quedan libres', () => {
+  it('con tarifas distintas muestra desde cuánto sale la hora', () => {
     renderCard()
-    expect(screen.getByText(/15\.000/)).toBeInTheDocument()
-    expect(screen.getByText('· 3 horarios', { exact: false })).toBeInTheDocument()
+    expect(screen.getByText(/^Desde \$\s5\.000\/h$/)).toBeInTheDocument()
   })
 
-  it('una clase de precio 0 dice sin cargo', () => {
-    renderCard({ price: 0 })
-    expect(screen.getByText('Sin cargo', { exact: false })).toBeInTheDocument()
+  it('con una sola tarifa muestra esa', () => {
+    renderCard({ subjects: [{ id: 1, name: 'Matemática', hourlyRateCents: 550050 }] })
+    expect(screen.getByText(/^\$\s5\.500,50\/h$/)).toBeInTheDocument()
   })
 
-  it('entiende duraciones libres', () => {
-    renderCard({ durationMinutes: 45 })
-    expect(screen.getByText(/clases de 45 min/)).toBeInTheDocument()
+  it('una materia sin cargo lo dice', () => {
+    renderCard({ subjects: [{ id: 1, name: 'Matemática', hourlyRateCents: 0 }] })
+    expect(screen.getByText('Sin cargo')).toBeInTheDocument()
   })
 
-  it('invita a sumarse a una grupal con lugar', () => {
+  it('invita a sumarse a una grupal con lugar, con su materia', () => {
     renderCard({
       maxStudents: 4,
-      slots: [{ start: '13:00', end: '14:30', enrolled: 3, joined: false, blocked: false }],
+      groups: [
+        {
+          start: '13:00',
+          end: '14:30',
+          subjectId: 1,
+          subjectName: 'Matemática',
+          enrolled: 3,
+          joined: false,
+          blocked: false,
+        },
+      ],
     })
     expect(screen.getByText('Grupal · hasta 4')).toBeInTheDocument()
-    expect(screen.getByText('Sumate a la de las 13:00: 3 de 4 anotados.')).toBeInTheDocument()
+    expect(screen.getByText('Sumate a Matemática de las 13:00: 3 de 4 anotados.')).toBeInTheDocument()
   })
 
   it('avisa si ya está anotado en esa grupal', () => {
-    const anotado = { start: '13:00', end: '14:30', enrolled: 2, joined: true, blocked: true }
-    renderCard({ maxStudents: 4, slots: [anotado], joined: [anotado], bookable: false })
+    const anotado = {
+      start: '13:00',
+      end: '14:30',
+      subjectId: 1,
+      subjectName: 'Matemática',
+      enrolled: 2,
+      joined: true,
+      blocked: true,
+    }
+    renderCard({ maxStudents: 4, groups: [anotado], joined: [anotado] })
     expect(screen.getByText('Ya estás anotado a las 13:00.')).toBeInTheDocument()
+    expect(screen.queryByText(/Sumate/)).not.toBeInTheDocument()
   })
 
   it('avisa en gris con qué clase se superpone, y sigue siendo reservable', () => {

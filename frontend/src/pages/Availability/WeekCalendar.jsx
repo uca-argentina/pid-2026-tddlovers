@@ -10,7 +10,6 @@ import { formatDayLong, toISODate, WEEKDAY_LABELS } from '../../utils/calendar.j
 import { matchesQuery, watchQuery } from '../../utils/media.js'
 import {
   capacityLabel,
-  formatPrice,
   formatWeekTitle,
   modalityLabel,
   toMinutes,
@@ -31,7 +30,7 @@ const HOUR_HEIGHT = 52
 /**
  * La semana del docente, SOLO PARA VER: cada ventana de disponibilidad es un
  * bloque en su día y su horario. Para cargar o cambiar algo se abre el modal
- * del día (tocando el bloque, la cabecera del día o "Agregar clase").
+ * del día (tocando el bloque, la cabecera del día o "Agregar horario").
  *
  * Cada semana es distinta: se muestran las ventanas sueltas de esas fechas y
  * las semanales que ya habían arrancado. La cuenta la hace windowsOn.
@@ -70,14 +69,12 @@ class WeekCalendar extends Component {
     })
   }
 
-  /** "Matemática, 13:00 a 16:00, presencial, grupal hasta 4, se repite". */
+  /** "13:00 a 16:00, presencial, grupal · hasta 4, se repite todas las semanas". */
   describeWindow(window) {
     const partes = [
-      window.subjectName,
       `${window.start} a ${window.end}`,
       modalityLabel(window.modality).toLowerCase(),
       capacityLabel(window.maxStudents).toLowerCase(),
-      formatPrice(window.price).toLowerCase(),
     ]
     if (window.repeatsWeekly) partes.push('se repite todas las semanas')
     return partes.join(', ')
@@ -124,7 +121,7 @@ class WeekCalendar extends Component {
     const top = ((toMinutes(window.start) - hours.from * 60) / 60) * HOUR_HEIGHT
     const height = ((toMinutes(window.end) - toMinutes(window.start)) / 60) * HOUR_HEIGHT
     // Una ventana de media hora no tiene lugar para tres renglones: queda la
-    // materia y a qué hora arranca, y el resto en el title (y en el modal).
+    // modalidad y a qué hora arranca, y el resto en el title (y en el modal).
     const compact = height < HOUR_HEIGHT
 
     return (
@@ -139,15 +136,13 @@ class WeekCalendar extends Component {
       >
         <span className="week-cal-block-subject">
           {window.repeatsWeekly ? <RepeatIcon className="week-cal-block-repeat" /> : null}
-          {window.subjectName}
+          {modalityLabel(window.modality)}
         </span>
         <span className="week-cal-block-time">
           {compact ? window.start : formatRangeLabel(window.start, window.end)}
         </span>
         {compact ? null : (
-          <span className="week-cal-block-meta">
-            {modalityLabel(window.modality)} · {capacityLabel(window.maxStudents)}
-          </span>
+          <span className="week-cal-block-meta">{capacityLabel(window.maxStudents)}</span>
         )}
       </button>
     )
@@ -168,7 +163,7 @@ class WeekCalendar extends Component {
             type="button"
             className={`week-cal-day-head ${day.isToday ? 'is-today' : ''} ${day.isPast ? 'is-past' : ''}`}
             onClick={() => this.props.onOpenDay(day.iso)}
-            aria-label={`Ver las clases del ${formatDayLong(day.date).toLowerCase()}`}
+            aria-label={`Ver los horarios del ${formatDayLong(day.date).toLowerCase()}`}
           >
             <span className="week-cal-weekday">{WEEKDAY_LABELS[day.index]}</span>
             <span className="week-cal-daynum">{day.date.getDate()}</span>
@@ -212,13 +207,13 @@ class WeekCalendar extends Component {
               type="button"
               className="week-cal-agenda-head"
               onClick={() => this.props.onOpenDay(day.iso)}
-              aria-label={`Ver las clases del ${formatDayLong(day.date).toLowerCase()}`}
+              aria-label={`Ver los horarios del ${formatDayLong(day.date).toLowerCase()}`}
             >
               <span>{formatDayLong(day.date)}</span>
               {day.isToday ? <span className="week-cal-today-tag">Hoy</span> : null}
             </button>
             {day.windows.length === 0 ? (
-              <p className="week-cal-agenda-empty">Sin clases</p>
+              <p className="week-cal-agenda-empty">Sin horarios</p>
             ) : (
               <ul className="week-cal-agenda-list">
                 {day.windows.map((window) => (
@@ -236,10 +231,10 @@ class WeekCalendar extends Component {
                         {window.repeatsWeekly ? (
                           <RepeatIcon className="week-cal-block-repeat" />
                         ) : null}
-                        {window.subjectName}
+                        {modalityLabel(window.modality)}
                       </span>
                       <span className="week-cal-block-meta">
-                        {modalityLabel(window.modality)} · {capacityLabel(window.maxStudents)}
+                        {capacityLabel(window.maxStudents)}
                       </span>
                     </button>
                   </li>

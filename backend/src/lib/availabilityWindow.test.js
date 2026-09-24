@@ -2,16 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { validateWindow } from './availabilityWindow.js';
 
 const HOY = '2026-09-22';
-const MATE = '47ac9e88-4099-4ab4-b1fe-3898d7b279c4';
 
 const ventana = (over = {}) => ({
   date: '2026-09-28',
   repeatsWeekly: false,
   start: '13:00',
   end: '15:00',
-  subjectId: MATE,
-  durationMinutes: 60,
-  price: 15000,
   modality: 'virtual',
   maxStudents: 1,
   meetingUrl: 'https://meet.example.com/abc',
@@ -29,50 +25,25 @@ describe('validateWindow', () => {
     expect(value.meetingUrl).toBe('https://meet.example.com/abc');
   });
 
-  it('accepts a class as long as the window', () => {
-    expect(validar({ end: '14:00' }).value).toBeDefined();
+  it('accepts the shortest window, room for one 30 minute class', () => {
+    expect(validar({ end: '13:30' }).value).toBeDefined();
   });
 
   it('accepts a window that ends at midnight', () => {
     expect(validar({ start: '23:00', end: '24:00' }).value).toBeDefined();
   });
 
-  it('rejects a class longer than the window', () => {
-    expect(validar({ durationMinutes: 150 }).fields).toEqual({ durationMinutes: 'invalid' });
-  });
-
-  it('accepts any duration of at least 30 minutes', () => {
-    expect(validar({ durationMinutes: 45 }).value.durationMinutes).toBe(45);
-    expect(validar({ durationMinutes: 50 }).value).toBeDefined();
-  });
-
-  it('rejects durations under 30 minutes or that are not whole minutes', () => {
-    expect(validar({ durationMinutes: 29 }).fields).toEqual({ durationMinutes: 'invalid' });
-    expect(validar({ durationMinutes: 45.5 }).fields).toEqual({ durationMinutes: 'invalid' });
-    expect(validar({ durationMinutes: '60' }).fields).toEqual({ durationMinutes: 'invalid' });
-  });
-
-  it('requires a price in whole pesos, 0 meaning free', () => {
-    expect(validar({ price: 0 }).value.price).toBe(0);
-    expect(validar({ price: 15000 }).value.price).toBe(15000);
-    expect(validar({ price: undefined }).fields).toEqual({ price: 'invalid' });
-    expect(validar({ price: -1 }).fields).toEqual({ price: 'invalid' });
-    expect(validar({ price: 1500.5 }).fields).toEqual({ price: 'invalid' });
-    expect(validar({ price: '15000' }).fields).toEqual({ price: 'invalid' });
-  });
-
-  it('accepts a 30 minute class', () => {
-    expect(validar({ durationMinutes: 30 }).value).toBeDefined();
+  it('no longer carries subject, duration or price: the student picks them', () => {
+    const { value } = validar({ subjectId: 'x', durationMinutes: 45, price: 100 });
+    expect(value).not.toHaveProperty('subjectId');
+    expect(value).not.toHaveProperty('durationMinutes');
+    expect(value).not.toHaveProperty('price');
   });
 
   it('rejects times off the half hour and reversed ranges', () => {
     expect(validar({ start: '13:15' }).fields).toEqual({ start: 'invalid' });
     expect(validar({ start: '15:00', end: '13:00' }).fields).toEqual({ end: 'invalid' });
     expect(validar({ start: '24:00' }).fields).toEqual({ start: 'invalid' });
-  });
-
-  it('requires a subject', () => {
-    expect(validar({ subjectId: '' }).fields).toEqual({ subjectId: 'required' });
   });
 
   it('requires the link for virtual and hybrid classes', () => {

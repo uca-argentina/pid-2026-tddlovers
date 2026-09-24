@@ -9,15 +9,30 @@ const WINDOW_COLUMNS = `
   av.repeats_weekly AS "repeatsWeekly",
   to_char(av.start_time, 'HH24:MI') AS start,
   to_char(av.end_time, 'HH24:MI') AS "end",
-  av.subject_id AS "subjectId",
-  s.name AS "subjectName",
-  av.duration_minutes AS "durationMinutes",
-  av.price,
   av.modality,
   av.max_students AS "maxStudents",
   av.meeting_url AS "meetingUrl",
   av.locality,
   av.address
+`;
+
+// Lo que el alumno puede reservar en la ventana: las materias que el docente
+// tiene tarifadas en ESA modalidad, con la tarifa por hora. La ventana no
+// guarda materias; salen del perfil del docente cada vez, así que cambiar una
+// tarifa cambia lo que se ofrece sin tocar ninguna ventana.
+const WINDOW_SUBJECTS = `
+  COALESCE(
+    (
+      SELECT json_agg(
+        json_build_object('id', s.id, 'name', s.name, 'hourlyRateCents', r.hourly_rate_cents)
+        ORDER BY s.name
+      )
+      FROM teacher_rates r
+      JOIN subjects s ON s.id = r.subject_id
+      WHERE r.teacher_id = av.teacher_id AND r.modality = av.modality
+    ),
+    '[]'::json
+  )
 `;
 
 // ¿Cae alguna vez en [$from, $to]? Una suelta, si su fecha está adentro; una
@@ -40,7 +55,6 @@ export async function findTeacherWindows({ teacherId, from, to }) {
   const result = await getPool().query(
     `SELECT ${WINDOW_COLUMNS}
      FROM availability av
-     JOIN subjects s ON s.id = av.subject_id
      WHERE av.teacher_id = $1 AND ${OCCURS_IN_RANGE('$2', '$3')}
      ORDER BY av.start_time, av.start_date`,
     [teacherId, from, to]
@@ -49,33 +63,38 @@ export async function findTeacherWindows({ teacherId, from, to }) {
 }
 
 /**
- * Lo que se ofrece a los alumnos en el rango. Solo ventanas de materias que el
- * docente sigue dando: si la sacó del perfil, la ventana queda guardada pero
- * no se ofrece (la pantalla del docente se lo avisa).
+ * Lo que se ofrece a los alumnos en el rango, cada ventana con `subjects`: las
+ * materias que se pueden reservar en ella y su tarifa por hora. Si el docente
+ * se quedó sin tarifas en la modalidad de una ventana, la ventana queda
+ * guardada pero no se ofrece (la pantalla del docente se lo avisa).
  */
 export async function findPublishedWindows({ from, to }) {
   const result = await getPool().query(
     `SELECT ${WINDOW_COLUMNS},
-            u.nombre || ' ' || u.apellido AS "teacherName"
+            u.nombre || ' ' || u.apellido AS "teacherName",
+            ${WINDOW_SUBJECTS} AS subjects
      FROM availability av
-     JOIN subjects s ON s.id = av.subject_id
      JOIN users u ON u.id = av.teacher_id
-     JOIN teacher_subjects ts
-       ON ts.teacher_id = av.teacher_id AND ts.subject_id = av.subject_id
      WHERE ${OCCURS_IN_RANGE('$1', '$2')}
+       AND EXISTS (
+         SELECT 1 FROM teacher_rates r
+         WHERE r.teacher_id = av.teacher_id AND r.modality = av.modality
+       )
      ORDER BY av.start_time, u.nombre, u.apellido`,
     [from, to]
   );
   return result.rows;
 }
 
-/** Una ventana con el nombre del docente, o null. Para reservar. */
+/**
+ * Una ventana con el nombre del docente, o null. Para reservar: la tarifa de
+ * la materia elegida se busca aparte (findRate), no hace falta la lista.
+ */
 export async function findWindowById(id) {
   const result = await getPool().query(
     `SELECT ${WINDOW_COLUMNS},
             u.nombre || ' ' || u.apellido AS "teacherName"
      FROM availability av
-     JOIN subjects s ON s.id = av.subject_id
      JOIN users u ON u.id = av.teacher_id
      WHERE av.id = $1`,
     [id]
@@ -147,7 +166,6 @@ async function selectWindow(client, id) {
   const result = await client.query(
     `SELECT ${WINDOW_COLUMNS}
      FROM availability av
-     JOIN subjects s ON s.id = av.subject_id
      WHERE av.id = $1`,
     [id]
   );
@@ -159,9 +177,6 @@ const WINDOW_VALUES = (w) => [
   w.repeatsWeekly,
   w.start,
   w.end,
-  w.subjectId,
-  w.durationMinutes,
-  w.price,
   w.modality,
   w.maxStudents,
   w.meetingUrl,
@@ -177,10 +192,10 @@ export async function createWindow(teacherId, window) {
 
     const result = await client.query(
       `INSERT INTO availability (
-         teacher_id, start_date, repeats_weekly, start_time, end_time, subject_id,
-         duration_minutes, price, modality, max_students, meeting_url, address, locality
+         teacher_id, start_date, repeats_weekly, start_time, end_time,
+         modality, max_students, meeting_url, address, locality
        )
-       VALUES ($1, $2::date, $3, $4::time, $5::time, $6, $7, $8, $9::class_modality, $10, $11, $12, $13)
+       VALUES ($1, $2::date, $3, $4::time, $5::time, $6::class_modality, $7, $8, $9, $10)
        RETURNING id`,
       [teacherId, ...WINDOW_VALUES(window)]
     );
@@ -210,8 +225,8 @@ export async function updateWindow(teacherId, id, window) {
     await client.query(
       `UPDATE availability SET
          start_date = $3::date, repeats_weekly = $4, start_time = $5::time, end_time = $6::time,
-         subject_id = $7, duration_minutes = $8, price = $9, modality = $10::class_modality,
-         max_students = $11, meeting_url = $12, address = $13, locality = $14
+         modality = $7::class_modality, max_students = $8, meeting_url = $9, address = $10,
+         locality = $11
        WHERE id = $1 AND teacher_id = $2`,
       [id, teacherId, ...WINDOW_VALUES(window)]
     );

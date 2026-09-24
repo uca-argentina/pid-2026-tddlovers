@@ -171,7 +171,8 @@ describe('CalendarPage', () => {
         locality: 'Palermo, CABA',
         maxStudents: 4,
         enrolled: 3,
-        price: 18000,
+        // 1 h 30 min a $ 12.000,50/h.
+        priceCents: 1800075,
       }),
     ])
 
@@ -188,13 +189,13 @@ describe('CalendarPage', () => {
     )
     expect(screen.getByText('Honduras 4800, 2° B')).toBeInTheDocument()
     expect(screen.getByText('Palermo, CABA')).toBeInTheDocument()
-    expect(screen.getByText(/18\.000/)).toBeInTheDocument()
+    expect(screen.getByText(/18\.000,75/)).toBeInTheDocument()
   })
 
   it('una individual dice individual, y una sin cargo lo dice', async () => {
     const iso = toISODate(today)
     fetchClasses.mockResolvedValue([
-      classOn(iso, { modality: 'virtual', meetingUrl: 'https://x.com', maxStudents: 1, enrolled: 1, price: 0 }),
+      classOn(iso, { modality: 'virtual', meetingUrl: 'https://x.com', maxStudents: 1, enrolled: 1, priceCents: 0 }),
     ])
 
     render(<CalendarPage />)

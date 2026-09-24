@@ -6,11 +6,14 @@ import Banner from '../../components/Banner.jsx'
 import { PlusIcon } from '../../components/icons.jsx'
 import { fetchMyWindows, fetchSubjects } from '../../api/client.js'
 import { addDays, fromISODate, toISODate } from '../../utils/calendar.js'
+import { resolveRates } from '../../utils/rates.js'
 import { startOfWeek } from '../../utils/windows.js'
 
 /**
  * La disponibilidad del docente: la semana como calendario de solo lectura y,
- * encima, el modal de un día para cargar o cambiar clases.
+ * encima, el modal de un día para cargar o cambiar horarios. Un horario dice
+ * cuándo y cómo (modalidad, cupo); qué materia y cuánto dura lo elige el
+ * alumno, entre las materias que el docente tarifó en su perfil.
  *
  * Cada semana es distinta, así que se pide semana por semana: el backend
  * devuelve las ventanas que caen en ella (las sueltas de esas fechas y las
@@ -43,8 +46,8 @@ class TeacherAvailability extends Component {
     fetchSubjects()
       .then((catalog) => this.setState({ catalog: Array.isArray(catalog) ? catalog : [] }))
       .catch(() => {
-        // Sin catálogo no hay nombres para el select, pero la semana se sigue
-        // viendo: las ventanas ya traen el nombre de su materia.
+        // Sin catálogo las tarifas se muestran sin el nombre de la materia,
+        // pero la semana se sigue viendo y se puede cargar igual.
       })
   }
 
@@ -56,10 +59,9 @@ class TeacherAvailability extends Component {
     return toISODate(new Date())
   }
 
-  /** Las materias del perfil, con nombre, para el formulario. */
-  getSubjects() {
-    const ids = (this.props.user?.subjectIds || []).map(String)
-    return this.state.catalog.filter((subject) => ids.includes(String(subject.id)))
+  /** Las tarifas del perfil, con el nombre de la materia. */
+  getRates() {
+    return resolveRates(this.props.user?.rates, this.state.catalog)
   }
 
   /**
@@ -107,8 +109,8 @@ class TeacherAvailability extends Component {
   }
 
   /**
-   * "Agregar clase" arriba de todo: abre el modal en HOY, con las clases que
-   * ya hay ese día, y el formulario se abre recién con el "Agregar clase" de
+   * "Agregar horario" arriba de todo: abre el modal en HOY, con las clases que
+   * ya hay ese día, y el formulario se abre recién con el "Agregar horario" de
    * adentro. Si se estaba mirando otra semana, la de atrás vuelve a la de hoy.
    */
   handleAdd = () => {
@@ -148,8 +150,8 @@ class TeacherAvailability extends Component {
 
   render() {
     const { weekStart, windows, loading, error, dialog } = this.state
-    const subjects = this.getSubjects()
-    const sinMaterias = (this.props.user?.subjectIds || []).length === 0
+    const rates = this.getRates()
+    const sinTarifas = rates.length === 0
 
     return (
       <div className="teacher-availability">
@@ -157,15 +159,17 @@ class TeacherAvailability extends Component {
           <div>
             <h1 className="availability-title">Disponibilidad</h1>
             <p className="availability-hint">
-              Las clases que ofrecés cada semana. Tocá una para verla o cambiarla, o un día para ver
-              todo lo de ese día.
+              Los horarios en que das clases cada semana. En cada uno, el alumno elige la materia y
+              cuánto dura su clase. Tocá un horario para verlo o cambiarlo, o un día para ver todo
+              lo de ese día.
             </p>
-            {/* Sin materias no se puede cargar nada: cada clase es de una. */}
-            {sinMaterias ? (
+            {/* Sin tarifas no hay nada que el alumno pueda reservar: la
+                materia y el precio salen de ahí. */}
+            {sinTarifas ? (
               <p className="availability-warning">
-                Todavía no elegiste qué materias das, así que no podés cargar clases.{' '}
+                Todavía no pusiste cuánto cobrás tus materias, así que no podés cargar horarios.{' '}
                 <Link className="auth-link" to="/perfil">
-                  Agregalas desde tu perfil
+                  Cargá tus tarifas en tu perfil
                 </Link>
                 .
               </p>
@@ -175,10 +179,10 @@ class TeacherAvailability extends Component {
             type="button"
             className="btn btn-primary availability-add"
             onClick={this.handleAdd}
-            disabled={sinMaterias}
+            disabled={sinTarifas}
           >
             <PlusIcon />
-            Agregar clase
+            Agregar horario
           </button>
         </div>
 
@@ -207,7 +211,7 @@ class TeacherAvailability extends Component {
             focusId={dialog.focusId}
             windows={windows}
             loading={loading}
-            subjects={subjects}
+            rates={rates}
             today={this.getToday()}
             onChangeDay={this.handleChangeDay}
             onChanged={this.handleChanged}

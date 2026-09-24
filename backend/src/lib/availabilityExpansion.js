@@ -16,8 +16,11 @@ const DAY_KEYS = [
   'domingo',
 ];
 
-// Los arranques van de a media hora; los finales, donde caiga la duración.
+// Los arranques van de a media hora; los finales, donde caiga la duración
+// que elija el alumno.
 const STEP_MINUTES = 30;
+// La clase más corta que se puede reservar: un tramo más chico no sirve.
+const MIN_CLASS_MINUTES = 30;
 
 export function toMinutes(time) {
   const [h, m] = time.split(':').map(Number);
@@ -60,71 +63,95 @@ export function occursOn(window, iso) {
   );
 }
 
-function overlaps(fromA, toA, fromB, toB) {
-  return fromA < toB && fromB < toA;
-}
-
 /**
- * Los turnos que el alumno puede tomar en UNA ocurrencia de una ventana:
+ * Lo que el alumno puede hacer en UNA ocurrencia de una ventana:
  *
- *  - Sumarse a una clase grupal que ya arrancó alguien, mientras quede cupo.
- *    Es la misma hora y la misma materia; `enrolled` dice cuántos hay.
- *  - Arrancar una clase nueva en cualquier :00/:30 donde entre la duración
- *    entera sin pisar ninguna clase del docente (de esta ventana o de otra:
- *    el docente no da dos clases a la vez). La duración es libre, así que el
- *    fin puede caer en cualquier minuto: 13:00 + 45 min termina 13:45.
+ *  - `free`: los tramos donde el docente no tiene ninguna clase (de esta
+ *    ventana o de otra: no da dos a la vez). `start` es el primer :00/:30
+ *    del tramo y `end` donde termina el tramo, que puede ser cualquier minuto
+ *    (una clase de 13:00 a 13:45 deja libre desde 13:45 → start 14:00). La
+ *    duración la elige el alumno al reservar, así que no se puede dar una
+ *    lista cerrada de turnos: el front ofrece los inicios y las duraciones
+ *    que entran, y el backend lo vuelve a validar al reservar.
+ *  - `groups`: clases grupales ya armadas con lugar. Sumarse es tomar la
+ *    MISMA clase: misma hora, materia y duración. Solo de materias que el
+ *    docente todavía tarifa en esta modalidad — sin tarifa no hay precio.
  *
  * `taken` son las clases del docente ese día, agrupadas por turno.
  * `cutoff` (minutos) descarta lo que ya empezó; null si el día es futuro.
  */
-export function slotsForWindow(window, taken, cutoff = null) {
+export function openingsForWindow(window, taken, cutoff = null) {
   const winFrom = toMinutes(window.start);
   const winTo = toMinutes(window.end);
   const alreadyStarted = (minutes) => cutoff !== null && minutes <= cutoff;
+  const tarifadas = new Set((window.subjects ?? []).map((subject) => String(subject.id)));
 
-  const slots = [];
-
+  const groups = [];
   if (window.maxStudents > 1) {
     for (const group of taken) {
       const from = toMinutes(group.start);
       const joinable =
         from >= winFrom &&
         from < winTo &&
-        // Si el docente cambió la materia de la ventana, un grupo armado con
-        // la materia vieja no es la clase que la ventana ofrece ahora.
-        String(group.subjectId) === String(window.subjectId) &&
+        tarifadas.has(String(group.subjectId)) &&
         group.enrolled < window.maxStudents &&
         !alreadyStarted(from);
-      if (joinable) slots.push({ start: group.start, end: group.end, enrolled: group.enrolled });
+      if (joinable) {
+        groups.push({
+          start: group.start,
+          end: group.end,
+          subjectId: group.subjectId,
+          subjectName: group.subjectName,
+          enrolled: group.enrolled,
+        });
+      }
     }
   }
+  groups.sort((a, b) => toMinutes(a.start) - toMinutes(b.start));
 
-  for (let from = winFrom; from + window.durationMinutes <= winTo; from += STEP_MINUTES) {
-    if (alreadyStarted(from)) continue;
-    const to = from + window.durationMinutes;
-    const clashes = taken.some((group) =>
-      overlaps(from, to, toMinutes(group.start), toMinutes(group.end))
-    );
-    if (!clashes) slots.push({ start: toTime(from), end: toTime(to), enrolled: 0 });
+  // Se recorre la ventana saltando por encima de cada clase del docente.
+  const busy = taken
+    .map((group) => ({ from: toMinutes(group.start), to: toMinutes(group.end) }))
+    .filter((span) => span.from < winTo && span.to > winFrom)
+    .sort((a, b) => a.from - b.from);
+
+  const free = [];
+  const pushGap = (from, to) => {
+    let first = Math.ceil(from / STEP_MINUTES) * STEP_MINUTES;
+    // Hoy: el primer inicio que todavía no pasó.
+    if (cutoff !== null && first <= cutoff) {
+      first = (Math.floor(cutoff / STEP_MINUTES) + 1) * STEP_MINUTES;
+    }
+    if (first + MIN_CLASS_MINUTES <= to) free.push({ start: toTime(first), end: toTime(to) });
+  };
+
+  let cursor = winFrom;
+  for (const span of busy) {
+    if (span.from > cursor) pushGap(cursor, Math.min(span.from, winTo));
+    cursor = Math.max(cursor, span.to);
+    if (cursor >= winTo) break;
   }
+  if (cursor < winTo) pushGap(cursor, winTo);
 
-  return slots.sort((a, b) => toMinutes(a.start) - toMinutes(b.start));
+  return { free, groups };
 }
 
 /**
  * Proyecta las ventanas sobre las fechas del rango. Devuelve una fila por
- * (ventana, fecha) con los turnos que quedan; las que se quedan sin ninguno
- * no salen.
+ * (ventana, fecha) con lo que queda para reservar; las que se quedan sin
+ * nada no salen.
  *
  * Dos sentidos distintos de "reservado", y solo uno se resta:
  *  - Reservado CON ESE DOCENTE: ese rato deja de existir para todos (salvo
  *    el lugar que quede en una grupal), así que se resta.
- *  - Reservado por el alumno con OTRO docente: el turno del docente sigue
+ *  - Reservado por el alumno con OTRO docente: el rato del docente sigue
  *    existiendo, este alumno no puede tomarlo. NO se resta acá — el front lo
  *    pinta en gris con lo que devuelve /api/classes.
  *
- * `taken`: [{ teacherId, date, start, end, subjectId, enrolled }], un
- * elemento por turno (una grupal con 3 alumnos es UNO con enrolled 3).
+ * `windows` trae `subjects`: [{ id, name, hourlyRateCents }], lo que se
+ * puede reservar en cada una (ver findPublishedWindows).
+ * `taken`: [{ teacherId, date, start, end, subjectId, subjectName, enrolled }],
+ * un elemento por turno (una grupal con 3 alumnos es UNO con enrolled 3).
  *
  * El link de las virtuales y la dirección exacta de las presenciales no
  * salen: se los lleva el alumno recién al reservar. Para decidir alcanza con
@@ -147,10 +174,11 @@ export function expandAvailability({ windows, taken, from, to, nowIso, nowTime }
 
     for (const window of windows) {
       if (!occursOn(window, iso)) continue;
+      if (!window.subjects || window.subjects.length === 0) continue;
 
       const busy = takenByTeacherDate.get(`${window.teacherId}|${iso}`) ?? [];
-      const slots = slotsForWindow(window, busy, cutoff);
-      if (slots.length === 0) continue;
+      const { free, groups } = openingsForWindow(window, busy, cutoff);
+      if (free.length === 0 && groups.length === 0) continue;
 
       rows.push({
         id: `${window.id}|${iso}`,
@@ -159,15 +187,14 @@ export function expandAvailability({ windows, taken, from, to, nowIso, nowTime }
         dayKey: dayKeyFromIso(iso),
         teacherId: window.teacherId,
         teacherName: window.teacherName,
-        subject: { id: window.subjectId, name: window.subjectName },
         start: window.start,
         end: window.end,
-        durationMinutes: window.durationMinutes,
-        price: window.price,
         modality: window.modality,
         maxStudents: window.maxStudents,
         locality: window.locality ?? null,
-        slots,
+        subjects: window.subjects,
+        free,
+        groups,
       });
     }
   }

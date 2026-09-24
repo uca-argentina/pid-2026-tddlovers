@@ -1,26 +1,22 @@
 import { Component } from 'react'
 import { ClockIcon, PinIcon, UsersIcon, VideoIcon } from '../../components/icons.jsx'
 import { formatRangeLabel } from '../../utils/availability.js'
-import { formatClashes, formatEnrolled, formatSlotCount } from '../../utils/booking.js'
-import {
-  capacityLabel,
-  formatMinutes,
-  formatPrice,
-  modalityLabel,
-  needsAddress,
-} from '../../utils/windows.js'
+import { formatClashes, formatEnrolled, lowestRate } from '../../utils/booking.js'
+import { formatHourlyRate } from '../../utils/rates.js'
+import { capacityLabel, modalityLabel, needsAddress } from '../../utils/windows.js'
 
 /**
- * Una tarjeta = una clase que ofrece un docente un día: la materia manda
- * (es lo que el alumno busca), y abajo con quién, a qué hora, cuánto dura
- * cada clase, dónde es y si es individual o grupal.
+ * Una tarjeta = un horario que ofrece un docente un día: arriba las materias
+ * que se pueden reservar ahí (es lo que el alumno busca), y abajo con quién,
+ * en qué rango, dónde es, si es individual o grupal y desde cuánto la hora.
+ * La materia y la duración se eligen en el modal.
  *
- * Si es grupal y alguien ya arrancó un turno con lugar, se dice: sumarse a
+ * Si es grupal y alguien ya arrancó una clase con lugar, se dice: sumarse a
  * una clase que ya existe es distinto de abrir una nueva, y es justo lo que
  * vuelve útil una grupal.
  *
  * Una superposición con clases propias NO apaga la tarjeta mientras quede
- * algún turno libre: el modal deja elegir entre lo que queda. Recién sin
+ * algún horario libre: el modal deja elegir entre lo que queda. Recién sin
  * ninguno el botón va deshabilitado.
  *
  * Los estilos están en BookingResults.css: fuera de la lista no significan
@@ -28,7 +24,20 @@ import {
  */
 class BookingCard extends Component {
   getGroupsWithRoom() {
-    return this.props.card.slots.filter((slot) => slot.enrolled > 0 && !slot.joined)
+    return this.props.card.groups.filter((group) => !group.joined)
+  }
+
+  /**
+   * '$ 5.000/h' si todas las materias cuestan lo mismo; si no, 'Desde
+   * $ 5.000/h': el precio exacto depende de la materia y la duración.
+   */
+  renderRate() {
+    const { card } = this.props
+    const minima = lowestRate(card)
+    if (minima === null) return null
+    const todasIguales = card.subjects.every((subject) => subject.hourlyRateCents === minima)
+    if (todasIguales) return formatHourlyRate(minima)
+    return minima === 0 ? 'Algunas materias sin cargo' : `Desde ${formatHourlyRate(minima)}`
   }
 
   renderLocation() {
@@ -56,7 +65,7 @@ class BookingCard extends Component {
     const primero = grupos[0]
     const texto =
       grupos.length === 1
-        ? `Sumate a la de las ${primero.start}: ${formatEnrolled(primero.enrolled, card.maxStudents)}.`
+        ? `Sumate a ${primero.subjectName} de las ${primero.start}: ${formatEnrolled(primero.enrolled, card.maxStudents)}.`
         : `${grupos.length} clases grupales con lugar para sumarte.`
 
     return <p className="booking-card-groups">{texto}</p>
@@ -65,12 +74,12 @@ class BookingCard extends Component {
   render() {
     const { card } = this.props
     const aviso = formatClashes(card.clashes, card.bookable)
-    const libres = card.slots.filter((slot) => !slot.blocked).length
+    const materias = card.subjects.map((subject) => subject.name).join(' · ')
 
     return (
       <li className={`booking-card ${card.bookable ? '' : 'is-blocked'}`}>
         <div className="booking-card-head">
-          <span className="booking-card-subject">{card.subject.name}</span>
+          <span className="booking-card-subject">{materias}</span>
           <span className={`booking-card-kind ${card.maxStudents > 1 ? 'is-group' : ''}`}>
             <UsersIcon />
             {capacityLabel(card.maxStudents)}
@@ -83,7 +92,7 @@ class BookingCard extends Component {
             <ClockIcon />
             <span>
               <span className="booking-card-ranges">{formatRangeLabel(card.start, card.end)}</span>
-              {' · '}clases de {formatMinutes(card.durationMinutes)}
+              {' · '}vos elegís cuánto dura
             </span>
           </li>
           {this.renderLocation()}
@@ -93,16 +102,13 @@ class BookingCard extends Component {
 
         {card.joined.length > 0 ? (
           <p className="booking-card-joined">
-            Ya estás anotado a las {card.joined.map((slot) => slot.start).join(' y ')}.
+            Ya estás anotado a las {card.joined.map((group) => group.start).join(' y ')}.
           </p>
         ) : null}
         {aviso ? <p className="booking-card-clash">{aviso}</p> : null}
 
         <div className="booking-card-actions">
-          <span className="booking-card-price">
-            {formatPrice(card.price)}
-            <span className="booking-card-total"> · {formatSlotCount(libres)}</span>
-          </span>
+          <span className="booking-card-price">{this.renderRate()}</span>
           <button
             type="button"
             className="btn btn-primary"
@@ -110,7 +116,7 @@ class BookingCard extends Component {
             onClick={this.props.onReservar}
             // Los botones de todas las tarjetas dicen lo mismo: sin esto, leído
             // con un lector de pantalla no se sabe cuál es cuál.
-            aria-label={`Reservar ${card.subject.name} con ${card.teacherName}`}
+            aria-label={`Reservar con ${card.teacherName}, ${formatRangeLabel(card.start, card.end)}`}
           >
             Reservar
           </button>

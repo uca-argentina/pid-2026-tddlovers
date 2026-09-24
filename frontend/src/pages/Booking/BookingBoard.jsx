@@ -23,12 +23,12 @@ const SIN_TARJETAS = { slots: null, myLessons: null, cards: [] }
  * calendario del mes y a la izquierda las clases del día elegido, con los
  * filtros arriba.
  *
- * Una tarjeta es una clase que ofrece un docente un día: materia, horario,
- * duración, modalidad y cupo ya vienen fijados por el docente, y el alumno
- * solo elige a qué hora (o se suma a una grupal ya armada). Lo reservado CON
- * ESE DOCENTE ya no está (lo restó el backend); lo que el alumno tiene con
- * OTRO aparece como aviso gris, porque el turno del docente sigue existiendo
- * aunque este alumno no lo pueda tomar.
+ * Una tarjeta es un horario que ofrece un docente un día: rango, modalidad y
+ * cupo los fijó el docente; la materia (entre las que tarifó), la hora de
+ * inicio y la duración las elige el alumno en el modal (o se suma a una
+ * grupal ya armada). Lo reservado CON ESE DOCENTE ya no está (lo restó el
+ * backend); lo que el alumno tiene con OTRO aparece como aviso gris, porque
+ * el rato del docente sigue existiendo aunque este alumno no lo pueda tomar.
  *
  * El `router` llega por props desde AvailabilityPage en vez de envolver esto
  * en otro withRouter: alcanza con un puente por ruta y así sigue siendo obvio
@@ -232,12 +232,14 @@ class BookingBoard extends Component {
     return map
   }
 
-  /** Solo las materias de alguna clase ofrecida en el rango cargado. */
+  /** Solo las materias que se pueden reservar en algún horario del rango cargado. */
   getFilterSubjects() {
     // Todo se normaliza a string: el id elegido puede venir de la URL (siempre
     // string) y el de las tarjetas del backend, y un Set compara con ===.
     const presentes = new Set()
-    for (const card of this.getCards()) presentes.add(String(card.subject.id))
+    for (const card of this.getCards()) {
+      for (const subject of card.subjects) presentes.add(String(subject.id))
+    }
     // La elegida se agrega igual: si no, un chip seleccionado que se queda sin
     // resultados desaparecería y no habría forma de sacarlo.
     for (const id of this.state.subjectIds) presentes.add(String(id))

@@ -5,12 +5,13 @@ import {
   filterCards,
   formatClashes,
   formatEnrolled,
-  formatSlotCount,
   groupCardsByDate,
+  lowestRate,
   normalizeText,
   offersStartBetween,
   rangesOverlap,
   resolveQuery,
+  startOptions,
 } from './booking.js'
 
 // 2026-09-14 es lunes. Una fila tal como la manda /api/availability.
@@ -21,20 +22,21 @@ const tarjeta = (over = {}) => ({
   dayKey: 'lunes',
   teacherId: 't1',
   teacherName: 'Laura Gómez',
-  subject: { id: 's1', name: 'Matemática' },
   start: '13:00',
   end: '16:00',
-  durationMinutes: 60,
   modality: 'virtual',
   maxStudents: 1,
-  address: null,
-  slots: [
-    { start: '13:00', end: '14:00', enrolled: 0 },
-    { start: '14:00', end: '15:00', enrolled: 0 },
-    { start: '15:00', end: '16:00', enrolled: 0 },
+  locality: null,
+  subjects: [
+    { id: 's1', name: 'Matemática', hourlyRateCents: 500000 },
+    { id: 's3', name: 'Química', hourlyRateCents: 450000 },
   ],
+  free: [{ start: '13:00', end: '16:00' }],
+  groups: [],
   ...over,
 })
+
+const inicios = (options) => options.map((option) => option.start)
 
 const clase = (over = {}) => ({
   id: 'c1',
@@ -80,22 +82,71 @@ describe('rangesOverlap', () => {
   })
 })
 
+describe('startOptions', () => {
+  it('cada :00/:30 del tramo donde entra una clase de 30 min, con la más larga posible', () => {
+    expect(startOptions([{ start: '13:00', end: '14:15' }])).toEqual([
+      { start: '13:00', maxMinutes: 75, blocked: false },
+      { start: '13:30', maxMinutes: 45, blocked: false },
+    ])
+  })
+
+  it('la duración máxima va de a 5 minutos', () => {
+    // 13:00 a 13:47: entran 45, no 47.
+    expect(startOptions([{ start: '13:00', end: '13:47' }])[0].maxMinutes).toBe(45)
+  })
+
+  it('una clase propia bloquea lo que pisa y corta lo que viene antes', () => {
+    const opciones = startOptions([{ start: '13:00', end: '16:00' }], [{ start: '14:10', end: '15:00' }])
+    expect(opciones.find((o) => o.start === '13:00')).toEqual({
+      start: '13:00',
+      maxMinutes: 70,
+      blocked: false,
+    })
+    // 13:30 + 30 min = 14:00, antes de las 14:10: entra, hasta 40 min.
+    expect(opciones.find((o) => o.start === '13:30').maxMinutes).toBe(40)
+    // 14:00 + 30 min se pisa con la de 14:10.
+    expect(opciones.find((o) => o.start === '14:00').blocked).toBe(true)
+    expect(opciones.find((o) => o.start === '14:30').blocked).toBe(true)
+    expect(opciones.find((o) => o.start === '15:00')).toEqual({
+      start: '15:00',
+      maxMinutes: 60,
+      blocked: false,
+    })
+  })
+
+  it('recorre varios tramos', () => {
+    const tramos = [
+      { start: '09:00', end: '09:30' },
+      { start: '11:00', end: '12:00' },
+    ]
+    expect(inicios(startOptions(tramos))).toEqual(['09:00', '11:00', '11:30'])
+  })
+})
+
 describe('annotateClashes', () => {
   it('sin clases propias todo se puede reservar', () => {
     const [card] = annotateClashes([tarjeta()], [])
     expect(card.bookable).toBe(true)
     expect(card.clashes).toEqual([])
-    expect(card.slots.every((slot) => !slot.blocked)).toBe(true)
+    expect(card.starts.every((option) => !option.blocked)).toBe(true)
+    expect(inicios(card.starts)).toEqual(['13:00', '13:30', '14:00', '14:30', '15:00', '15:30'])
   })
 
-  it('bloquea solo los turnos que se pisan con otra clase propia', () => {
+  it('bloquea solo los inicios que se pisan con otra clase propia', () => {
     const [card] = annotateClashes([tarjeta()], [clase({ startTime: '14:30', endTime: '15:30' })])
-    expect(card.slots.map((slot) => slot.blocked)).toEqual([false, true, true])
+    expect(card.starts.map((option) => option.blocked)).toEqual([
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+    ])
     expect(card.bookable).toBe(true)
     expect(card.clashes).toHaveLength(1)
   })
 
-  it('sin ningún turno libre la tarjeta no se puede reservar', () => {
+  it('sin ningún horario libre la tarjeta no se puede reservar', () => {
     const [card] = annotateClashes([tarjeta()], [clase({ startTime: '13:00', endTime: '16:00' })])
     expect(card.bookable).toBe(false)
   })
@@ -109,14 +160,32 @@ describe('annotateClashes', () => {
     const grupal = tarjeta({
       teacherId: 't1',
       maxStudents: 4,
-      slots: [{ start: '14:00', end: '15:00', enrolled: 2 }],
+      free: [],
+      groups: [{ start: '14:00', end: '15:00', subjectId: 's1', subjectName: 'Matemática', enrolled: 2 }],
     })
     const mia = clase({ teacherId: 't1', teacherName: 'Laura Gómez', subjectName: 'Matemática' })
     const [card] = annotateClashes([grupal], [mia])
 
-    expect(card.slots[0]).toMatchObject({ joined: true, blocked: true })
+    expect(card.groups[0]).toMatchObject({ joined: true, blocked: true })
     expect(card.joined).toHaveLength(1)
     expect(card.clashes).toEqual([])
+    expect(card.bookable).toBe(false)
+  })
+
+  it('una grupal con lugar alcanza para que se pueda reservar', () => {
+    const grupal = tarjeta({
+      maxStudents: 4,
+      free: [],
+      groups: [{ start: '14:00', end: '15:00', subjectId: 's1', subjectName: 'Matemática', enrolled: 2 }],
+    })
+    expect(annotateClashes([grupal], [])[0].bookable).toBe(true)
+  })
+})
+
+describe('lowestRate', () => {
+  it('la tarifa más baja de las materias de la ventana', () => {
+    expect(lowestRate(tarjeta())).toBe(450000)
+    expect(lowestRate(tarjeta({ subjects: [] }))).toBeNull()
   })
 })
 
@@ -132,11 +201,21 @@ describe('groupCardsByDate', () => {
 })
 
 describe('offersStartBetween', () => {
-  it('mira dónde ARRANCAN los turnos', () => {
+  it('mira dónde puede ARRANCAR una clase: hasta 30 min antes del fin del tramo', () => {
     expect(offersStartBetween(tarjeta(), '14:00', '')).toBe(true)
-    expect(offersStartBetween(tarjeta(), '15:30', '')).toBe(false)
+    expect(offersStartBetween(tarjeta(), '15:30', '')).toBe(true)
+    expect(offersStartBetween(tarjeta(), '16:00', '')).toBe(false)
     expect(offersStartBetween(tarjeta(), '', '13:00')).toBe(true)
     expect(offersStartBetween(tarjeta(), '', '12:00')).toBe(false)
+  })
+
+  it('cuenta también sumarse a una grupal', () => {
+    const grupal = tarjeta({
+      free: [],
+      groups: [{ start: '09:00', end: '10:00', subjectId: 's1', subjectName: 'Matemática', enrolled: 1 }],
+    })
+    expect(offersStartBetween(grupal, '', '09:00')).toBe(true)
+    expect(offersStartBetween(grupal, '10:00', '')).toBe(false)
   })
 })
 
@@ -146,7 +225,10 @@ describe('filterCards', () => {
     id: 'p',
     modality: 'in_person',
     maxStudents: 5,
-    subject: { id: 's2', name: 'Física' },
+    subjects: [
+      { id: 's2', name: 'Física', hourlyRateCents: 800000 },
+      { id: 's3', name: 'Química', hourlyRateCents: 800000 },
+    ],
     teacherName: 'Carla Benítez',
   })
   const ids = (cards) => cards.map((card) => card.id)
@@ -155,8 +237,15 @@ describe('filterCards', () => {
     expect(ids(filterCards([virtual, presencial]))).toEqual(['v', 'p'])
   })
 
-  it('por materia, comparando ids como string', () => {
+  it('por materia: pasa la ventana que ofrece alguna de las elegidas', () => {
     expect(ids(filterCards([virtual, presencial], { subjectIds: ['s2'] }))).toEqual(['p'])
+    expect(ids(filterCards([virtual, presencial], { subjectIds: ['s3'] }))).toEqual(['v', 'p'])
+    expect(ids(filterCards([virtual, presencial], { subjectIds: ['s1', 's2'] }))).toEqual(['v', 'p'])
+  })
+
+  it('compara los ids de materia como string', () => {
+    const conNumeros = tarjeta({ id: 'n', subjects: [{ id: 7, name: 'Historia', hourlyRateCents: 1 }] })
+    expect(ids(filterCards([conNumeros], { subjectIds: ['7'] }))).toEqual(['n'])
   })
 
   it('por modalidad', () => {
@@ -182,11 +271,6 @@ describe('filterCards', () => {
 })
 
 describe('textos de la tarjeta', () => {
-  it('formatSlotCount', () => {
-    expect(formatSlotCount(1)).toBe('1 horario')
-    expect(formatSlotCount(3)).toBe('3 horarios')
-  })
-
   it('formatEnrolled', () => {
     expect(formatEnrolled(2, 5)).toBe('2 de 5 anotados')
   })

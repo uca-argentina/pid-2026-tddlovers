@@ -1,6 +1,6 @@
 import { Component } from 'react'
 import {
-  ClockIcon,
+  BookIcon,
   PencilIcon,
   PinIcon,
   RepeatIcon,
@@ -10,11 +10,11 @@ import {
   VideoIcon,
 } from '../../components/icons.jsx'
 import { formatRangeLabel } from '../../utils/availability.js'
+import { formatHourlyRate } from '../../utils/rates.js'
 import {
   capacityLabel,
-  formatMinutes,
-  formatPrice,
   modalityLabel,
+  modalityPlural,
   needsAddress,
   needsMeetingUrl,
   repeatLabel,
@@ -22,7 +22,9 @@ import {
 
 /**
  * Una ventana en modo lectura, como tarjeta adentro del modal del día: todo
- * lo que el docente cargó, y los botones para editarla o borrarla.
+ * lo que el docente cargó, qué materias va a poder elegir el alumno (las que
+ * tiene tarifadas en esa modalidad, `subjects`) y los botones para editarla
+ * o borrarla.
  *
  * Borrar pide confirmación en la misma tarjeta y no con otro modal encima:
  * un modal arriba de otro es difícil de manejar en el teléfono. Si la
@@ -39,10 +41,6 @@ class WindowCard extends Component {
     return (
       <ul className="window-card-facts">
         <li>
-          <ClockIcon />
-          Clases de {formatMinutes(window.durationMinutes)}
-        </li>
-        <li>
           <Icono />
           {modalityLabel(window.modality)}
         </li>
@@ -50,10 +48,14 @@ class WindowCard extends Component {
           <UsersIcon />
           {capacityLabel(window.maxStudents)}
         </li>
-        <li className="window-card-price">
-          {formatPrice(window.price)}
-          {window.maxStudents > 1 && window.price > 0 ? ' por alumno' : ''}
-        </li>
+        {this.props.subjects.length > 0 ? (
+          <li className="window-card-wide">
+            <BookIcon />
+            {this.props.subjects
+              .map((rate) => `${rate.subjectName} (${formatHourlyRate(rate.hourlyRateCents)})`)
+              .join(', ')}
+          </li>
+        ) : null}
         {needsAddress(window.modality) && window.locality ? (
           <li className="window-card-wide">
             <PinIcon />
@@ -87,8 +89,10 @@ class WindowCard extends Component {
       return (
         <div className="window-card-confirm" role="group" aria-label="Confirmar">
           <p>
-            ¿Eliminar esta clase?
+            ¿Eliminar este horario?
             {window.repeatsWeekly ? ' Se borra de todas las semanas.' : ''}
+            {/* Las clases ya reservadas quedan: tienen todo copiado. */}
+            {' '}Las clases ya reservadas no se cancelan.
           </p>
           <div className="window-card-actions">
             <button
@@ -114,7 +118,7 @@ class WindowCard extends Component {
           type="button"
           className="window-card-icon-btn"
           onClick={onEdit}
-          aria-label={`Editar la clase de ${window.subjectName} de ${window.start} a ${window.end}`}
+          aria-label={`Editar el horario de ${window.start} a ${window.end}`}
         >
           <PencilIcon />
           Editar
@@ -123,7 +127,7 @@ class WindowCard extends Component {
           type="button"
           className="window-card-icon-btn is-danger"
           onClick={onAskDelete}
-          aria-label={`Eliminar la clase de ${window.subjectName} de ${window.start} a ${window.end}`}
+          aria-label={`Eliminar el horario de ${window.start} a ${window.end}`}
         >
           <TrashIcon />
           Eliminar
@@ -133,7 +137,7 @@ class WindowCard extends Component {
   }
 
   render() {
-    const { window, focused, notTaught, cardRef } = this.props
+    const { window, focused, subjects, cardRef } = this.props
 
     return (
       <li className={`window-card ${focused ? 'is-focused' : ''}`} ref={cardRef}>
@@ -146,23 +150,16 @@ class WindowCard extends Component {
             </span>
           ) : null}
         </div>
-        <p className="window-card-subject">{window.subjectName}</p>
 
         {this.renderFacts()}
 
         {/* La ventana queda guardada pero el tablero no la ofrece (ver
             findPublishedWindows): sin esto el docente no sabría por qué nadie
-            reserva. */}
-        {/* Presenciales de antes de que existiera la localidad: el tablero
-            las muestra sin zona hasta que se complete. */}
-        {needsAddress(window.modality) && !window.locality ? (
+            reserva. Pasa si borró las tarifas de esa modalidad después. */}
+        {subjects.length === 0 ? (
           <p className="window-card-warning">
-            Falta la localidad: editá la clase para que los alumnos sepan la zona.
-          </p>
-        ) : null}
-        {notTaught ? (
-          <p className="window-card-warning">
-            Ya no tenés esta materia en tu perfil: los alumnos no ven esta clase.
+            No tenés tarifas para clases {modalityPlural(window.modality)}: los alumnos no ven este
+            horario. Cargalas desde tu perfil.
           </p>
         ) : null}
 
@@ -175,7 +172,7 @@ class WindowCard extends Component {
 WindowCard.defaultProps = {
   readOnly: false,
   focused: false,
-  notTaught: false,
+  subjects: [],
   confirming: false,
   deleting: false,
   cardRef: undefined,

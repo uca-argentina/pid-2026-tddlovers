@@ -4,7 +4,7 @@ import {
   dayKeyFromIso,
   expandAvailability,
   occursOn,
-  slotsForWindow,
+  openingsForWindow,
 } from './availabilityExpansion.js';
 
 // 2026-09-14 es lunes.
@@ -21,15 +21,15 @@ const ventana = (over = {}) => ({
   repeatsWeekly: false,
   start: '13:00',
   end: '15:00',
-  subjectId: 's1',
-  subjectName: 'Matemática',
-  durationMinutes: 60,
-  price: 15000,
   modality: 'virtual',
   maxStudents: 1,
   meetingUrl: 'https://meet.example.com/abc',
   locality: null,
   address: null,
+  subjects: [
+    { id: 's1', name: 'Matemática', hourlyRateCents: 500000 },
+    { id: 's2', name: 'Física', hourlyRateCents: 600000 },
+  ],
   ...over,
 });
 
@@ -39,11 +39,13 @@ const turno = (over = {}) => ({
   start: '13:00',
   end: '14:00',
   subjectId: 's1',
+  subjectName: 'Matemática',
   enrolled: 1,
   ...over,
 });
 
-const starts = (slots) => slots.map((slot) => slot.start);
+const abiertos = (window, taken = [], cutoff = null) =>
+  openingsForWindow(window, taken, cutoff);
 
 describe('dayKeyFromIso', () => {
   it('maps a date to its weekday, week starting on Monday', () => {
@@ -75,77 +77,70 @@ describe('occursOn', () => {
   });
 });
 
-describe('slotsForWindow', () => {
-  it('offers every half hour where the whole class fits', () => {
-    expect(starts(slotsForWindow(ventana(), []))).toEqual(['13:00', '13:30', '14:00']);
+describe('openingsForWindow', () => {
+  it('a window with nothing booked is one free stretch', () => {
+    expect(abiertos(ventana())).toEqual({ free: [{ start: '13:00', end: '15:00' }], groups: [] });
   });
 
-  it('uses the duration the teacher chose', () => {
-    const slots = slotsForWindow(ventana({ durationMinutes: 90 }), []);
-    expect(slots).toEqual([
-      { start: '13:00', end: '14:30', enrolled: 0 },
-      { start: '13:30', end: '15:00', enrolled: 0 },
+  it('a class of the teacher splits the window in two', () => {
+    const { free } = abiertos(ventana({ end: '17:00' }), [turno({ start: '14:00', end: '15:00' })]);
+    expect(free).toEqual([
+      { start: '13:00', end: '14:00' },
+      { start: '15:00', end: '17:00' },
     ]);
   });
 
-  it('a free duration ends wherever it falls, starts stay on :00/:30', () => {
-    const slots = slotsForWindow(ventana({ end: '14:30', durationMinutes: 45 }), []);
-    expect(slots).toEqual([
-      { start: '13:00', end: '13:45', enrolled: 0 },
-      { start: '13:30', end: '14:15', enrolled: 0 },
-    ]);
+  it('after a class ending off the half hour, the next start is the next :00/:30', () => {
+    // 13:00–13:45: el tramo libre arranca 13:45, pero una clase arranca 14:00.
+    const { free } = abiertos(ventana(), [turno({ end: '13:45' })]);
+    expect(free).toEqual([{ start: '14:00', end: '15:00' }]);
   });
 
-  it('a class ending off the half hour still blocks what it overlaps', () => {
-    const turno45 = turno({ start: '13:00', end: '13:45' });
-    expect(starts(slotsForWindow(ventana(), [turno45]))).toEqual(['14:00']);
-  });
-
-  it('a window exactly as long as the class is a single slot', () => {
-    expect(starts(slotsForWindow(ventana({ end: '14:00' }), []))).toEqual(['13:00']);
-  });
-
-  it('removes starts that would overlap a class the teacher already has', () => {
-    expect(starts(slotsForWindow(ventana(), [turno()]))).toEqual(['14:00']);
+  it('a stretch too short for a 30 minute class is not offered', () => {
+    const { free } = abiertos(ventana(), [turno({ end: '14:45' })]);
+    expect(free).toEqual([]);
   });
 
   it('a class from another window of the teacher also blocks', () => {
     const otra = turno({ start: '12:30', end: '13:30', subjectId: 's2' });
-    expect(starts(slotsForWindow(ventana(), [otra]))).toEqual(['13:30', '14:00']);
+    expect(abiertos(ventana(), [otra]).free).toEqual([{ start: '13:30', end: '15:00' }]);
   });
 
-  it('offers joining a group class that still has room', () => {
-    const grupal = ventana({ maxStudents: 3 });
-    const slots = slotsForWindow(grupal, [turno({ enrolled: 2 })]);
-    expect(slots[0]).toEqual({ start: '13:00', end: '14:00', enrolled: 2 });
-    expect(starts(slots)).toEqual(['13:00', '14:00']);
+  it('offers joining a group class that still has room, with its subject', () => {
+    const { groups, free } = abiertos(ventana({ maxStudents: 3 }), [turno({ enrolled: 2 })]);
+    expect(groups).toEqual([
+      { start: '13:00', end: '14:00', subjectId: 's1', subjectName: 'Matemática', enrolled: 2 },
+    ]);
+    expect(free).toEqual([{ start: '14:00', end: '15:00' }]);
   });
 
   it('a full group class is not offered', () => {
-    const slots = slotsForWindow(ventana({ maxStudents: 3 }), [turno({ enrolled: 3 })]);
-    expect(starts(slots)).toEqual(['14:00']);
+    expect(abiertos(ventana({ maxStudents: 3 }), [turno({ enrolled: 3 })]).groups).toEqual([]);
   });
 
   it('never offers joining an individual class', () => {
-    expect(slotsForWindow(ventana(), [turno()]).some((s) => s.enrolled > 0)).toBe(false);
+    expect(abiertos(ventana(), [turno()]).groups).toEqual([]);
   });
 
-  it('does not offer joining a group of another subject', () => {
-    const slots = slotsForWindow(ventana({ maxStudents: 3 }), [turno({ subjectId: 's2' })]);
-    expect(slots.some((s) => s.enrolled > 0)).toBe(false);
+  it('does not offer joining a group of a subject the teacher no longer rates', () => {
+    const grupal = ventana({ maxStudents: 3 });
+    expect(abiertos(grupal, [turno({ subjectId: 's9' })]).groups).toEqual([]);
   });
 
   it('drops what already started', () => {
-    // 13:10: ni la de 13:00 ni sumarse a ella.
-    const slots = slotsForWindow(ventana({ maxStudents: 3 }), [turno()], 13 * 60 + 10);
-    expect(starts(slots)).toEqual(['14:00']);
+    // 13:10: ni sumarse a la de 13:00 ni arrancar antes de 13:30.
+    const { free, groups } = abiertos(ventana({ maxStudents: 3, end: '16:00' }), [], 13 * 60 + 10);
+    expect(groups).toEqual([]);
+    expect(free).toEqual([{ start: '13:30', end: '16:00' }]);
+  });
+
+  it('a start exactly at the current time already passed', () => {
+    expect(abiertos(ventana(), [], 13 * 60).free).toEqual([{ start: '13:30', end: '15:00' }]);
   });
 
   it('handles a window that ends at midnight', () => {
-    const slots = slotsForWindow(ventana({ start: '23:00', end: '24:00', durationMinutes: 30 }), []);
-    expect(slots).toEqual([
-      { start: '23:00', end: '23:30', enrolled: 0 },
-      { start: '23:30', end: '24:00', enrolled: 0 },
+    expect(abiertos(ventana({ start: '23:00', end: '24:00' })).free).toEqual([
+      { start: '23:00', end: '24:00' },
     ]);
   });
 });
@@ -162,12 +157,16 @@ describe('expandAvailability', () => {
       windowId: 'w1',
       date: LUNES,
       dayKey: 'lunes',
-      subject: { id: 's1', name: 'Matemática' },
-      durationMinutes: 60,
-      price: 15000,
       modality: 'virtual',
       maxStudents: 1,
+      free: [{ start: '13:00', end: '15:00' }],
+      groups: [],
     });
+    expect(rows[0].subjects.map((subject) => subject.name)).toEqual(['Matemática', 'Física']);
+  });
+
+  it('a window with no rated subject is not offered', () => {
+    expect(expandir({ windows: [ventana({ subjects: [] })] })).toEqual([]);
   });
 
   it('never exposes the meeting link', () => {
@@ -199,7 +198,7 @@ describe('expandAvailability', () => {
     const rows = expandir({
       taken: [turno({ teacherId: 'otro' }), turno({ date: MARTES })],
     });
-    expect(starts(rows[0].slots)).toEqual(['13:00', '13:30', '14:00']);
+    expect(rows[0].free).toEqual([{ start: '13:00', end: '15:00' }]);
   });
 
   it('drops an occurrence with nothing left to book', () => {
@@ -216,6 +215,6 @@ describe('expandAvailability', () => {
 
   it('trims hours already started today', () => {
     const rows = expandir({ nowIso: LUNES, nowTime: '13:15' });
-    expect(starts(rows[0].slots)).toEqual(['13:30', '14:00']);
+    expect(rows[0].free).toEqual([{ start: '13:30', end: '15:00' }]);
   });
 });

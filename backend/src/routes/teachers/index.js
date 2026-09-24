@@ -4,7 +4,7 @@ import {
   findTeacherWindows,
   updateWindow,
 } from '../../db/availability.js';
-import { teacherTeachesSubject } from '../../db/users.js';
+import { teacherHasRateFor } from '../../db/rates.js';
 import { validateWindow } from '../../lib/availabilityWindow.js';
 import { todayIso } from '../../lib/clock.js';
 
@@ -41,14 +41,22 @@ export default async function teachersRoutes(app) {
     return reply.send(await findTeacherWindows({ teacherId: request.user.id, from, to }));
   });
 
-  /** Chequeos compartidos por crear y editar. null si todo bien. */
+  // Cómo se nombra cada modalidad en "no tenés tarifas para clases ...".
+  const MODALITY_PLURAL = { virtual: 'virtuales', in_person: 'presenciales', hybrid: 'híbridas' };
+
+  /**
+   * Chequeos compartidos por crear y editar. null si todo bien.
+   *
+   * La ventana no dice materia: el alumno elige entre las que el docente
+   * tiene tarifadas en esa modalidad. Sin ninguna, la ventana no le serviría
+   * a nadie — mejor decirlo ahora que dejar al docente esperando reservas.
+   */
   async function problemWith(request, value) {
-    // Cualquier materia no: solo una de las que el docente tiene en el perfil.
-    const teaches = await teacherTeachesSubject(request.user.id, value.subjectId);
-    if (!teaches) {
+    const tieneTarifa = await teacherHasRateFor(request.user.id, value.modality);
+    if (!tieneTarifa) {
       return {
-        message: 'Esa materia no está en tu perfil. Agregala desde Mi perfil.',
-        fields: { subjectId: 'invalid' },
+        message: `No tenés tarifas para clases ${MODALITY_PLURAL[value.modality]}. Cargalas desde Mi perfil.`,
+        fields: { modality: 'invalid' },
       };
     }
     return null;

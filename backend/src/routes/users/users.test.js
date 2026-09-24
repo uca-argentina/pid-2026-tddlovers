@@ -18,6 +18,10 @@ vi.mock('../../db/sessions.js', () => ({
   deleteExpiredSessions: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('../../db/rates.js', () => ({
+  findRatesByTeacher: vi.fn(),
+}));
+
 vi.mock('../../db/subjects.js', () => ({
   listSubjects: vi.fn(),
   countExistingSubjectIds: vi.fn(),
@@ -26,6 +30,7 @@ vi.mock('../../db/subjects.js', () => ({
 const { updateUserProfile, findSubjectIdsByTeacher } = await import('../../db/users.js');
 const { findValidSession, deleteExpiredSessions } = await import('../../db/sessions.js');
 const { countExistingSubjectIds } = await import('../../db/subjects.js');
+const { findRatesByTeacher } = await import('../../db/rates.js');
 const { buildApp } = await import('../../app.js');
 
 const MATE = '47ac9e88-4099-4ab4-b1fe-3898d7b279c4';
@@ -57,6 +62,7 @@ describe('PATCH /api/users/me', () => {
   beforeEach(() => {
     app = buildApp({ logger: false });
     findSubjectIdsByTeacher.mockResolvedValue([]);
+    findRatesByTeacher.mockResolvedValue([]);
   });
 
   afterEach(async () => {
@@ -151,11 +157,13 @@ describe('PATCH /api/users/me', () => {
       apellido: 'Lovelace',
       telefono: '+54 11 5555-5555',
       subjectIds: [MATE, FISICA],
+      rates: [],
     });
     // El id sale de la sesión, no del body.
     expect(updateUserProfile).toHaveBeenCalledWith('user-1', {
       telefono: '+54 11 5555-5555',
       subjectIds: [MATE, FISICA],
+      rates: undefined,
     });
   });
 
@@ -174,16 +182,22 @@ describe('PATCH /api/users/me', () => {
       method: 'PATCH',
       url: '/api/users/me',
       headers,
-      payload: { telefono: '', subjectIds: [MATE] },
+      payload: {
+        telefono: '',
+        subjectIds: [MATE],
+        rates: [{ subjectId: MATE, modality: 'virtual', hourlyRateCents: 500000 }],
+      },
     });
 
     expect(res.statusCode).toBe(200);
     expect(res.json().subjectIds).toEqual([]);
+    expect(res.json().rates).toEqual([]);
     // Las materias del alumno ni se validan ni se guardan.
     expect(countExistingSubjectIds).not.toHaveBeenCalled();
     expect(updateUserProfile).toHaveBeenCalledWith('user-1', {
       telefono: null,
       subjectIds: undefined,
+      rates: undefined,
     });
   });
 
@@ -207,5 +221,92 @@ describe('PATCH /api/users/me', () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json().telefono).toBeNull();
+  });
+
+  describe('rates', () => {
+    const TEACHER = {
+      id: 'user-1',
+      email: 'a@example.com',
+      role: 'teacher',
+      nombre: 'Ada',
+      apellido: 'Lovelace',
+      telefono: null,
+    };
+    const tarifa = (over = {}) => ({
+      subjectId: MATE,
+      modality: 'virtual',
+      hourlyRateCents: 500000,
+      ...over,
+    });
+
+    it('saves the rates together with the subjects and returns them', async () => {
+      countExistingSubjectIds.mockResolvedValueOnce(2);
+      updateUserProfile.mockResolvedValueOnce(TEACHER);
+      const rates = [tarifa(), tarifa({ subjectId: FISICA, modality: 'in_person', hourlyRateCents: 650050 })];
+      findRatesByTeacher.mockResolvedValue(rates);
+
+      const headers = await authedHeaders(app);
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/users/me',
+        headers,
+        payload: { telefono: '', subjectIds: [MATE, FISICA], rates },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().rates).toEqual(rates);
+      expect(updateUserProfile).toHaveBeenCalledWith('user-1', {
+        telefono: null,
+        subjectIds: [MATE, FISICA],
+        rates,
+      });
+    });
+
+    it('rejects a rate for a subject being removed in the same request', async () => {
+      countExistingSubjectIds.mockResolvedValueOnce(1);
+      const headers = await authedHeaders(app);
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/users/me',
+        headers,
+        payload: { telefono: '', subjectIds: [FISICA], rates: [tarifa()] },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().fields).toEqual({ rates: 'invalid' });
+      expect(updateUserProfile).not.toHaveBeenCalled();
+    });
+
+    it('without subjectIds, checks the rates against the subjects already saved', async () => {
+      findSubjectIdsByTeacher.mockResolvedValue([FISICA]);
+      const headers = await authedHeaders(app);
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/users/me',
+        headers,
+        payload: { telefono: '', rates: [tarifa()] },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(findSubjectIdsByTeacher).toHaveBeenCalledWith('user-1');
+      expect(updateUserProfile).not.toHaveBeenCalled();
+    });
+
+    it('rejects an amount with fractions of a cent', async () => {
+      countExistingSubjectIds.mockResolvedValueOnce(1);
+      const headers = await authedHeaders(app);
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/users/me',
+        headers,
+        payload: { telefono: '', subjectIds: [MATE], rates: [tarifa({ hourlyRateCents: 10.5 })] },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(updateUserProfile).not.toHaveBeenCalled();
+    });
   });
 });

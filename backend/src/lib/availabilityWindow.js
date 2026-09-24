@@ -3,21 +3,25 @@
 // vuelve a chequear antes de tocar la base. Los CHECK de la tabla son la
 // última red, pero un error de constraint no se le puede mostrar a nadie.
 //
-// Lo que necesita la base (que la materia sea del docente, que no se pise
-// con otra ventana) no va acá: lo resuelven la ruta y db/availability.js.
+// Lo que necesita la base (que el docente tenga tarifa en esa modalidad, que
+// no se pise con otra ventana) no va acá: lo resuelven la ruta y
+// db/availability.js.
+//
+// La ventana ya no dice materia, duración ni precio: la materia y la
+// duración las elige el alumno, y el precio sale de la tarifa del docente
+// (ver lib/teacherRates.js).
 
 import { toMinutes } from './availabilityExpansion.js';
 
 export const MODALITIES = ['virtual', 'in_person', 'hybrid'];
 export const MAX_STUDENTS_LIMIT = 50;
-// El mismo techo que el CHECK de la base: frena un typo con ceros de más.
-export const MAX_PRICE = 10000000;
+// La clase más corta que se puede reservar: la ventana tiene que tener lugar
+// para al menos una.
 export const MIN_DURATION = 30;
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // 'HH:MM' en :00 o :30. '24:00' vale solo como fin (ver CLAUDE.md).
 const TIME_RE = /^(?:[01]\d|2[0-3]):(?:00|30)$/;
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_URL_LENGTH = 500;
 const MAX_ADDRESS_LENGTH = 200;
 const MAX_LOCALITY_LENGTH = 100;
@@ -62,11 +66,6 @@ export function validateWindow(body, { today, allowPastDate = false }) {
     return fail('date', 'No se puede cargar una clase en un día que ya pasó.');
   }
 
-  if (!body.subjectId) {
-    return { message: 'Elegí la materia de la clase.', fields: { subjectId: 'required' } };
-  }
-  if (!UUID_RE.test(String(body.subjectId))) return fail('subjectId', 'Materia inválida.');
-
   if (!TIME_RE.test(body.start ?? '')) {
     return fail('start', 'El horario tiene que empezar en punto o y media.');
   }
@@ -76,21 +75,10 @@ export function validateWindow(body, { today, allowPastDate = false }) {
   const start = toMinutes(body.start);
   const end = toMinutes(body.end);
   if (start >= end) return fail('end', 'El horario termina antes de empezar.');
-
-  // Libre (45, 50, 75...), pero no menos de media hora.
-  const duration = body.durationMinutes;
-  if (!Number.isInteger(duration) || duration < MIN_DURATION) {
-    return fail('durationMinutes', `Las clases duran como mínimo ${MIN_DURATION} minutos.`);
-  }
-  // La única regla entre la ventana y la clase: que entre al menos una.
-  if (duration > end - start) {
-    return fail('durationMinutes', 'La clase dura más que el horario que cargaste.');
-  }
-
-  // En pesos enteros, por alumno. 0 es sin cargo.
-  const price = body.price;
-  if (!Number.isInteger(price) || price < 0 || price > MAX_PRICE) {
-    return fail('price', 'El precio tiene que ser un monto en pesos, sin centavos.');
+  // Con inicio y fin en :00/:30 esto ya se cumple; queda escrito por si
+  // algún día el paso cambia.
+  if (end - start < MIN_DURATION) {
+    return fail('end', `El horario tiene que durar al menos ${MIN_DURATION} minutos.`);
   }
 
   if (!MODALITIES.includes(body.modality)) {
@@ -142,9 +130,6 @@ export function validateWindow(body, { today, allowPastDate = false }) {
       repeatsWeekly,
       start: body.start,
       end: body.end,
-      subjectId: body.subjectId,
-      durationMinutes: duration,
-      price,
       modality: body.modality,
       maxStudents,
       meetingUrl,

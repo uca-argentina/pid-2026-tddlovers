@@ -122,7 +122,7 @@ export function fetchMyWindows({ from, to }) {
   return request(`/api/teachers/me/availability?from=${from}&to=${to}`)
 }
 
-/** Devuelve la ventana guardada, con id y nombre de la materia. */
+/** Devuelve la ventana guardada, con su id. */
 export function createWindow(window) {
   return request('/api/teachers/me/availability', {
     method: 'POST',
@@ -143,9 +143,10 @@ export function deleteWindow(id) {
 
 /**
  * La disponibilidad YA con fecha y YA neta de lo reservado: una fila por
- * (ventana, fecha), con su materia, modalidad, cupo y los turnos que quedan
- * en `slots`. La pantalla del alumno nunca ve una ventana semanal — el
- * backend la proyecta sobre el rango pedido.
+ * (ventana, fecha), con su modalidad, cupo, las materias que se pueden
+ * reservar con su tarifa (`subjects`), los tramos libres (`free`) y las
+ * grupales a las que sumarse (`groups`). La pantalla del alumno nunca ve una
+ * ventana semanal — el backend la proyecta sobre el rango pedido.
  */
 export function fetchAvailability({ from, to }) {
   return request(`/api/availability?from=${from}&to=${to}`)
@@ -161,15 +162,16 @@ export function fetchMyLessons({ from, to }) {
 }
 
 /**
- * Reservar un turno de una ventana. Materia, duración y modalidad salen de la
- * ventana en el backend, así que alcanza con cuál, qué día y a qué hora. Si
- * a esa hora ya hay una grupal con lugar, es sumarse a ella. Devuelve la
- * clase guardada, sin envolver.
+ * Reservar una clase en una ventana: qué día, a qué hora, de qué materia y
+ * cuántos minutos. La modalidad sale de la ventana y el precio lo calcula el
+ * backend con la tarifa del docente. Si a esa hora ya hay una grupal de la
+ * misma materia y duración, es sumarse a ella. Devuelve la clase guardada,
+ * sin envolver.
  */
-export function bookLesson({ windowId, date, startTime }) {
+export function bookLesson({ windowId, date, startTime, subjectId, durationMinutes }) {
   return request('/api/classes', {
     method: 'POST',
-    body: JSON.stringify({ windowId, date, startTime }),
+    body: JSON.stringify({ windowId, date, startTime, subjectId, durationMinutes }),
   })
 }
 
@@ -177,6 +179,9 @@ export function bookLesson({ windowId, date, startTime }) {
  * Guarda el perfil. Devuelve el usuario completo y actualizado (no envuelto
  * en { user }), igual que login y /me. El id sale de la sesión en el backend,
  * así que mandarlo en el body no cambiaría nada.
+ *
+ * `rates` es la lista ENTERA de tarifas del docente,
+ * [{ subjectId, modality, hourlyRateCents }], y reemplaza a la que había.
  */
 export function updateProfile(payload) {
   return request('/api/users/me', {
@@ -184,6 +189,7 @@ export function updateProfile(payload) {
     body: JSON.stringify({
       telefono: payload.telefono,
       subjectIds: payload.subjectIds,
+      rates: payload.rates,
     }),
   })
 }

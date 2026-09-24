@@ -43,7 +43,18 @@ const MATERIAS = [
   { id: 5, name: 'Programación' },
 ]
 
-const docente = { id: 1, nombre: 'Agustín', role: 'teacher', subjectIds: [1, 3, 5] }
+// Matemática y Álgebra virtuales, Álgebra también presencial. Nada híbrido.
+const docente = {
+  id: 1,
+  nombre: 'Agustín',
+  role: 'teacher',
+  subjectIds: [1, 3, 5],
+  rates: [
+    { subjectId: 1, modality: 'virtual', hourlyRateCents: 500000 },
+    { subjectId: 3, modality: 'virtual', hourlyRateCents: 600000 },
+    { subjectId: 3, modality: 'in_person', hourlyRateCents: 750050 },
+  ],
+}
 const alumno = { id: 7, nombre: 'Sofía', role: 'student', subjectIds: [] }
 
 // Todo se arma sobre HOY: es la semana que la pantalla muestra al entrar.
@@ -57,10 +68,6 @@ const ventana = (over = {}) => ({
   repeatsWeekly: false,
   start: '13:00',
   end: '15:00',
-  subjectId: 1,
-  subjectName: 'Matemática',
-  durationMinutes: 60,
-  price: 15000,
   modality: 'virtual',
   maxStudents: 1,
   meetingUrl: 'https://meet.example.com/abc',
@@ -139,13 +146,13 @@ describe('AvailabilityPage — vista de docente', () => {
   }
 
   /**
-   * "Agregar clase" de la página abre el modal en hoy, y el formulario se
-   * abre con el "Agregar clase" de adentro del modal.
+   * "Agregar horario" de la página abre el modal en hoy, y el formulario se
+   * abre con el "Agregar horario" de adentro del modal.
    */
   async function abrirFormulario() {
-    await userEvent.click(screen.getByRole('button', { name: 'Agregar clase' }))
-    const modal = screen.getByRole('dialog', { name: 'Clases del día' })
-    await userEvent.click(within(modal).getByRole('button', { name: 'Agregar clase' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Agregar horario' }))
+    const modal = screen.getByRole('dialog', { name: 'Horarios del día' })
+    await userEvent.click(within(modal).getByRole('button', { name: 'Agregar horario' }))
     return modal
   }
 
@@ -159,7 +166,13 @@ describe('AvailabilityPage — vista de docente', () => {
   }
 
   function bloque() {
-    return screen.findByRole('button', { name: /^Matemática, 13:00 a 15:00/ })
+    return screen.findByRole('button', { name: /^13:00 a 15:00/ })
+  }
+
+  function abrirModalDelBloque() {
+    return bloque()
+      .then((boton) => userEvent.click(boton))
+      .then(() => screen.getByRole('dialog', { name: 'Horarios del día' }))
   }
 
   it('pide las ventanas de la semana actual, de lunes a domingo', async () => {
@@ -171,12 +184,10 @@ describe('AvailabilityPage — vista de docente', () => {
     })
   })
 
-  it('muestra cada ventana como un bloque en su día', async () => {
+  it('muestra cada ventana como un bloque en su día, sin materia ni precio', async () => {
     await entrar()
 
-    expect(await bloque()).toHaveAccessibleName(
-      /^Matemática, 13:00 a 15:00, virtual, individual, \$\s15\.000$/,
-    )
+    expect(await bloque()).toHaveAccessibleName('13:00 a 15:00, virtual, individual')
   })
 
   it('una ventana semanal aparece también en las semanas siguientes', async () => {
@@ -195,43 +206,67 @@ describe('AvailabilityPage — vista de docente', () => {
     expect(await bloque()).toHaveAccessibleName(/se repite todas las semanas/)
   })
 
-  it('tocar un bloque abre el modal del día con su tarjeta', async () => {
+  it('la tarjeta dice qué materias puede elegir el alumno, con su tarifa', async () => {
     await entrar()
-    await userEvent.click(await bloque())
+    const modal = await abrirModalDelBloque()
 
-    const modal = screen.getByRole('dialog', { name: 'Clases del día' })
-    expect(within(modal).getByText('Matemática')).toBeInTheDocument()
     expect(within(modal).getByText('13:00 – 15:00')).toBeInTheDocument()
-    expect(within(modal).getByText('Clases de 1 h')).toBeInTheDocument()
-    expect(within(modal).getByText(/15\.000/)).toBeInTheDocument()
+    // Las de la modalidad de la ventana (virtual), no las presenciales.
+    expect(
+      within(modal).getByText(/^Álgebra \(\$\s6\.000\/h\), Matemática \(\$\s5\.000\/h\)$/),
+    ).toBeInTheDocument()
     expect(within(modal).getByRole('link', { name: 'https://meet.example.com/abc' })).toBeInTheDocument()
   })
 
-  it('"Agregar clase" abre el modal en hoy, con sus clases y sin formulario', async () => {
+  it('una ventana de una modalidad sin tarifas avisa que no se ofrece', async () => {
+    fetchMyWindows.mockResolvedValue([
+      ventana({ modality: 'hybrid', locality: 'Palermo', address: 'Aula 3' }),
+    ])
+    await entrar()
+    const modal = await abrirModalDelBloque()
+
+    expect(
+      within(modal).getByText(/No tenés tarifas para clases híbridas: los alumnos no ven este horario/),
+    ).toBeInTheDocument()
+  })
+
+  it('"Agregar horario" abre el modal en hoy, con sus horarios y sin formulario', async () => {
     await entrar()
     await bloque()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Agregar clase' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Agregar horario' }))
 
-    const modal = screen.getByRole('dialog', { name: 'Clases del día' })
+    const modal = screen.getByRole('dialog', { name: 'Horarios del día' })
     expect(within(modal).getByText('Hoy')).toBeInTheDocument()
-    expect(within(modal).getByText('Matemática')).toBeInTheDocument()
-    expect(within(modal).queryByText('Nueva clase')).not.toBeInTheDocument()
-    expect(within(modal).getByRole('button', { name: 'Agregar clase' })).toBeInTheDocument()
+    expect(within(modal).getByText('13:00 – 15:00')).toBeInTheDocument()
+    expect(within(modal).queryByText('Nuevo horario')).not.toBeInTheDocument()
+    expect(within(modal).getByRole('button', { name: 'Agregar horario' })).toBeInTheDocument()
   })
 
-  it('agregar una clase la manda con todos los campos y recarga la semana', async () => {
+  it('el formulario no pide materia, duración ni precio', async () => {
     await entrar()
     await bloque()
     const modal = await abrirFormulario()
 
-    await userEvent.selectOptions(within(modal).getByLabelText('Materia'), 'Álgebra')
+    expect(within(modal).queryByLabelText('Materia')).not.toBeInTheDocument()
+    expect(within(modal).queryByLabelText('Cada clase dura')).not.toBeInTheDocument()
+    expect(within(modal).queryByLabelText('Precio por clase')).not.toBeInTheDocument()
+    expect(
+      within(modal).getByText(/Los alumnos eligen entre: Álgebra \(\$\s6\.000\/h\), Matemática/),
+    ).toBeInTheDocument()
+  })
+
+  it('agregar un horario lo manda con todos los campos y recarga la semana', async () => {
+    await entrar()
+    await bloque()
+    const modal = await abrirFormulario()
+
     moverHorario(modal, '16:00', '19:30')
-    expect(within(modal).getByText('El horario dura 3 h 30 min.', { exact: false })).toBeInTheDocument()
-    await userEvent.clear(within(modal).getByLabelText('Cada clase dura'))
-    await userEvent.type(within(modal).getByLabelText('Cada clase dura'), '45')
-    await userEvent.type(within(modal).getByLabelText('Precio por clase'), '12.500')
+    expect(within(modal).getByText(/^3 h 30 min disponibles/)).toBeInTheDocument()
     await userEvent.click(within(modal).getByRole('button', { name: 'Presencial' }))
+    // En presencial solo tiene Álgebra.
+    expect(within(modal).getByText(/Los alumnos eligen entre: Álgebra \(\$\s7\.500,50\/h\)\./))
+      .toBeInTheDocument()
     await userEvent.type(within(modal).getByLabelText('Localidad'), 'Palermo, CABA')
     await userEvent.type(within(modal).getByLabelText('Dirección exacta'), 'Aula 3')
     await userEvent.click(within(modal).getByRole('button', { name: 'Grupal' }))
@@ -245,48 +280,58 @@ describe('AvailabilityPage — vista de docente', () => {
       repeatsWeekly: true,
       start: '16:00',
       end: '19:30',
-      subjectId: '3',
-      durationMinutes: 45,
-      price: 12500,
       modality: 'in_person',
       maxStudents: 2,
       meetingUrl: '',
       locality: 'Palermo, CABA',
       address: 'Aula 3',
     })
-    expect(await within(modal).findByText('Listo, agregamos la clase.')).toBeInTheDocument()
+    expect(await within(modal).findByText('Listo, agregamos el horario.')).toBeInTheDocument()
     // Una recarga de la semana después de guardar.
     expect(fetchMyWindows).toHaveBeenCalledTimes(pedidosAntes + 1)
-    // Guardada, el formulario se cierra: queda la tarjeta nueva, no las dos.
-    expect(within(modal).queryByText('Nueva clase')).not.toBeInTheDocument()
+    // Guardado, el formulario se cierra: queda la tarjeta nueva, no las dos.
+    expect(within(modal).queryByText('Nuevo horario')).not.toBeInTheDocument()
     expect(within(modal).queryByRole('button', { name: 'Guardar' })).not.toBeInTheDocument()
   })
 
-  it('no deja guardar una duración que no entra en el horario, ni sin precio', async () => {
+  it('no deja guardar en una modalidad sin tarifas y manda al perfil', async () => {
     await entrar()
     await bloque()
     const modal = await abrirFormulario()
 
-    await userEvent.selectOptions(within(modal).getByLabelText('Materia'), 'Matemática')
-    await userEvent.clear(within(modal).getByLabelText('Cada clase dura'))
-    await userEvent.type(within(modal).getByLabelText('Cada clase dura'), '90')
-    await userEvent.type(
-      within(modal).getByLabelText('Link de la videollamada'),
-      'https://meet.example.com/x',
+    await userEvent.click(within(modal).getByRole('button', { name: 'Híbrida' }))
+    expect(within(modal).getByText(/No tenés tarifas para clases híbridas\./)).toBeInTheDocument()
+    expect(within(modal).getByRole('link', { name: 'Cargalas en tu perfil' })).toHaveAttribute(
+      'href',
+      '/perfil',
     )
+    await userEvent.type(within(modal).getByLabelText('Link de la videollamada'), 'https://x.com/a')
+    await userEvent.type(within(modal).getByLabelText('Localidad'), 'Palermo, CABA')
+    await userEvent.type(within(modal).getByLabelText('Dirección exacta'), 'Aula 3')
     await userEvent.click(within(modal).getByRole('button', { name: 'Guardar' }))
 
-    expect(within(modal).getByText('No entra en el horario, que dura 1 h.')).toBeInTheDocument()
-    expect(within(modal).getByText('Poné el precio (0 si es sin cargo).')).toBeInTheDocument()
     expect(createWindow).not.toHaveBeenCalled()
   })
 
-  it('no manda una clase virtual sin link', async () => {
+  it('si solo tiene tarifas presenciales, el formulario arranca en presencial', async () => {
+    await entrar({
+      ...docente,
+      rates: [{ subjectId: 3, modality: 'in_person', hourlyRateCents: 100000 }],
+    })
+    await bloque()
+    const modal = await abrirFormulario()
+
+    expect(within(modal).getByRole('button', { name: 'Presencial' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  })
+
+  it('no manda un horario virtual sin link', async () => {
     await entrar()
     await bloque()
     const modal = await abrirFormulario()
 
-    await userEvent.selectOptions(within(modal).getByLabelText('Materia'), 'Matemática')
     await userEvent.click(within(modal).getByRole('button', { name: 'Guardar' }))
 
     expect(within(modal).getByText('Pegá el link de la videollamada.')).toBeInTheDocument()
@@ -299,8 +344,6 @@ describe('AvailabilityPage — vista de docente', () => {
     await bloque()
     const modal = await abrirFormulario()
 
-    await userEvent.selectOptions(within(modal).getByLabelText('Materia'), 'Matemática')
-    await userEvent.type(within(modal).getByLabelText('Precio por clase'), '15000')
     await userEvent.type(
       within(modal).getByLabelText('Link de la videollamada'),
       'https://meet.example.com/x',
@@ -312,29 +355,28 @@ describe('AvailabilityPage — vista de docente', () => {
     )
   })
 
-  it('editar una clase la manda con su id', async () => {
+  it('editar un horario lo manda con su id', async () => {
     await entrar()
-    await userEvent.click(await bloque())
-    const modal = screen.getByRole('dialog', { name: 'Clases del día' })
+    const modal = await abrirModalDelBloque()
 
-    await userEvent.click(within(modal).getByRole('button', { name: /^Editar la clase/ }))
-    await userEvent.click(within(modal).getByRole('button', { name: 'Híbrida' }))
+    await userEvent.click(within(modal).getByRole('button', { name: /^Editar el horario/ }))
+    await userEvent.click(within(modal).getByRole('button', { name: 'Presencial' }))
     await userEvent.type(within(modal).getByLabelText('Localidad'), 'Palermo, CABA')
     await userEvent.type(within(modal).getByLabelText('Dirección exacta'), 'Aula 3')
     await userEvent.click(within(modal).getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() => expect(updateWindow).toHaveBeenCalledTimes(1))
-    expect(updateWindow).toHaveBeenCalledWith(
-      'w1',
-      expect.objectContaining({
-        price: 15000,
-        durationMinutes: 60,
-        modality: 'hybrid',
-        meetingUrl: 'https://meet.example.com/abc',
-        locality: 'Palermo, CABA',
-        address: 'Aula 3',
-      }),
-    )
+    expect(updateWindow).toHaveBeenCalledWith('w1', {
+      date: HOY,
+      repeatsWeekly: false,
+      start: '13:00',
+      end: '15:00',
+      modality: 'in_person',
+      maxStudents: 1,
+      meetingUrl: '',
+      locality: 'Palermo, CABA',
+      address: 'Aula 3',
+    })
   })
 
   it('una presencial pide localidad y dirección exacta', async () => {
@@ -350,25 +392,14 @@ describe('AvailabilityPage — vista de docente', () => {
     expect(createWindow).not.toHaveBeenCalled()
   })
 
-  it('una presencial vieja sin localidad avisa que hay que completarla', async () => {
-    fetchMyWindows.mockResolvedValue([
-      ventana({ modality: 'in_person', meetingUrl: null, locality: null, address: 'Aula 3' }),
-    ])
-    await entrar()
-    await userEvent.click(await bloque())
-
-    const modal = screen.getByRole('dialog', { name: 'Clases del día' })
-    expect(within(modal).getByText(/Falta la localidad/)).toBeInTheDocument()
-  })
-
   it('eliminar pide confirmación, y si se repite avisa que es de todas las semanas', async () => {
     fetchMyWindows.mockResolvedValue([ventana({ repeatsWeekly: true })])
     await entrar()
-    await userEvent.click(await bloque())
-    const modal = screen.getByRole('dialog', { name: 'Clases del día' })
+    const modal = await abrirModalDelBloque()
 
-    await userEvent.click(within(modal).getByRole('button', { name: /^Eliminar la clase/ }))
+    await userEvent.click(within(modal).getByRole('button', { name: /^Eliminar el horario/ }))
     expect(within(modal).getByText(/Se borra de todas las semanas/)).toBeInTheDocument()
+    expect(within(modal).getByText(/Las clases ya reservadas no se cancelan/)).toBeInTheDocument()
     expect(deleteWindow).not.toHaveBeenCalled()
 
     await userEvent.click(within(modal).getByRole('button', { name: 'Sí, eliminar' }))
@@ -377,8 +408,7 @@ describe('AvailabilityPage — vista de docente', () => {
 
   it('las flechas del modal pasan de día', async () => {
     await entrar()
-    await userEvent.click(await bloque())
-    const modal = screen.getByRole('dialog', { name: 'Clases del día' })
+    const modal = await abrirModalDelBloque()
     expect(within(modal).getByText('Hoy')).toBeInTheDocument()
 
     await userEvent.click(within(modal).getByRole('button', { name: 'Día siguiente' }))
@@ -386,25 +416,24 @@ describe('AvailabilityPage — vista de docente', () => {
     expect(within(modal).queryByText('Hoy')).not.toBeInTheDocument()
     // La ventana es de hoy y no se repite: mañana no hay nada. Si mañana cae
     // en la semana siguiente, la de atrás la sigue y se recarga.
-    expect(await within(modal).findByText('No ofrecés clases este día.')).toBeInTheDocument()
+    expect(await within(modal).findByText('No ofrecés horarios este día.')).toBeInTheDocument()
   })
 
   it('un día que ya pasó se ve pero no se toca', async () => {
     await entrar()
-    await userEvent.click(await bloque())
-    const modal = screen.getByRole('dialog', { name: 'Clases del día' })
+    const modal = await abrirModalDelBloque()
 
     await userEvent.click(within(modal).getByRole('button', { name: 'Día anterior' }))
 
     expect(await within(modal).findByText('Ya pasó')).toBeInTheDocument()
-    expect(within(modal).queryByRole('button', { name: 'Agregar clase' })).not.toBeInTheDocument()
+    expect(within(modal).queryByRole('button', { name: 'Agregar horario' })).not.toBeInTheDocument()
   })
 
-  it('sin materias no deja agregar clases y manda al perfil', async () => {
-    await entrar({ ...docente, subjectIds: [] })
+  it('sin tarifas no deja agregar horarios y manda al perfil', async () => {
+    await entrar({ ...docente, rates: [] })
 
-    expect(screen.getByRole('button', { name: 'Agregar clase' })).toBeDisabled()
-    expect(screen.getByRole('link', { name: 'Agregalas desde tu perfil' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Agregar horario' })).toBeDisabled()
+    expect(screen.getByRole('link', { name: 'Cargá tus tarifas en tu perfil' })).toHaveAttribute(
       'href',
       '/perfil',
     )

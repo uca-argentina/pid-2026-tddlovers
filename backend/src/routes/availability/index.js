@@ -8,9 +8,11 @@ const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 export default async function availabilityRoutes(app) {
   /**
    * El tablero del alumno: la disponibilidad YA con fecha y YA neta de lo
-   * reservado. Una fila por (ventana, fecha), con la materia, la modalidad,
-   * el cupo y los turnos que quedan — incluidas las grupales a las que
-   * todavía se puede sumar.
+   * reservado. Una fila por (ventana, fecha), con la modalidad, el cupo, las
+   * materias que se pueden reservar (con su tarifa por hora), los tramos
+   * libres (`free`) y las grupales a las que todavía se puede sumar
+   * (`groups`). La duración la elige el alumno, así que no hay turnos
+   * cerrados: ver openingsForWindow.
    *
    * El alumno nunca ve una ventana semanal: el puente entre "los lunes de 13
    * a 15:30" y "el lunes 14 de septiembre" se hace acá.

@@ -1,13 +1,20 @@
 import { Component } from 'react'
+import { Link } from 'react-router-dom'
 import Banner from '../../components/Banner.jsx'
 import TimeRangeSlider from '../../components/TimeRangeSlider.jsx'
 import { SpinnerIcon } from '../../components/icons.jsx'
 import {
+  formatHourlyRate,
+  MIN_CLASS_MINUTES,
+  rateModalities,
+  ratesForModality,
+} from '../../utils/rates.js'
+import {
   formatMinutes,
   MAX_STUDENTS_LIMIT,
-  MIN_DURATION,
   MIN_GROUP_SIZE,
   MODALITIES,
+  modalityPlural,
   needsAddress,
   needsMeetingUrl,
   toMinutes,
@@ -29,8 +36,13 @@ let nextFormId = 0
  *
  * El horario se elige con el mismo slider del filtro del alumno, de a media
  * hora: así el inicio y el fin siempre caen en :00/:30 y nunca quedan al
- * revés. La duración y el precio son texto libre, porque son cualquier
- * número (una clase de 45 min, $ 12.500).
+ * revés.
+ *
+ * No hay materia, duración ni precio: la ventana es "cuándo estoy y cómo".
+ * El alumno elige la materia (entre las que el docente tarifó en esa
+ * modalidad) y cuánto dura la clase, y paga según la tarifa por hora. Por eso
+ * abajo de la modalidad se muestra qué va a poder elegir el alumno — o que no
+ * hay nada, si el docente no tiene tarifas para esa modalidad.
  */
 class WindowForm extends Component {
   constructor(props) {
@@ -89,35 +101,9 @@ class WindowForm extends Component {
     }
   }
 
-  renderSubject(errors) {
-    const { draft, subjects, saving } = this.props
-    return (
-      <div className="window-form-field">
-        <label className="window-form-label" htmlFor={this.fieldId('subject')}>
-          Materia
-        </label>
-        <select
-          id={this.fieldId('subject')}
-          className="window-form-select"
-          value={draft.subjectId}
-          onChange={this.handleField('subjectId')}
-          disabled={saving}
-          {...this.invalidProps(errors, 'subjectId')}
-        >
-          <option value="">Elegí una materia</option>
-          {subjects.map((subject) => (
-            <option key={subject.id} value={subject.id}>
-              {subject.name}
-            </option>
-          ))}
-        </select>
-        {this.renderError(errors, 'subjectId')}
-      </div>
-    )
-  }
-
   renderTimes() {
     const { draft, saving } = this.props
+    const largo = toMinutes(draft.end) - toMinutes(draft.start)
     return (
       <fieldset className="window-form-fieldset">
         <legend className="window-form-label">Horario</legend>
@@ -129,66 +115,11 @@ class WindowForm extends Component {
           onChange={this.handleRange}
           disabled={saving}
         />
+        <span className="window-form-hint">
+          {formatMinutes(largo)} disponibles. Cada alumno elige cuánto dura su clase, desde{' '}
+          {MIN_CLASS_MINUTES} min.
+        </span>
       </fieldset>
-    )
-  }
-
-  /** Duración y precio: dos números que se tipean, uno al lado del otro. */
-  renderNumbers(errors) {
-    const { draft, saving } = this.props
-    const largo = toMinutes(draft.end) - toMinutes(draft.start)
-
-    return (
-      <div className="window-form-row">
-        <div className="window-form-field">
-          <label className="window-form-label" htmlFor={this.fieldId('duration')}>
-            Cada clase dura
-          </label>
-          <div className="window-form-affix">
-            <input
-              id={this.fieldId('duration')}
-              className="window-form-input"
-              type="text"
-              inputMode="numeric"
-              placeholder="60"
-              value={draft.durationMinutes}
-              onChange={this.handleField('durationMinutes')}
-              disabled={saving}
-              {...this.invalidProps(errors, 'durationMinutes')}
-            />
-            <span className="window-form-suffix">min</span>
-          </div>
-          {this.renderError(errors, 'durationMinutes') || (
-            <span className="window-form-hint">
-              Mínimo {MIN_DURATION} min. El horario dura {formatMinutes(largo)}.
-            </span>
-          )}
-        </div>
-        <div className="window-form-field">
-          <label className="window-form-label" htmlFor={this.fieldId('price')}>
-            Precio por clase
-          </label>
-          <div className="window-form-affix">
-            <span className="window-form-prefix">$</span>
-            <input
-              id={this.fieldId('price')}
-              className="window-form-input has-prefix"
-              type="text"
-              inputMode="numeric"
-              placeholder="15.000"
-              value={draft.price}
-              onChange={this.handleField('price')}
-              disabled={saving}
-              {...this.invalidProps(errors, 'price')}
-            />
-          </div>
-          {this.renderError(errors, 'price') || (
-            <span className="window-form-hint">
-              {draft.group ? 'Lo paga cada alumno. ' : ''}0 si es sin cargo.
-            </span>
-          )}
-        </div>
-      </div>
     )
   }
 
@@ -216,8 +147,36 @@ class WindowForm extends Component {
             </button>
           ))}
         </div>
+        {this.renderOffer()}
       </fieldset>
     )
+  }
+
+  /**
+   * Qué va a poder reservar el alumno con esta modalidad. Se ve siempre, no
+   * solo al intentar guardar: sin tarifas para la modalidad, el docente tiene
+   * que saberlo antes de completar todo lo demás.
+   */
+  renderOffer() {
+    const { draft, rates } = this.props
+    const ofrecidas = ratesForModality(rates, draft.modality)
+
+    if (ofrecidas.length === 0) {
+      return (
+        <p className="window-form-error" id={this.fieldId('modality-error')}>
+          No tenés tarifas para clases {modalityPlural(draft.modality)}.{' '}
+          <Link className="auth-link" to="/perfil">
+            Cargalas en tu perfil
+          </Link>
+          .
+        </p>
+      )
+    }
+
+    const lista = ofrecidas
+      .map((rate) => `${rate.subjectName} (${formatHourlyRate(rate.hourlyRateCents)})`)
+      .join(', ')
+    return <span className="window-form-hint">Los alumnos eligen entre: {lista}.</span>
   }
 
   renderLocation(errors) {
@@ -345,15 +304,13 @@ class WindowForm extends Component {
 
   render() {
     const { draft, saving, serverError, isNew, originalRepeats, iso, onCancel } = this.props
-    const errors = validateDraft(draft)
+    const errors = validateDraft(draft, { rateModalities: rateModalities(this.props.rates) })
 
     return (
       <form className="window-form" onSubmit={this.handleSubmit} noValidate>
-        <h3 className="window-form-title">{isNew ? 'Nueva clase' : 'Editar clase'}</h3>
+        <h3 className="window-form-title">{isNew ? 'Nuevo horario' : 'Editar horario'}</h3>
 
-        {this.renderSubject(errors)}
         {this.renderTimes()}
-        {this.renderNumbers(errors)}
         {this.renderModality()}
         {this.renderLocation(errors)}
         {this.renderCapacity(errors)}
@@ -395,7 +352,7 @@ class WindowForm extends Component {
 }
 
 WindowForm.defaultProps = {
-  subjects: [],
+  rates: [],
   saving: false,
   showErrors: false,
   serverError: null,

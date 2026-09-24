@@ -12,6 +12,7 @@ import WindowCard from './WindowCard.jsx'
 import WindowForm from './WindowForm.jsx'
 import { createWindow, deleteWindow, updateWindow } from '../../api/client.js'
 import { addDays, formatDayLong, fromISODate, toISODate } from '../../utils/calendar.js'
+import { rateModalities, ratesForModality } from '../../utils/rates.js'
 import {
   draftFromWindow,
   draftToPayload,
@@ -27,6 +28,10 @@ const NEW = 'new'
  * El modal de un día: cada ventana de disponibilidad de ese día es una
  * tarjeta, y desde acá se agregan, editan y borran. Las flechas de arriba
  * pasan al día anterior o siguiente sin cerrar el modal.
+ *
+ * `rates` son las tarifas del docente con el nombre de la materia (ver
+ * resolveRates): de ahí sale qué puede reservar el alumno en cada ventana, y
+ * en qué modalidades tiene sentido cargar una.
  *
  * Una sola tarjeta en edición a la vez, y mientras se edita no se puede
  * cambiar de día: el borrador es de ESE día, y perderlo por tocar una flecha
@@ -86,30 +91,20 @@ class DayWindowsDialog extends Component {
     return this.props.iso >= this.props.today
   }
 
+  getRateModalities() {
+    return rateModalities(this.props.rates)
+  }
+
   newDraft() {
-    const { iso, subjects } = this.props
-    // Con una sola materia no hay nada que elegir.
-    return emptyDraft({ date: iso, subjectId: subjects.length === 1 ? subjects[0].id : '' })
+    // Arranca en una modalidad en la que el docente tenga tarifas: si solo da
+    // presencial, no tiene sentido que el formulario abra en virtual.
+    const [primera = 'virtual'] = this.getRateModalities()
+    const modality = this.getRateModalities().includes('virtual') ? 'virtual' : primera
+    return emptyDraft({ date: this.props.iso, modality })
   }
 
   getWindows() {
     return windowsOn(this.props.windows, this.props.iso)
-  }
-
-  isTaught(window) {
-    return this.props.subjects.some((subject) => String(subject.id) === String(window.subjectId))
-  }
-
-  /**
-   * Las materias para el select. Si la ventana que se edita es de una
-   * materia que ya no está en el perfil, se agrega igual para que el select
-   * no aparezca vacío; el backend no va a dejar guardarla, y lo dice.
-   */
-  getSubjects() {
-    const { subjects } = this.props
-    const { original } = this.state
-    if (!original || this.isTaught(original)) return subjects
-    return [...subjects, { id: original.subjectId, name: original.subjectName }]
   }
 
   handleDay = (delta) => () => {
@@ -171,7 +166,7 @@ class DayWindowsDialog extends Component {
     const { draft, editing, saving } = this.state
     if (saving) return
 
-    if (Object.keys(validateDraft(draft)).length > 0) {
+    if (Object.keys(validateDraft(draft, { rateModalities: this.getRateModalities() })).length > 0) {
       this.setState({ showErrors: true })
       return
     }
@@ -189,14 +184,14 @@ class DayWindowsDialog extends Component {
           draft: null,
           original: null,
           saving: false,
-          notice: editing === NEW ? 'Listo, agregamos la clase.' : 'Listo, guardamos los cambios.',
+          notice: editing === NEW ? 'Listo, agregamos el horario.' : 'Listo, guardamos los cambios.',
         })
       })
       .catch((error) => {
         if (this.unmounted) return
         this.setState({
           saving: false,
-          serverError: error.message || 'No se pudo guardar la clase. Probá de nuevo.',
+          serverError: error.message || 'No se pudo guardar el horario. Probá de nuevo.',
         })
       })
   }
@@ -218,13 +213,13 @@ class DayWindowsDialog extends Component {
       .then(() => this.props.onChanged())
       .then(() => {
         if (this.unmounted) return
-        this.setState({ deleting: false, confirmDeleteId: null, notice: 'Listo, eliminamos la clase.' })
+        this.setState({ deleting: false, confirmDeleteId: null, notice: 'Listo, eliminamos el horario.' })
       })
       .catch((error) => {
         if (this.unmounted) return
         this.setState({
           deleting: false,
-          serverError: error.message || 'No se pudo eliminar la clase. Probá de nuevo.',
+          serverError: error.message || 'No se pudo eliminar el horario. Probá de nuevo.',
         })
       })
   }
@@ -270,7 +265,7 @@ class DayWindowsDialog extends Component {
         <WindowForm
           draft={draft}
           iso={this.props.iso}
-          subjects={this.getSubjects()}
+          rates={this.props.rates}
           isNew={isNew}
           originalRepeats={Boolean(original?.repeatsWeekly)}
           saving={saving}
@@ -299,7 +294,7 @@ class DayWindowsDialog extends Component {
           window={window}
           focused={focused}
           cardRef={focused ? this.setFocusedRef : undefined}
-          notTaught={!this.isTaught(window)}
+          subjects={ratesForModality(this.props.rates, window.modality)}
           readOnly={readOnly}
           confirming={confirmDeleteId === window.id}
           deleting={deleting}
@@ -313,17 +308,16 @@ class DayWindowsDialog extends Component {
   }
 
   renderFooter() {
-    const { subjects } = this.props
     if (!this.canEdit()) {
       return (
         <p className="day-dialog-note">Este día ya pasó: podés ver lo que ofreciste, no cambiarlo.</p>
       )
     }
     if (this.state.editing !== null) return null
-    if (subjects.length === 0) {
+    if (this.props.rates.length === 0) {
       return (
         <p className="day-dialog-note">
-          Para cargar clases primero elegí qué materias das.{' '}
+          Para cargar horarios primero poné cuánto cobrás cada materia.{' '}
           <Link className="auth-link" to="/perfil">
             Ir a mi perfil
           </Link>
@@ -333,7 +327,7 @@ class DayWindowsDialog extends Component {
     return (
       <button type="button" className="day-dialog-add" onClick={this.handleAdd}>
         <PlusIcon />
-        Agregar clase
+        Agregar horario
       </button>
     )
   }
@@ -345,7 +339,7 @@ class DayWindowsDialog extends Component {
     const vacio = windows.length === 0 && editing !== NEW
 
     return (
-      <Modal title="Clases del día" onClose={onClose}>
+      <Modal title="Horarios del día" onClose={onClose}>
         <div className="day-dialog">
           {this.renderNav()}
 
@@ -361,7 +355,7 @@ class DayWindowsDialog extends Component {
             </p>
           ) : null}
           {!loading && vacio ? (
-            <p className="day-dialog-empty">No ofrecés clases este día.</p>
+            <p className="day-dialog-empty">No ofrecés horarios este día.</p>
           ) : null}
 
           {windows.length > 0 || editing === NEW ? (
@@ -380,7 +374,7 @@ class DayWindowsDialog extends Component {
 
 DayWindowsDialog.defaultProps = {
   windows: [],
-  subjects: [],
+  rates: [],
   loading: false,
   focusId: null,
 }

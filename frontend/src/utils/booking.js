@@ -1,9 +1,13 @@
 // Lo que hace la pantalla del alumno con las filas que manda el backend. Cada
 // fila es UNA ventana de un docente en UNA fecha (ver
-// lib/availabilityExpansion.js en el backend): materia, modalidad, cupo y los
-// turnos que quedan en `slots`. Lo que ya está reservado con ese docente ya
-// viene restado; acá solo se cruza con las clases PROPIAS del alumno y se
-// filtra.
+// lib/availabilityExpansion.js en el backend): modalidad, cupo, las materias
+// que se pueden reservar con su tarifa (`subjects`), los tramos libres
+// (`free`) y las grupales a las que sumarse (`groups`). Lo que ya está
+// reservado con ese docente ya viene restado; acá solo se cruza con las
+// clases PROPIAS del alumno y se filtra.
+//
+// No hay turnos cerrados: la duración la elige el alumno. De cada tramo libre
+// salen inicios en :00/:30, cada uno con la clase más larga que entra.
 //
 // Es el primer archivo de utils/ que importa de otro utils/: la dirección es
 // siempre booking -> {calendar, availability} y nunca al revés, así que no
@@ -12,6 +16,10 @@
 
 import { DAY_KEYS, dayLabel, formatRangeLabel } from './availability.js'
 import { fromISODate, mondayIndex } from './calendar.js'
+import { CLASS_MINUTES_STEP, MIN_CLASS_MINUTES } from './rates.js'
+
+// Los inicios van de a media hora, igual que en el backend.
+const START_STEP = 30
 
 /** '2026-09-14' -> 'lunes'. */
 export function dayKeyFromIso(iso) {
@@ -25,7 +33,7 @@ export function dayKeyFromDate(date) {
 }
 
 /** 'HH:MM' -> minutos desde medianoche ('24:00' -> 1440), o -1 si no es hora. */
-function toMinutes(time) {
+export function toMinutes(time) {
   const match = /^([01]\d|2[0-4]):([0-5]\d)$/.exec(time ?? '')
   if (!match) return -1
   return Number(match[1]) * 60 + Number(match[2])
@@ -57,38 +65,79 @@ function lessonRange(lesson) {
   return { start: lesson.startTime, end: lesson.endTime }
 }
 
+function toTime(minutes) {
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
 /**
- * ¿Esta clase propia ES este turno? Pasa con una grupal: el alumno ya se
- * anotó y el turno sigue ofreciéndose porque queda lugar para otros.
+ * ¿Esta clase propia ES esta grupal? Pasa cuando el alumno ya se anotó y la
+ * grupal sigue ofreciéndose porque queda lugar para otros.
  */
-function isSameClass(lesson, card, slot) {
-  return String(lesson.teacherId) === String(card.teacherId) && lesson.startTime === slot.start
+function isSameClass(lesson, card, group) {
+  return String(lesson.teacherId) === String(card.teacherId) && lesson.startTime === group.start
+}
+
+/**
+ * Los inicios que salen de los tramos libres, cada uno con la clase más larga
+ * que entra (`maxMinutes`, de a 5): hasta el fin del tramo o hasta la
+ * próxima clase propia, lo que llegue primero. `blocked` si ni la clase más
+ * corta entra sin pisarse con una clase propia.
+ *
+ * `busy` son las clases propias del día, { start, end }. Sin ellas (sin
+ * usuario) son todos los inicios del tramo.
+ */
+export function startOptions(free, busy = []) {
+  const ocupado = busy.map(toSpan).filter(Boolean)
+  const opciones = []
+
+  for (const tramo of free || []) {
+    const span = toSpan(tramo)
+    if (!span) continue
+
+    for (let inicio = span.from; inicio + MIN_CLASS_MINUTES <= span.to; inicio += START_STEP) {
+      let limite = span.to
+      let blocked = false
+      for (const clase of ocupado) {
+        if (clase.from < inicio + MIN_CLASS_MINUTES && inicio < clase.to) blocked = true
+        else if (clase.from >= inicio + MIN_CLASS_MINUTES) limite = Math.min(limite, clase.from)
+      }
+      const maxMinutes = Math.floor((limite - inicio) / CLASS_MINUTES_STEP) * CLASS_MINUTES_STEP
+      opciones.push({ start: toTime(inicio), maxMinutes, blocked })
+    }
+  }
+
+  return opciones
 }
 
 /**
  * Cruza cada fila con las clases que el alumno ya tiene ese día. No se resta
- * nada: el turno del docente sigue existiendo, lo que pasa es que este alumno
- * no lo puede tomar. Cada turno queda marcado:
- *   - `joined`: ya está anotado en esa grupal;
- *   - `blocked`: se le pisa con otra clase suya (o es la misma).
- *
- * `clashes` son las clases propias que se pisan con la ventana, sin contar
- * aquellas en las que ya está anotado ahí mismo (esas se avisan aparte).
+ * nada: el rato del docente sigue existiendo, lo que pasa es que este alumno
+ * no lo puede tomar. Queda:
+ *   - `groups`, cada una con `joined` (ya está anotado) y `blocked` (se le
+ *     pisa con otra clase suya, o es la misma);
+ *   - `starts`: los inicios posibles (ver startOptions), ya recortados por
+ *     las clases propias;
+ *   - `clashes`: las clases propias que se pisan con la ventana, sin contar
+ *     aquellas en las que ya está anotado ahí mismo (esas se avisan aparte).
  */
 export function annotateClashes(cards, myLessons) {
   return cards.map((card) => {
     const delDia = myLessons.filter((lesson) => lesson.date === card.date)
 
-    const slots = card.slots.map((slot) => {
-      const joined = delDia.some((lesson) => isSameClass(lesson, card, slot))
-      const blocked = joined || delDia.some((lesson) => rangesOverlap(slot, lessonRange(lesson)))
-      return { ...slot, joined, blocked }
+    const groups = (card.groups || []).map((group) => {
+      const joined = delDia.some((lesson) => isSameClass(lesson, card, group))
+      const blocked = joined || delDia.some((lesson) => rangesOverlap(group, lessonRange(lesson)))
+      return { ...group, joined, blocked }
     })
+
+    const starts = startOptions(card.free, delDia.map(lessonRange))
 
     const window = { start: card.start, end: card.end }
     const clashes = delDia
       .filter((lesson) => rangesOverlap(window, lessonRange(lesson)))
-      .filter((lesson) => !slots.some((slot) => slot.joined && isSameClass(lesson, card, slot)))
+      .filter((lesson) => !groups.some((group) => group.joined && isSameClass(lesson, card, group)))
       .map((lesson) => ({
         id: lesson.id,
         subjectName: lesson.subjectName,
@@ -99,12 +148,20 @@ export function annotateClashes(cards, myLessons) {
 
     return {
       ...card,
-      slots,
+      groups,
+      starts,
       clashes,
-      joined: slots.filter((slot) => slot.joined),
-      bookable: slots.some((slot) => !slot.blocked),
+      joined: groups.filter((group) => group.joined),
+      bookable:
+        groups.some((group) => !group.blocked) || starts.some((option) => !option.blocked),
     }
   })
+}
+
+/** La tarifa más baja de la ventana, para el "desde $ X/h" de la tarjeta. */
+export function lowestRate(card) {
+  const tarifas = (card.subjects || []).map((subject) => subject.hourlyRateCents)
+  return tarifas.length > 0 ? Math.min(...tarifas) : null
 }
 
 /** { [iso]: Card[] }, cada lista ordenada por hora y docente. */
@@ -137,14 +194,19 @@ export function normalizeText(text) {
 }
 
 /**
- * ¿Algún turno ARRANCA entre `fromTime` y `toTime`? Cualquiera de los dos
- * puede venir vacío (sin límite).
+ * ¿Alguna clase puede ARRANCAR entre `fromTime` y `toTime`? Cualquiera de
+ * los dos puede venir vacío (sin límite). Cuenta sumarse a una grupal y
+ * cualquier inicio de un tramo libre.
  */
 export function offersStartBetween(card, fromTime, toTime) {
   const desde = fromTime ? toMinutes(fromTime) : 0
   const hasta = toTime ? toMinutes(toTime) : Infinity
-  return card.slots.some((slot) => {
-    const inicio = toMinutes(slot.start)
+  const inicios = [
+    ...(card.groups || []).map((group) => group.start),
+    ...(card.starts || startOptions(card.free)).map((option) => option.start),
+  ]
+  return inicios.some((start) => {
+    const inicio = toMinutes(start)
     return inicio >= desde && inicio <= hasta
   })
 }
@@ -159,7 +221,10 @@ export function cardKind(card) {
  * significa "no filtra". Dentro de un mismo grupo de chips es O (Virtual o
  * Presencial).
  *
- * OJO: el filtro de horas elige qué TARJETAS entran, pero NO esconde turnos.
+ * El filtro de materia deja pasar la ventana si el docente da ALGUNA de las
+ * elegidas en esa modalidad: la materia se elige recién al reservar.
+ *
+ * OJO: el filtro de horas elige qué TARJETAS entran, pero NO esconde horarios.
  * La tarjeta dice la verdad sobre la ventana del docente; recortarla sería
  * inventar una disponibilidad más chica de la que hay.
  */
@@ -178,7 +243,12 @@ export function filterCards(cards, filters = {}) {
   return cards.filter((card) => {
     if (dayKeys.length > 0 && !dayKeys.includes(card.dayKey)) return false
     // El id se compara como string: puede venir de la URL.
-    if (subjectIds.length > 0 && !subjectIds.some((id) => String(id) === String(card.subject.id))) {
+    if (
+      subjectIds.length > 0 &&
+      !(card.subjects || []).some((subject) =>
+        subjectIds.some((id) => String(id) === String(subject.id)),
+      )
+    ) {
       return false
     }
     if (modalities.length > 0 && !modalities.includes(card.modality)) return false
@@ -236,11 +306,6 @@ export function formatClashes(clashes, bookable = true) {
   return bookable
     ? `Se superpone con ${joinWithY(listados)}${detalle}.`
     : `No te queda ningún horario libre: se superpone con ${joinWithY(listados)}${detalle}.`
-}
-
-/** '3 horarios' / '1 horario'. */
-export function formatSlotCount(count) {
-  return `${count} ${count === 1 ? 'horario' : 'horarios'}`
 }
 
 /** '2 de 5 anotados'. */

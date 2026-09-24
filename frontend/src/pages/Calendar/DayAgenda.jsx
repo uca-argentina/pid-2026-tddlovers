@@ -2,9 +2,9 @@ import { Component } from 'react'
 import { PinIcon, SpinnerIcon, UsersIcon, VideoIcon } from '../../components/icons.jsx'
 import { formatRangeLabel } from '../../utils/availability.js'
 import { formatDayLong, formatDuration } from '../../utils/calendar.js'
+import { formatMoney } from '../../utils/rates.js'
 import {
   capacityLabel,
-  formatPrice,
   modalityLabel,
   needsAddress,
   needsMeetingUrl,
@@ -111,8 +111,9 @@ class DayAgenda extends Component {
 
   renderItem(item) {
     const counterpart = this.getCounterpart(item)
-    // Nulo en las clases de antes de que existiera el precio.
-    const tienePrecio = item.price !== null && item.price !== undefined
+    // En centavos, calculado al reservar (tarifa × duración). Defensivo por
+    // si llega una clase sin él.
+    const tienePrecio = item.priceCents !== null && item.priceCents !== undefined
 
     return (
       <li key={item.id} className="day-agenda-item">
@@ -144,7 +145,7 @@ class DayAgenda extends Component {
           </p>
         )}
 
-        {tienePrecio ? <p className="day-agenda-price">{formatPrice(item.price)}</p> : null}
+        {tienePrecio ? <p className="day-agenda-price">{formatMoney(item.priceCents)}</p> : null}
       </li>
     )
   }

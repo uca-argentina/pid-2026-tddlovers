@@ -57,26 +57,15 @@ export async function findSubjectIdsByTeacher(teacherId) {
 }
 
 /**
- * ¿Este docente da esta materia? La disponibilidad ya no dice de qué materia
- * es, así que al reservar es lo único que ata la materia elegida al docente.
- */
-export async function teacherTeachesSubject(teacherId, subjectId) {
-  const result = await getPool().query(
-    `SELECT 1 FROM teacher_subjects WHERE teacher_id = $1 AND subject_id = $2 LIMIT 1`,
-    [teacherId, subjectId]
-  );
-  return result.rowCount > 0;
-}
-
-/**
- * Actualiza el perfil y, si es docente, reemplaza sus materias por las que
- * llegan. Todo en una transacción: si falla el vínculo con las materias, el
- * teléfono tampoco se guarda, y nunca queda un docente a medio actualizar.
+ * Actualiza el perfil y, si es docente, reemplaza sus materias y sus tarifas
+ * por las que llegan. Todo en una transacción: si falla una tarifa, ni el
+ * teléfono ni las materias se guardan, y nunca queda un docente a medio
+ * actualizar.
  *
- * `subjectIds` se ignora para los alumnos: teacher_subjects está pensada para
- * docentes, y el registro tampoco les pide materias.
+ * `subjectIds` y `rates` se ignoran para los alumnos: el registro tampoco les
+ * pide materias. Cualquiera de los dos puede venir undefined = no se toca.
  */
-export async function updateUserProfile(userId, { telefono, subjectIds }) {
+export async function updateUserProfile(userId, { telefono, subjectIds, rates }) {
   const client = await getPool().connect();
   try {
     await client.query('BEGIN');
@@ -105,6 +94,26 @@ export async function updateUserProfile(userId, { telefono, subjectIds }) {
            FROM unnest($2::uuid[]) AS subject_id
            ON CONFLICT DO NOTHING`,
           [userId, subjectIds]
+        );
+      }
+    }
+
+    // Después de las materias: sacar una materia ya se llevó sus tarifas
+    // (FK con cascada), y las nuevas solo pueden ser de materias que quedan.
+    if (user.role === 'teacher' && Array.isArray(rates)) {
+      await client.query(`DELETE FROM teacher_rates WHERE teacher_id = $1`, [userId]);
+      if (rates.length > 0) {
+        await client.query(
+          `INSERT INTO teacher_rates (teacher_id, subject_id, modality, hourly_rate_cents)
+           SELECT $1, r.subject_id, r.modality, r.cents
+           FROM unnest($2::uuid[], $3::class_modality[], $4::int[])
+             AS r(subject_id, modality, cents)`,
+          [
+            userId,
+            rates.map((rate) => rate.subjectId),
+            rates.map((rate) => rate.modality),
+            rates.map((rate) => rate.hourlyRateCents),
+          ]
         );
       }
     }

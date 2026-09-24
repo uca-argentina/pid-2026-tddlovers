@@ -1,6 +1,8 @@
 // Las ventanas de disponibilidad del docente: "el lunes 14 de 13:00 a 16:00
-// doy Matemática, clases de 1 h, presencial, hasta 4 alumnos", con la opción
-// de que se repita todas las semanas desde ese día.
+// estoy disponible, presencial, hasta 4 alumnos por clase", con la opción de
+// que se repita todas las semanas desde ese día. La ventana no dice materia,
+// duración ni precio: la materia y la duración las elige el alumno, y el
+// precio sale de las tarifas del docente (ver rates.js).
 //
 // Funciones puras, sin React, igual que calendar.js y availability.js. De acá
 // salen la ubicación de cada ventana en la semana que se muestra, las
@@ -28,11 +30,8 @@ const MODALITY_LABELS = MODALITIES.reduce((acc, item) => {
   return acc
 }, {})
 
-// La duración es libre (45, 50, 75 min...), pero no menos de media hora.
-export const MIN_DURATION = 30
-// Los mismos techos que los CHECK de la base: frenan un typo con ceros de más.
+// El mismo techo que el CHECK de la base: frena un typo con ceros de más.
 export const MAX_STUDENTS_LIMIT = 50
-export const MAX_PRICE = 10000000
 // Grupal con cupo 1 sería individual: el mínimo de una grupal es 2.
 export const MIN_GROUP_SIZE = 2
 
@@ -68,34 +67,6 @@ export function formatMinutes(total) {
   if (hours === 0) return `${minutes} min`
   if (minutes === 0) return `${hours} h`
   return `${hours} h ${minutes} min`
-}
-
-const PRICE_FORMAT = new Intl.NumberFormat('es-AR', {
-  style: 'currency',
-  currency: 'ARS',
-  maximumFractionDigits: 0,
-})
-
-/** 15000 -> '$ 15.000'; 0 -> 'Sin cargo'. Es por alumno y por clase. */
-export function formatPrice(price) {
-  if (price === 0) return 'Sin cargo'
-  return PRICE_FORMAT.format(price)
-}
-
-/**
- * Lo que se tipeó en el campo de precio -> pesos enteros, o NaN. Acepta cómo
- * se escribe un monto acá: '15000', '15.000', '$ 15.000'. Una coma es de
- * centavos, y centavos no hay.
- */
-export function parsePrice(text) {
-  const limpio = String(text).replace(/[\s$.]/g, '')
-  return /^\d+$/.test(limpio) ? Number(limpio) : NaN
-}
-
-/** '45' -> 45, o NaN si no son minutos enteros. */
-export function parseMinutes(text) {
-  const limpio = String(text).trim()
-  return /^\d+$/.test(limpio) ? Number(limpio) : NaN
 }
 
 /** 'Individual' o 'Grupal · hasta 5'. */
@@ -190,20 +161,16 @@ export function visibleHours(windows) {
 /**
  * Lo que el formulario edita. Se parece a la ventana pero separa "es grupal"
  * del cupo: así destildar grupal y volver a tildarlo no pierde el número que
- * se había escrito. Duración y precio son texto, tal cual se tipean: se
- * convierten recién al mandar.
+ * se había escrito.
  */
-export function emptyDraft({ date, subjectId = '' }) {
+export function emptyDraft({ date, modality = 'virtual' }) {
   return {
     id: null,
     date,
     repeatsWeekly: false,
     start: '09:00',
     end: '10:00',
-    subjectId,
-    durationMinutes: '60',
-    price: '',
-    modality: 'virtual',
+    modality,
     group: false,
     groupSize: String(MIN_GROUP_SIZE),
     meetingUrl: '',
@@ -219,9 +186,6 @@ export function draftFromWindow(window) {
     repeatsWeekly: window.repeatsWeekly,
     start: window.start,
     end: window.end,
-    subjectId: window.subjectId,
-    durationMinutes: String(window.durationMinutes),
-    price: String(window.price ?? ''),
     modality: window.modality,
     group: window.maxStudents > 1,
     groupSize: String(window.maxStudents > 1 ? window.maxStudents : MIN_GROUP_SIZE),
@@ -238,9 +202,6 @@ export function draftToPayload(draft) {
     repeatsWeekly: draft.repeatsWeekly,
     start: draft.start,
     end: draft.end,
-    subjectId: draft.subjectId,
-    durationMinutes: parseMinutes(draft.durationMinutes),
-    price: parsePrice(draft.price),
     modality: draft.modality,
     maxStudents: draft.group ? Number(draft.groupSize) : 1,
     meetingUrl: needsMeetingUrl(draft.modality) ? draft.meetingUrl.trim() : '',
@@ -258,28 +219,27 @@ function isHttpUrl(text) {
   }
 }
 
+// Para "no tenés tarifas para clases ...".
+const MODALITY_PLURALS = { virtual: 'virtuales', in_person: 'presenciales', hybrid: 'híbridas' }
+
+/** 'virtuales', 'presenciales', 'híbridas'. */
+export function modalityPlural(key) {
+  return MODALITY_PLURALS[key] || key
+}
+
 /**
  * { campo: mensaje } con lo que está mal; vacío si se puede guardar. Todos a
  * la vez y no el primero: el formulario los muestra al lado de cada campo.
+ *
+ * `rateModalities`: las modalidades en las que el docente tiene tarifas. Una
+ * ventana en otra no le serviría a nadie (el alumno no tendría materia para
+ * elegir), y el backend tampoco la deja guardar.
  */
-export function validateDraft(draft) {
+export function validateDraft(draft, { rateModalities = null } = {}) {
   const errors = {}
 
-  if (!draft.subjectId) errors.subjectId = 'Elegí la materia.'
-
-  const largo = toMinutes(draft.end) - toMinutes(draft.start)
-  const duracion = parseMinutes(draft.durationMinutes)
-  if (Number.isNaN(duracion)) errors.durationMinutes = 'Escribí los minutos, por ejemplo 45.'
-  else if (duracion < MIN_DURATION) {
-    errors.durationMinutes = `Como mínimo ${MIN_DURATION} minutos.`
-  } else if (duracion > largo) {
-    errors.durationMinutes = `No entra en el horario, que dura ${formatMinutes(largo)}.`
-  }
-
-  const precio = parsePrice(draft.price)
-  if (String(draft.price).trim() === '') errors.price = 'Poné el precio (0 si es sin cargo).'
-  else if (Number.isNaN(precio) || precio > MAX_PRICE) {
-    errors.price = 'Un monto en pesos, sin centavos.'
+  if (rateModalities && !rateModalities.includes(draft.modality)) {
+    errors.modality = `No tenés tarifas para clases ${modalityPlural(draft.modality)}.`
   }
 
   if (draft.group) {
