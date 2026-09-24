@@ -139,10 +139,79 @@ describe('CalendarPage', () => {
 
     render(<CalendarPage />)
 
-    expect(await screen.findByRole('link', { name: 'Entrar a la clase' })).toHaveAttribute(
+    expect(await screen.findByRole('link', { name: 'Entrar a la videollamada' })).toHaveAttribute(
       'href',
       'https://meet.example.com/abc',
     )
+  })
+
+  it('una clase presencial reservada muestra la dirección exacta y la zona', async () => {
+    const iso = toISODate(today)
+    fetchClasses.mockResolvedValue([
+      classOn(iso, { modality: 'in_person', address: 'Honduras 4800, 2° B', locality: 'Palermo' }),
+    ])
+
+    render(<CalendarPage />)
+
+    expect(await screen.findByText('Honduras 4800, 2° B')).toBeInTheDocument()
+    expect(screen.getByText('Palermo')).toBeInTheDocument()
+  })
+
+  it('el alumno ve toda la información de la clase que reservó', async () => {
+    const iso = toISODate(today)
+    fetchClasses.mockResolvedValue([
+      classOn(iso, {
+        startTime: '10:00',
+        endTime: '11:30',
+        subjectName: 'Física',
+        teacherName: 'Laura Gómez',
+        modality: 'hybrid',
+        meetingUrl: 'https://meet.example.com/abc',
+        address: 'Honduras 4800, 2° B',
+        locality: 'Palermo, CABA',
+        maxStudents: 4,
+        enrolled: 3,
+        price: 18000,
+      }),
+    ])
+
+    render(<CalendarPage />)
+
+    expect(await screen.findByText('10:00 – 11:30')).toBeInTheDocument()
+    expect(screen.getByText('1 h 30 min')).toBeInTheDocument()
+    expect(screen.getByText('Híbrida')).toBeInTheDocument()
+    expect(screen.getByText('Laura Gómez')).toBeInTheDocument()
+    expect(screen.getByText('Grupal · hasta 4 · 3 de 4 anotados')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Entrar a la videollamada' })).toHaveAttribute(
+      'href',
+      'https://meet.example.com/abc',
+    )
+    expect(screen.getByText('Honduras 4800, 2° B')).toBeInTheDocument()
+    expect(screen.getByText('Palermo, CABA')).toBeInTheDocument()
+    expect(screen.getByText(/18\.000/)).toBeInTheDocument()
+  })
+
+  it('una individual dice individual, y una sin cargo lo dice', async () => {
+    const iso = toISODate(today)
+    fetchClasses.mockResolvedValue([
+      classOn(iso, { modality: 'virtual', meetingUrl: 'https://x.com', maxStudents: 1, enrolled: 1, price: 0 }),
+    ])
+
+    render(<CalendarPage />)
+
+    expect(await screen.findByText('Individual')).toBeInTheDocument()
+    expect(screen.getByText('Sin cargo')).toBeInTheDocument()
+  })
+
+  it('una clase reservada antes de la modalidad avisa por qué le faltan datos', async () => {
+    const iso = toISODate(today)
+    fetchClasses.mockResolvedValue([classOn(iso)])
+
+    render(<CalendarPage />)
+
+    expect(
+      await screen.findByText(/Reservada antes de que las clases tuvieran modalidad/),
+    ).toHaveTextContent('Consultalos con el docente.')
   })
 
   it('ordena las clases del día por hora', async () => {

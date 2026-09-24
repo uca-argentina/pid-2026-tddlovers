@@ -112,6 +112,23 @@ class BookingDialog extends Component {
     )
   }
 
+  renderPrivateNote() {
+    const { modality } = this.props.card
+    const queSeVe = [
+      needsMeetingUrl(modality) ? 'El link de la videollamada' : null,
+      needsAddress(modality) ? 'la dirección exacta' : null,
+    ].filter(Boolean)
+    if (queSeVe.length === 0) return null
+
+    const sujeto = queSeVe.join(' y ')
+    const verbo = queSeVe.length > 1 ? 'te aparecen' : 'te aparece'
+    return (
+      <p className="booking-dialog-note">
+        {sujeto.charAt(0).toUpperCase() + sujeto.slice(1)} {verbo} en tu calendario cuando reserves.
+      </p>
+    )
+  }
+
   renderSummary() {
     const slot = this.getSelected()
     const { card } = this.props
@@ -167,20 +184,17 @@ class BookingDialog extends Component {
               <dt>Precio</dt>
               <dd>{formatPrice(card.price)}</dd>
             </div>
-            {needsAddress(card.modality) && card.address ? (
+            {needsAddress(card.modality) && card.locality ? (
               <div className="booking-dialog-wide">
-                <dt>Dirección</dt>
-                <dd>{card.address}</dd>
+                <dt>Localidad</dt>
+                <dd>{card.locality}</dd>
               </div>
             ) : null}
           </dl>
 
-          {/* El link no viaja en la disponibilidad: se lo lleva el que reserva. */}
-          {needsMeetingUrl(card.modality) ? (
-            <p className="booking-dialog-note">
-              El link de la videollamada te aparece en tu calendario cuando reserves.
-            </p>
-          ) : null}
+          {/* Ni el link ni la dirección exacta viajan en la disponibilidad: se
+              los lleva el que reserva, en su calendario. */}
+          {this.renderPrivateNote()}
 
           {this.renderSlots('Sumate a una clase grupal', grupos)}
           {this.renderSlots(grupos.length > 0 ? 'O empezá una nueva' : 'Elegí el horario', nuevos)}

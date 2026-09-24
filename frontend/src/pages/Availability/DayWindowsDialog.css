@@ -223,6 +223,18 @@
   color: var(--color-success);
 }
 
+/* La dirección exacta se alinea con el texto de la localidad (sin ícono
+   propio) y aclara quién la ve. */
+.window-card-facts .window-card-private {
+  padding-left: 21px;
+  flex-wrap: wrap;
+}
+
+.window-card-private-note {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
 /* Dirección y link van en su propio renglón y se cortan con puntos: un link
    de Meet entero rompe el ancho del modal en el teléfono. */
 .window-card-facts .window-card-wide {

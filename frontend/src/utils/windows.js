@@ -207,6 +207,7 @@ export function emptyDraft({ date, subjectId = '' }) {
     group: false,
     groupSize: String(MIN_GROUP_SIZE),
     meetingUrl: '',
+    locality: '',
     address: '',
   }
 }
@@ -225,6 +226,7 @@ export function draftFromWindow(window) {
     group: window.maxStudents > 1,
     groupSize: String(window.maxStudents > 1 ? window.maxStudents : MIN_GROUP_SIZE),
     meetingUrl: window.meetingUrl || '',
+    locality: window.locality || '',
     address: window.address || '',
   }
 }
@@ -242,6 +244,7 @@ export function draftToPayload(draft) {
     modality: draft.modality,
     maxStudents: draft.group ? Number(draft.groupSize) : 1,
     meetingUrl: needsMeetingUrl(draft.modality) ? draft.meetingUrl.trim() : '',
+    locality: needsAddress(draft.modality) ? draft.locality.trim() : '',
     address: needsAddress(draft.modality) ? draft.address.trim() : '',
   }
 }
@@ -292,8 +295,11 @@ export function validateDraft(draft) {
     else if (!isHttpUrl(link)) errors.meetingUrl = 'Tiene que ser un link (https://...).'
   }
 
+  if (needsAddress(draft.modality) && !draft.locality.trim()) {
+    errors.locality = 'Escribí la zona, por ejemplo Palermo, CABA.'
+  }
   if (needsAddress(draft.modality) && !draft.address.trim()) {
-    errors.address = 'Escribí dónde es la clase.'
+    errors.address = 'Escribí la dirección exacta.'
   }
 
   return errors

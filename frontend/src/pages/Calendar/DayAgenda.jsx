@@ -1,13 +1,21 @@
 import { Component } from 'react'
-import { PinIcon, SpinnerIcon, VideoIcon } from '../../components/icons.jsx'
+import { PinIcon, SpinnerIcon, UsersIcon, VideoIcon } from '../../components/icons.jsx'
+import { formatRangeLabel } from '../../utils/availability.js'
 import { formatDayLong, formatDuration } from '../../utils/calendar.js'
-import { formatPrice, modalityLabel, needsAddress, needsMeetingUrl } from '../../utils/windows.js'
+import {
+  capacityLabel,
+  formatPrice,
+  modalityLabel,
+  needsAddress,
+  needsMeetingUrl,
+} from '../../utils/windows.js'
 import './DayAgenda.css'
 
 /**
- * Panel del día seleccionado: las clases de ese día con más detalle que en
- * la grilla (hora de inicio, cuánto dura, materia y con quién). Las ordena
- * CalendarPage por hora, de la más temprana a la más tarde.
+ * Panel del día seleccionado: las clases de ese día con todo lo que hace
+ * falta para ir a darlas o a tomarlas — horario, materia, con quién, cupo,
+ * dónde (el link o la dirección exacta, que el alumno recién ve acá, después
+ * de reservar) y precio. Las ordena CalendarPage por hora.
  *
  * Quién es "el otro" depende de desde dónde se mire: un alumno ve el nombre
  * del docente y un docente ve el del alumno. Sin fetch propio: los datos
@@ -45,46 +53,71 @@ class DayAgenda extends Component {
   }
 
   /**
-   * Dónde es la clase. Las clases de antes de que existiera la modalidad no
-   * la tienen, y ahí no se muestra nada.
+   * El cupo. Para el alumno, en una grupal, cuántos van a estar (el número,
+   * no quiénes). El docente ya ve los nombres en la línea de alumnos.
+   */
+  renderCapacity(item) {
+    if (!item.maxStudents) return null
+    const grupal = item.maxStudents > 1
+    const anotados =
+      grupal && this.props.viewRole !== 'teacher' && item.enrolled
+        ? ` · ${item.enrolled} de ${item.maxStudents} anotados`
+        : ''
+
+    return (
+      <li>
+        <UsersIcon />
+        <span>
+          {capacityLabel(item.maxStudents)}
+          {anotados}
+        </span>
+      </li>
+    )
+  }
+
+  /**
+   * Dónde es la clase: el link para entrar y/o la dirección exacta con su
+   * localidad abajo. Las clases de antes de que existiera la modalidad no
+   * tienen nada de esto, y ahí no se muestra.
    */
   renderPlace(item) {
-    if (!item.modality) return null
     const link = needsMeetingUrl(item.modality) && item.meetingUrl
     const direccion = needsAddress(item.modality) && item.address
 
     return (
-      <ul className="day-agenda-place">
+      <>
         {link ? (
           <li>
             <VideoIcon />
             <a href={item.meetingUrl} target="_blank" rel="noreferrer">
-              {item.modality === 'hybrid' ? 'Entrar a la videollamada' : 'Entrar a la clase'}
+              Entrar a la videollamada
             </a>
           </li>
         ) : null}
         {direccion ? (
-          <li>
+          <li className="day-agenda-address">
             <PinIcon />
-            <span>{item.address}</span>
+            <span>
+              {item.address}
+              {item.locality ? (
+                <span className="day-agenda-locality">{item.locality}</span>
+              ) : null}
+            </span>
           </li>
         ) : null}
-        {!link && !direccion ? <li>{modalityLabel(item.modality)}</li> : null}
-        {/* Nulo en las clases de antes de que existiera el precio. */}
-        {item.price !== null && item.price !== undefined ? (
-          <li className="day-agenda-price">{formatPrice(item.price)}</li>
-        ) : null}
-      </ul>
+      </>
     )
   }
 
   renderItem(item) {
     const counterpart = this.getCounterpart(item)
+    // Nulo en las clases de antes de que existiera el precio.
+    const tienePrecio = item.price !== null && item.price !== undefined
 
     return (
       <li key={item.id} className="day-agenda-item">
         <div className="day-agenda-head">
-          <span className="day-agenda-time">{item.startTime}</span>
+          <span className="day-agenda-time">{formatRangeLabel(item.startTime, item.endTime)}</span>
           <span className="day-agenda-duration">{formatDuration(item.startTime, item.endTime)}</span>
           {item.modality ? (
             <span className="day-agenda-modality">{modalityLabel(item.modality)}</span>
@@ -94,7 +127,24 @@ class DayAgenda extends Component {
         <p className={`day-agenda-person ${counterpart.empty ? 'is-empty' : ''}`}>
           <span className="day-agenda-person-label">{counterpart.label}:</span> {counterpart.name}
         </p>
-        {this.renderPlace(item)}
+
+        {/* Reservada antes de que las clases tuvieran modalidad, cupo, precio y
+            ubicación: esos datos no existen y no hay de dónde sacarlos (la
+            ventana de origen ya no está). Se dice, en vez de mostrar una
+            tarjeta a medias sin explicación. */}
+        {item.modality ? (
+          <ul className="day-agenda-facts">
+            {this.renderCapacity(item)}
+            {this.renderPlace(item)}
+          </ul>
+        ) : (
+          <p className="day-agenda-legacy">
+            Reservada antes de que las clases tuvieran modalidad, lugar y precio. Consultalos con{' '}
+            {this.props.viewRole === 'teacher' ? 'el alumno' : 'el docente'}.
+          </p>
+        )}
+
+        {tienePrecio ? <p className="day-agenda-price">{formatPrice(item.price)}</p> : null}
       </li>
     )
   }

@@ -54,10 +54,16 @@ class WindowCard extends Component {
           {formatPrice(window.price)}
           {window.maxStudents > 1 && window.price > 0 ? ' por alumno' : ''}
         </li>
-        {needsAddress(window.modality) && window.address ? (
+        {needsAddress(window.modality) && window.locality ? (
           <li className="window-card-wide">
             <PinIcon />
+            {window.locality}
+          </li>
+        ) : null}
+        {needsAddress(window.modality) && window.address ? (
+          <li className="window-card-wide window-card-private">
             {window.address}
+            <span className="window-card-private-note">(solo la ven quienes reservan)</span>
           </li>
         ) : null}
         {needsMeetingUrl(window.modality) && window.meetingUrl ? (
@@ -147,6 +153,13 @@ class WindowCard extends Component {
         {/* La ventana queda guardada pero el tablero no la ofrece (ver
             findPublishedWindows): sin esto el docente no sabría por qué nadie
             reserva. */}
+        {/* Presenciales de antes de que existiera la localidad: el tablero
+            las muestra sin zona hasta que se complete. */}
+        {needsAddress(window.modality) && !window.locality ? (
+          <p className="window-card-warning">
+            Falta la localidad: editá la clase para que los alumnos sepan la zona.
+          </p>
+        ) : null}
         {notTaught ? (
           <p className="window-card-warning">
             Ya no tenés esta materia en tu perfil: los alumnos no ven esta clase.

@@ -34,7 +34,8 @@ class BookingCard extends Component {
   renderLocation() {
     const { card } = this.props
     const Icono = card.modality === 'in_person' ? PinIcon : VideoIcon
-    const donde = needsAddress(card.modality) && card.address ? ` · ${card.address}` : ''
+    // La localidad y no la dirección: la exacta se la lleva recién el que reserva.
+    const donde = needsAddress(card.modality) && card.locality ? ` · ${card.locality}` : ''
 
     return (
       <li>

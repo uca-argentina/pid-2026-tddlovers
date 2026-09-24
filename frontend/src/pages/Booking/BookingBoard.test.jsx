@@ -77,7 +77,7 @@ const carla = (overrides = {}) =>
     start: '09:00',
     end: '11:00',
     modality: 'in_person',
-    address: 'Aula 3',
+    locality: 'Puerto Madero',
     maxStudents: 4,
     slots: turnos('09:00', '11:00'),
     ...overrides,
@@ -146,7 +146,8 @@ describe('BookingBoard', () => {
     expect(await screen.findAllByRole('button', { name: /^Reservar / })).toHaveLength(2)
     expect(screen.getByRole('button', { name: 'Reservar Física con Carla Benítez' })).toBeEnabled()
     expect(screen.getByText('Grupal · hasta 4')).toBeInTheDocument()
-    expect(screen.getByText('Presencial · Aula 3')).toBeInTheDocument()
+    // La zona, nunca la dirección exacta: esa llega recién al reservar.
+    expect(screen.getByText('Presencial · Puerto Madero')).toBeInTheDocument()
   })
 
   it('una grupal con lugar invita a sumarse', async () => {
@@ -409,6 +410,21 @@ describe('BookingBoard', () => {
     await waitFor(() =>
       expect(bookLesson).toHaveBeenCalledWith({ windowId: 'w-carla', date: HOY, startTime: '09:00' }),
     )
+  })
+
+  it('en una presencial el modal dice la localidad y que la dirección llega al reservar', async () => {
+    fetchAvailability.mockResolvedValue([carla()])
+    renderBoard()
+    await esperarCarga()
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Reservar Física con Carla Benítez' }),
+    )
+
+    const modal = screen.getByRole('dialog')
+    expect(within(modal).getByText('Puerto Madero')).toBeInTheDocument()
+    expect(
+      within(modal).getByText('La dirección exacta te aparece en tu calendario cuando reserves.'),
+    ).toBeInTheDocument()
   })
 
   it('los horarios que chocan con una clase propia no se pueden elegir', async () => {

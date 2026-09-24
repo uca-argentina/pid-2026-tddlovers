@@ -244,10 +244,34 @@ class WindowForm extends Component {
             <span className="window-form-hint">Solo lo ven los alumnos que reservan.</span>
           </div>
         ) : null}
+        {/* Dos niveles a propósito: la localidad la ve cualquier alumno para
+            decidir si le queda cerca; la dirección exacta, solo el que
+            reservó (igual que el link). */}
+        {needsAddress(draft.modality) ? (
+          <div className="window-form-field">
+            <label className="window-form-label" htmlFor={this.fieldId('locality')}>
+              Localidad
+            </label>
+            <input
+              id={this.fieldId('locality')}
+              className="window-form-input"
+              type="text"
+              placeholder="Palermo, CABA"
+              maxLength={100}
+              value={draft.locality}
+              onChange={this.handleField('locality')}
+              disabled={saving}
+              {...this.invalidProps(errors, 'locality')}
+            />
+            {this.renderError(errors, 'locality') || (
+              <span className="window-form-hint">La ven todos los alumnos, antes de reservar.</span>
+            )}
+          </div>
+        ) : null}
         {needsAddress(draft.modality) ? (
           <div className="window-form-field">
             <label className="window-form-label" htmlFor={this.fieldId('address')}>
-              Dirección
+              Dirección exacta
             </label>
             <input
               id={this.fieldId('address')}
@@ -260,7 +284,9 @@ class WindowForm extends Component {
               disabled={saving}
               {...this.invalidProps(errors, 'address')}
             />
-            {this.renderError(errors, 'address')}
+            {this.renderError(errors, 'address') || (
+              <span className="window-form-hint">Solo la ven los alumnos que reservan.</span>
+            )}
           </div>
         ) : null}
       </>

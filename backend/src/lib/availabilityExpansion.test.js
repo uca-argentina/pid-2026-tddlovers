@@ -28,6 +28,7 @@ const ventana = (over = {}) => ({
   modality: 'virtual',
   maxStudents: 1,
   meetingUrl: 'https://meet.example.com/abc',
+  locality: null,
   address: null,
   ...over,
 });
@@ -171,6 +172,19 @@ describe('expandAvailability', () => {
 
   it('never exposes the meeting link', () => {
     expect(expandir()[0]).not.toHaveProperty('meetingUrl');
+  });
+
+  it('shows the locality of an in-person class but never its exact address', () => {
+    const presencial = ventana({
+      modality: 'in_person',
+      meetingUrl: null,
+      locality: 'Palermo, CABA',
+      address: 'Honduras 4800, 2° B',
+    });
+    const [row] = expandir({ windows: [presencial] });
+    expect(row.locality).toBe('Palermo, CABA');
+    expect(row).not.toHaveProperty('address');
+    expect(JSON.stringify(row)).not.toContain('Honduras');
   });
 
   it('repeats a weekly window on every matching date of the range', () => {

@@ -232,7 +232,8 @@ describe('AvailabilityPage — vista de docente', () => {
     await userEvent.type(within(modal).getByLabelText('Cada clase dura'), '45')
     await userEvent.type(within(modal).getByLabelText('Precio por clase'), '12.500')
     await userEvent.click(within(modal).getByRole('button', { name: 'Presencial' }))
-    await userEvent.type(within(modal).getByLabelText('Dirección'), 'Aula 3')
+    await userEvent.type(within(modal).getByLabelText('Localidad'), 'Palermo, CABA')
+    await userEvent.type(within(modal).getByLabelText('Dirección exacta'), 'Aula 3')
     await userEvent.click(within(modal).getByRole('button', { name: 'Grupal' }))
     await userEvent.click(within(modal).getByRole('checkbox'))
     const pedidosAntes = fetchMyWindows.mock.calls.length
@@ -250,6 +251,7 @@ describe('AvailabilityPage — vista de docente', () => {
       modality: 'in_person',
       maxStudents: 2,
       meetingUrl: '',
+      locality: 'Palermo, CABA',
       address: 'Aula 3',
     })
     expect(await within(modal).findByText('Listo, agregamos la clase.')).toBeInTheDocument()
@@ -317,7 +319,8 @@ describe('AvailabilityPage — vista de docente', () => {
 
     await userEvent.click(within(modal).getByRole('button', { name: /^Editar la clase/ }))
     await userEvent.click(within(modal).getByRole('button', { name: 'Híbrida' }))
-    await userEvent.type(within(modal).getByLabelText('Dirección'), 'Aula 3')
+    await userEvent.type(within(modal).getByLabelText('Localidad'), 'Palermo, CABA')
+    await userEvent.type(within(modal).getByLabelText('Dirección exacta'), 'Aula 3')
     await userEvent.click(within(modal).getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() => expect(updateWindow).toHaveBeenCalledTimes(1))
@@ -328,9 +331,34 @@ describe('AvailabilityPage — vista de docente', () => {
         durationMinutes: 60,
         modality: 'hybrid',
         meetingUrl: 'https://meet.example.com/abc',
+        locality: 'Palermo, CABA',
         address: 'Aula 3',
       }),
     )
+  })
+
+  it('una presencial pide localidad y dirección exacta', async () => {
+    await entrar()
+    await bloque()
+    const modal = await abrirFormulario()
+
+    await userEvent.click(within(modal).getByRole('button', { name: 'Presencial' }))
+    await userEvent.click(within(modal).getByRole('button', { name: 'Guardar' }))
+
+    expect(within(modal).getByText('Escribí la zona, por ejemplo Palermo, CABA.')).toBeInTheDocument()
+    expect(within(modal).getByText('Escribí la dirección exacta.')).toBeInTheDocument()
+    expect(createWindow).not.toHaveBeenCalled()
+  })
+
+  it('una presencial vieja sin localidad avisa que hay que completarla', async () => {
+    fetchMyWindows.mockResolvedValue([
+      ventana({ modality: 'in_person', meetingUrl: null, locality: null, address: 'Aula 3' }),
+    ])
+    await entrar()
+    await userEvent.click(await bloque())
+
+    const modal = screen.getByRole('dialog', { name: 'Clases del día' })
+    expect(within(modal).getByText(/Falta la localidad/)).toBeInTheDocument()
   })
 
   it('eliminar pide confirmación, y si se repite avisa que es de todas las semanas', async () => {

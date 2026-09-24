@@ -126,7 +126,9 @@ export function slotsForWindow(window, taken, cutoff = null) {
  * `taken`: [{ teacherId, date, start, end, subjectId, enrolled }], un
  * elemento por turno (una grupal con 3 alumnos es UNO con enrolled 3).
  *
- * El link de las virtuales no sale: se lo lleva el alumno recién al reservar.
+ * El link de las virtuales y la dirección exacta de las presenciales no
+ * salen: se los lleva el alumno recién al reservar. Para decidir alcanza con
+ * la localidad.
  */
 export function expandAvailability({ windows, taken, from, to, nowIso, nowTime }) {
   const takenByTeacherDate = new Map();
@@ -164,7 +166,7 @@ export function expandAvailability({ windows, taken, from, to, nowIso, nowTime }
         price: window.price,
         modality: window.modality,
         maxStudents: window.maxStudents,
-        address: window.address ?? null,
+        locality: window.locality ?? null,
         slots,
       });
     }

@@ -61,6 +61,7 @@ const ventana = (over = {}) => ({
   modality: 'in_person',
   maxStudents: 4,
   meetingUrl: '',
+  locality: 'Puerto Madero, CABA',
   address: 'Av. Alicia Moreau de Justo 1300',
   ...over,
 });

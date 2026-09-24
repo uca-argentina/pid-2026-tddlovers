@@ -59,9 +59,9 @@ describe('BookingCard', () => {
     expect(screen.getByText('Individual')).toBeInTheDocument()
   })
 
-  it('una presencial muestra la dirección', () => {
-    renderCard({ modality: 'in_person', address: 'Aula 3' })
-    expect(screen.getByText('Presencial · Aula 3')).toBeInTheDocument()
+  it('una presencial muestra la localidad', () => {
+    renderCard({ modality: 'in_person', locality: 'Palermo, CABA' })
+    expect(screen.getByText('Presencial · Palermo, CABA')).toBeInTheDocument()
   })
 
   it('muestra el precio y cuántos horarios le quedan libres', () => {

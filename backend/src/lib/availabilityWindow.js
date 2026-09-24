@@ -20,6 +20,7 @@ const TIME_RE = /^(?:[01]\d|2[0-3]):(?:00|30)$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_URL_LENGTH = 500;
 const MAX_ADDRESS_LENGTH = 200;
+const MAX_LOCALITY_LENGTH = 100;
 
 function isRealDate(iso) {
   if (!ISO_DATE_RE.test(iso ?? '')) return false;
@@ -116,10 +117,19 @@ export function validateWindow(body, { today, allowPastDate = false }) {
     }
   }
 
+  // Presencial: la localidad es lo que ve cualquier alumno; la dirección
+  // exacta, solo el que reservó. Las dos son obligatorias.
+  const locality = needsAddress ? String(body.locality ?? '').trim() : null;
   const address = needsAddress ? String(body.address ?? '').trim() : null;
   if (needsAddress) {
+    if (!locality) {
+      return { message: 'Falta la localidad de la clase presencial.', fields: { locality: 'required' } };
+    }
+    if (locality.length > MAX_LOCALITY_LENGTH) {
+      return fail('locality', `La localidad puede tener hasta ${MAX_LOCALITY_LENGTH} caracteres.`);
+    }
     if (!address) {
-      return { message: 'Falta la dirección de la clase presencial.', fields: { address: 'required' } };
+      return { message: 'Falta la dirección exacta de la clase presencial.', fields: { address: 'required' } };
     }
     if (address.length > MAX_ADDRESS_LENGTH) {
       return fail('address', `La dirección puede tener hasta ${MAX_ADDRESS_LENGTH} caracteres.`);
@@ -138,6 +148,7 @@ export function validateWindow(body, { today, allowPastDate = false }) {
       modality: body.modality,
       maxStudents,
       meetingUrl,
+      locality,
       address,
     },
   };

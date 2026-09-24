@@ -64,11 +64,15 @@
 .day-agenda-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  /* Con el horario completo ("10:00 – 11:30") la columna angosta no llega a
+     todo en un renglón: baja la etiqueta de modalidad, nunca se parte la hora. */
+  flex-wrap: wrap;
+  gap: 4px 8px;
   margin-bottom: 6px;
 }
 
 .day-agenda-time {
+  white-space: nowrap;
   font-size: 15px;
   font-weight: 700;
   color: var(--color-primary);
@@ -76,6 +80,7 @@
 }
 
 .day-agenda-duration {
+  white-space: nowrap;
   font-size: 12px;
   color: var(--color-text-muted);
 }
@@ -111,39 +116,58 @@
   font-weight: 600;
 }
 
-.day-agenda-place {
+.day-agenda-facts {
   list-style: none;
-  margin: 6px 0 0;
+  margin: 8px 0 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 
-.day-agenda-place li {
+.day-agenda-facts li {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  align-items: flex-start;
+  gap: 7px;
   min-width: 0;
   font-size: 12.5px;
   color: var(--color-text);
 }
 
-.day-agenda-place svg {
+.day-agenda-facts svg {
   flex-shrink: 0;
   width: 14px;
   height: 14px;
+  margin-top: 2px;
   color: var(--color-text-muted);
 }
 
-.day-agenda-place .day-agenda-price {
-  font-weight: 600;
-  color: var(--color-text-muted);
-}
-
-.day-agenda-place a {
+.day-agenda-facts a {
   color: var(--color-primary);
   font-weight: 600;
+}
+
+/* La localidad debajo de la dirección exacta, más chica: la dirección es lo
+   que hace falta para llegar; la zona, de referencia. */
+.day-agenda-locality {
+  display: block;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.day-agenda-legacy {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--color-text-muted);
+}
+
+.day-agenda-price {
+  margin-top: 8px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
 }
 
 @media (max-width: 900px) {

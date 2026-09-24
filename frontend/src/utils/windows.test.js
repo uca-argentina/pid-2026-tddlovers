@@ -31,6 +31,7 @@ const ventana = (over = {}) => ({
   modality: 'virtual',
   maxStudents: 1,
   meetingUrl: 'https://meet.example.com/abc',
+  locality: null,
   address: null,
   ...over,
 })
@@ -144,9 +145,16 @@ describe('borrador <-> ventana', () => {
 
   it('no manda la ubicación que la modalidad no usa', () => {
     const presencial = draftToPayload(
-      borrador({ modality: 'in_person', address: ' Aula 3 ', meetingUrl: 'https://x.com' }),
+      borrador({
+        modality: 'in_person',
+        locality: ' Palermo ',
+        address: ' Aula 3 ',
+        meetingUrl: 'https://x.com',
+      }),
     )
-    expect(presencial).toMatchObject({ address: 'Aula 3', meetingUrl: '' })
+    expect(presencial).toMatchObject({ locality: 'Palermo', address: 'Aula 3', meetingUrl: '' })
+    const virtual = draftToPayload(borrador({ locality: 'Palermo', address: 'Aula 3' }))
+    expect(virtual).toMatchObject({ locality: '', address: '' })
   })
 })
 
@@ -161,6 +169,7 @@ describe('validateDraft', () => {
     expect(validateDraft(borrador({ meetingUrl: 'meet' }))).toHaveProperty('meetingUrl')
     const hibrida = validateDraft(borrador({ modality: 'hybrid', address: '' }))
     expect(hibrida).toHaveProperty('address')
+    expect(hibrida).toHaveProperty('locality')
   })
 
   it('una grupal necesita entre 2 y 50', () => {

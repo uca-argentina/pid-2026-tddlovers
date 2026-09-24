@@ -15,6 +15,7 @@ const ventana = (over = {}) => ({
   modality: 'virtual',
   maxStudents: 1,
   meetingUrl: 'https://meet.example.com/abc',
+  locality: '',
   address: '',
   ...over,
 });
@@ -24,7 +25,7 @@ const validar = (over, opts = {}) => validateWindow(ventana(over), { today: HOY,
 describe('validateWindow', () => {
   it('accepts a complete virtual window and drops the unused address', () => {
     const { value } = validar();
-    expect(value).toMatchObject({ modality: 'virtual', address: null });
+    expect(value).toMatchObject({ modality: 'virtual', locality: null, address: null });
     expect(value.meetingUrl).toBe('https://meet.example.com/abc');
   });
 
@@ -76,7 +77,7 @@ describe('validateWindow', () => {
 
   it('requires the link for virtual and hybrid classes', () => {
     expect(validar({ meetingUrl: '  ' }).fields).toEqual({ meetingUrl: 'required' });
-    expect(validar({ modality: 'hybrid', address: 'Av. Alicia Moreau de Justo 1300', meetingUrl: '' }).fields)
+    expect(validar({ modality: 'hybrid', locality: 'Puerto Madero', address: 'Av. Alicia Moreau de Justo 1300', meetingUrl: '' }).fields)
       .toEqual({ meetingUrl: 'required' });
   });
 
@@ -85,10 +86,30 @@ describe('validateWindow', () => {
     expect(validar({ meetingUrl: 'meet' }).fields).toEqual({ meetingUrl: 'invalid' });
   });
 
-  it('requires the address for in-person classes and drops the unused link', () => {
-    expect(validar({ modality: 'in_person' }).fields).toEqual({ address: 'required' });
-    const { value } = validar({ modality: 'in_person', address: '  Av. Alicia Moreau de Justo 1300 ' });
-    expect(value).toMatchObject({ address: 'Av. Alicia Moreau de Justo 1300', meetingUrl: null });
+  it('requires locality and exact address for in-person classes, and drops the unused link', () => {
+    expect(validar({ modality: 'in_person', address: 'Aula 3' }).fields).toEqual({ locality: 'required' });
+    expect(validar({ modality: 'in_person', locality: 'Palermo' }).fields).toEqual({ address: 'required' });
+    const { value } = validar({
+      modality: 'in_person',
+      locality: ' Puerto Madero, CABA ',
+      address: '  Av. Alicia Moreau de Justo 1300 ',
+    });
+    expect(value).toMatchObject({
+      locality: 'Puerto Madero, CABA',
+      address: 'Av. Alicia Moreau de Justo 1300',
+      meetingUrl: null,
+    });
+  });
+
+  it('a hybrid class needs locality too', () => {
+    const hibrida = { modality: 'hybrid', address: 'Aula 3', meetingUrl: 'https://meet.example.com/abc' };
+    expect(validar(hibrida).fields).toEqual({ locality: 'required' });
+    expect(validar({ ...hibrida, locality: 'Palermo' }).value.locality).toBe('Palermo');
+  });
+
+  it('a virtual class keeps neither locality nor address', () => {
+    const { value } = validar({ locality: 'Palermo', address: 'Aula 3' });
+    expect(value).toMatchObject({ locality: null, address: null });
   });
 
   it('rejects an unknown modality', () => {

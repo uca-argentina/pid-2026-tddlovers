@@ -21,7 +21,16 @@ const CLASS_COLUMNS = `
   c.max_students AS "maxStudents",
   c.meeting_url AS "meetingUrl",
   c.address,
-  c.price
+  c.locality,
+  c.price,
+  (
+    -- Cuántos hay anotados en ese turno (una grupal son varias filas con el
+    -- mismo docente, fecha e inicio). Un número y no nombres: el alumno ve
+    -- cuánta gente va a haber, no quién.
+    SELECT count(*)::int FROM classes o
+    WHERE o.teacher_id = c.teacher_id AND o.class_date = c.class_date
+      AND o.start_time = c.start_time AND o.status = 'reservada'
+  ) AS enrolled
 `;
 
 const CLASS_JOINS = `
@@ -161,9 +170,9 @@ export async function bookClass({ window, studentId, date, startTime }) {
     const result = await client.query(
       `INSERT INTO classes (
          teacher_id, student_id, subject_id, class_date, start_time, end_time,
-         availability_id, modality, max_students, meeting_url, address, price
+         availability_id, modality, max_students, meeting_url, address, locality, price
        )
-       VALUES ($1, $2, $3, $4::date, $5::time, $6::time, $7, $8::class_modality, $9, $10, $11, $12)
+       VALUES ($1, $2, $3, $4::date, $5::time, $6::time, $7, $8::class_modality, $9, $10, $11, $12, $13)
        RETURNING id`,
       [
         window.teacherId,
@@ -177,6 +186,7 @@ export async function bookClass({ window, studentId, date, startTime }) {
         window.maxStudents,
         window.meetingUrl,
         window.address,
+        window.locality,
         window.price,
       ]
     );

@@ -16,6 +16,7 @@ const WINDOW_COLUMNS = `
   av.modality,
   av.max_students AS "maxStudents",
   av.meeting_url AS "meetingUrl",
+  av.locality,
   av.address
 `;
 
@@ -165,6 +166,7 @@ const WINDOW_VALUES = (w) => [
   w.maxStudents,
   w.meetingUrl,
   w.address,
+  w.locality,
 ];
 
 /** { window } o { conflict } con el mensaje para el docente. */
@@ -176,9 +178,9 @@ export async function createWindow(teacherId, window) {
     const result = await client.query(
       `INSERT INTO availability (
          teacher_id, start_date, repeats_weekly, start_time, end_time, subject_id,
-         duration_minutes, price, modality, max_students, meeting_url, address
+         duration_minutes, price, modality, max_students, meeting_url, address, locality
        )
-       VALUES ($1, $2::date, $3, $4::time, $5::time, $6, $7, $8, $9::class_modality, $10, $11, $12)
+       VALUES ($1, $2::date, $3, $4::time, $5::time, $6, $7, $8, $9::class_modality, $10, $11, $12, $13)
        RETURNING id`,
       [teacherId, ...WINDOW_VALUES(window)]
     );
@@ -209,7 +211,7 @@ export async function updateWindow(teacherId, id, window) {
       `UPDATE availability SET
          start_date = $3::date, repeats_weekly = $4, start_time = $5::time, end_time = $6::time,
          subject_id = $7, duration_minutes = $8, price = $9, modality = $10::class_modality,
-         max_students = $11, meeting_url = $12, address = $13
+         max_students = $11, meeting_url = $12, address = $13, locality = $14
        WHERE id = $1 AND teacher_id = $2`,
       [id, teacherId, ...WINDOW_VALUES(window)]
     );
