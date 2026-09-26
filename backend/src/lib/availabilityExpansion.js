@@ -1,7 +1,7 @@
-// El puente entre la plantilla semanal del docente y las fechas que reserva
-// el alumno. Esta es la pieza que el front tenía en utils/booking.js contra
-// los mocks y que siempre estuvo pensada para vivir acá (ver
-// PID-Front/CLAUDE.md, "weekly template → dated availability").
+// El puente entre las ventanas que carga el docente y las fechas que reserva
+// el alumno (ver CLAUDE.md, "weekly template → dated availability"). Una
+// ventana tiene una fecha y puede repetirse todas las semanas; acá se
+// proyecta sobre el rango pedido y se resta lo ya reservado.
 //
 // Todo se hace en minutos desde medianoche: comparar 'HH:MM' como texto
 // funciona de casualidad y se rompe con '24:00'.
@@ -15,6 +15,12 @@ const DAY_KEYS = [
   'sabado',
   'domingo',
 ];
+
+// Los arranques van de a media hora; los finales, donde caiga la duración
+// que elija el alumno.
+const STEP_MINUTES = 30;
+// La clase más corta que se puede reservar: un tramo más chico no sirve.
+const MIN_CLASS_MINUTES = 30;
 
 export function toMinutes(time) {
   const [h, m] = time.split(':').map(Number);
@@ -46,60 +52,117 @@ export function datesBetween(from, to) {
 }
 
 /**
- * Los pedazos de `ranges` que no toca ninguno de `busy`. Un hueco en el medio
- * parte un rango en dos; si lo tapan entero, desaparece.
- *
- * Tocarse en el borde NO es pisarse: 14:00-15:00 y 15:00-16:00 conviven.
+ * ¿La ventana cae en esa fecha? La fecha misma, o —si se repite— cualquier
+ * fecha posterior del mismo día de la semana. Nunca antes: una clase semanal
+ * que se cargó hoy no aparece en las semanas que ya pasaron.
  */
-export function subtractRanges(ranges, busy) {
-  let spans = ranges.map((r) => ({ from: toMinutes(r.start), to: toMinutes(r.end) }));
-
-  for (const b of busy) {
-    const taken = { from: toMinutes(b.start), to: toMinutes(b.end) };
-    const next = [];
-    for (const span of spans) {
-      if (taken.to <= span.from || taken.from >= span.to) {
-        next.push(span);
-        continue;
-      }
-      if (span.from < taken.from) next.push({ from: span.from, to: taken.from });
-      if (taken.to < span.to) next.push({ from: taken.to, to: span.to });
-    }
-    spans = next;
-  }
-
-  return spans
-    .sort((a, b) => a.from - b.from)
-    .map((s) => ({ start: toTime(s.from), end: toTime(s.to) }));
-}
-
-/** ¿Entra una clase de 1 h? Un resto de media hora no sirve para nada. */
-function fitsAClass(range) {
-  return toMinutes(range.end) - toMinutes(range.start) >= 60;
+export function occursOn(window, iso) {
+  if (iso === window.date) return true;
+  return (
+    window.repeatsWeekly && iso > window.date && dayKeyFromIso(iso) === dayKeyFromIso(window.date)
+  );
 }
 
 /**
- * Proyecta las plantillas semanales sobre las fechas del rango y resta lo ya
- * reservado. Devuelve una fila por (docente, fecha) con los rangos libres de
- * ese día y las materias del docente — la materia no es parte del horario, la
- * elige el alumno al reservar.
+ * Lo que el alumno puede hacer en UNA ocurrencia de una ventana:
+ *
+ *  - `free`: los tramos donde el docente no tiene ninguna clase (de esta
+ *    ventana o de otra: no da dos a la vez). `start` es el primer :00/:30
+ *    del tramo y `end` donde termina el tramo, que puede ser cualquier minuto
+ *    (una clase de 13:00 a 13:45 deja libre desde 13:45 → start 14:00). La
+ *    duración la elige el alumno al reservar, así que no se puede dar una
+ *    lista cerrada de turnos: el front ofrece los inicios y las duraciones
+ *    que entran, y el backend lo vuelve a validar al reservar.
+ *  - `groups`: clases grupales ya armadas con lugar. Sumarse es tomar la
+ *    MISMA clase: misma hora, materia y duración. Solo de materias que el
+ *    docente todavía tarifa en esta modalidad — sin tarifa no hay precio.
+ *
+ * `taken` son las clases del docente ese día, agrupadas por turno.
+ * `cutoff` (minutos) descarta lo que ya empezó; null si el día es futuro.
+ */
+export function openingsForWindow(window, taken, cutoff = null) {
+  const winFrom = toMinutes(window.start);
+  const winTo = toMinutes(window.end);
+  const alreadyStarted = (minutes) => cutoff !== null && minutes <= cutoff;
+  const tarifadas = new Set((window.subjects ?? []).map((subject) => String(subject.id)));
+
+  const groups = [];
+  if (window.maxStudents > 1) {
+    for (const group of taken) {
+      const from = toMinutes(group.start);
+      const joinable =
+        from >= winFrom &&
+        from < winTo &&
+        tarifadas.has(String(group.subjectId)) &&
+        group.enrolled < window.maxStudents &&
+        !alreadyStarted(from);
+      if (joinable) {
+        groups.push({
+          start: group.start,
+          end: group.end,
+          subjectId: group.subjectId,
+          subjectName: group.subjectName,
+          enrolled: group.enrolled,
+        });
+      }
+    }
+  }
+  groups.sort((a, b) => toMinutes(a.start) - toMinutes(b.start));
+
+  // Se recorre la ventana saltando por encima de cada clase del docente.
+  const busy = taken
+    .map((group) => ({ from: toMinutes(group.start), to: toMinutes(group.end) }))
+    .filter((span) => span.from < winTo && span.to > winFrom)
+    .sort((a, b) => a.from - b.from);
+
+  const free = [];
+  const pushGap = (from, to) => {
+    let first = Math.ceil(from / STEP_MINUTES) * STEP_MINUTES;
+    // Hoy: el primer inicio que todavía no pasó.
+    if (cutoff !== null && first <= cutoff) {
+      first = (Math.floor(cutoff / STEP_MINUTES) + 1) * STEP_MINUTES;
+    }
+    if (first + MIN_CLASS_MINUTES <= to) free.push({ start: toTime(first), end: toTime(to) });
+  };
+
+  let cursor = winFrom;
+  for (const span of busy) {
+    if (span.from > cursor) pushGap(cursor, Math.min(span.from, winTo));
+    cursor = Math.max(cursor, span.to);
+    if (cursor >= winTo) break;
+  }
+  if (cursor < winTo) pushGap(cursor, winTo);
+
+  return { free, groups };
+}
+
+/**
+ * Proyecta las ventanas sobre las fechas del rango. Devuelve una fila por
+ * (ventana, fecha) con lo que queda para reservar; las que se quedan sin
+ * nada no salen.
  *
  * Dos sentidos distintos de "reservado", y solo uno se resta:
- *  - Reservado CON ESE DOCENTE: la hora deja de existir para todos, así que
- *    se resta, sea de la materia que sea.
- *  - Reservado por el alumno con OTRO docente: la hora del docente sigue
- *    existiendo, este alumno no puede tomarla. NO se resta acá — el front la
+ *  - Reservado CON ESE DOCENTE: ese rato deja de existir para todos (salvo
+ *    el lugar que quede en una grupal), así que se resta.
+ *  - Reservado por el alumno con OTRO docente: el rato del docente sigue
+ *    existiendo, este alumno no puede tomarlo. NO se resta acá — el front lo
  *    pinta en gris con lo que devuelve /api/classes.
  *
- * `nowIso`/`nowTime` recortan lo que ya pasó: una hora de hoy que ya arrancó
- * no se ofrece más.
+ * `windows` trae `subjects`: [{ id, name, hourlyRateCents }], lo que se
+ * puede reservar en cada una (ver findPublishedWindows).
+ * `taken`: [{ teacherId, date, start, end, subjectId, subjectName, enrolled }],
+ * un elemento por turno (una grupal con 3 alumnos es UNO con enrolled 3).
+ *
+ * El link de las virtuales y la dirección exacta de las presenciales no
+ * salen: se los lleva el alumno recién al reservar. Para decidir alcanza con
+ * la localidad.
  */
-export function expandAvailability({ entries, bookings, from, to, nowIso, nowTime }) {
-  const bookingsByTeacherDate = new Map();
-  for (const b of bookings) {
-    const key = `${b.teacherId}|${b.date}`;
-    if (!bookingsByTeacherDate.has(key)) bookingsByTeacherDate.set(key, []);
-    bookingsByTeacherDate.get(key).push({ start: b.start, end: b.end });
+export function expandAvailability({ windows, taken, from, to, nowIso, nowTime }) {
+  const takenByTeacherDate = new Map();
+  for (const group of taken) {
+    const key = `${group.teacherId}|${group.date}`;
+    if (!takenByTeacherDate.has(key)) takenByTeacherDate.set(key, []);
+    takenByTeacherDate.get(key).push(group);
   }
 
   const rows = [];
@@ -107,38 +170,31 @@ export function expandAvailability({ entries, bookings, from, to, nowIso, nowTim
   for (const iso of datesBetween(from, to)) {
     // Un día entero ya pasado no aporta nada.
     if (nowIso && iso < nowIso) continue;
-    const dayKey = dayKeyFromIso(iso);
+    const cutoff = nowIso && iso === nowIso && nowTime ? toMinutes(nowTime) : null;
 
-    for (const entry of entries) {
-      const ranges = entry.schedule[dayKey];
-      if (!ranges || ranges.length === 0) continue;
+    for (const window of windows) {
+      if (!occursOn(window, iso)) continue;
+      if (!window.subjects || window.subjects.length === 0) continue;
 
-      const busy = bookingsByTeacherDate.get(`${entry.teacherId}|${iso}`) ?? [];
-      let free = subtractRanges(ranges, busy);
-
-      // Hoy: se corta lo que ya empezó. Se deja el rango que todavía permite
-      // arrancar una clase completa más adelante.
-      if (nowIso && iso === nowIso && nowTime) {
-        const cutoff = toMinutes(nowTime);
-        free = free
-          .map((r) => {
-            const start = Math.max(toMinutes(r.start), cutoff);
-            return { start: toTime(start), end: r.end };
-          })
-          .filter((r) => toMinutes(r.start) < toMinutes(r.end));
-      }
-
-      free = free.filter(fitsAClass);
-      if (free.length === 0) continue;
+      const busy = takenByTeacherDate.get(`${window.teacherId}|${iso}`) ?? [];
+      const { free, groups } = openingsForWindow(window, busy, cutoff);
+      if (free.length === 0 && groups.length === 0) continue;
 
       rows.push({
-        id: `${iso}|${entry.teacherId}`,
+        id: `${window.id}|${iso}`,
+        windowId: window.id,
         date: iso,
-        dayKey,
-        teacherId: entry.teacherId,
-        teacherName: entry.teacherName,
-        subjects: entry.subjects,
-        ranges: free,
+        dayKey: dayKeyFromIso(iso),
+        teacherId: window.teacherId,
+        teacherName: window.teacherName,
+        start: window.start,
+        end: window.end,
+        modality: window.modality,
+        maxStudents: window.maxStudents,
+        locality: window.locality ?? null,
+        subjects: window.subjects,
+        free,
+        groups,
       });
     }
   }

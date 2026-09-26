@@ -24,6 +24,11 @@ const user = {
   telefono: '+54 11 5555-5555',
   role: 'teacher',
   subjectIds: [1, 3],
+  // Matemática: $ 5.000/h virtual y $ 6.500,50/h presencial.
+  rates: [
+    { subjectId: 1, modality: 'virtual', hourlyRateCents: 500000 },
+    { subjectId: 1, modality: 'in_person', hourlyRateCents: 650050 },
+  ],
 }
 
 function renderProfile(props) {
@@ -44,6 +49,10 @@ function esperarMaterias() {
 
 function telefonoInput() {
   return screen.getByLabelText('Teléfono (opcional)')
+}
+
+function tarifa(materia, modalidad) {
+  return screen.getByLabelText(`Tarifa por hora de ${materia}, ${modalidad}`)
 }
 
 function botonGuardar() {
@@ -222,6 +231,7 @@ describe('ProfilePage', () => {
     expect(updateProfile).toHaveBeenCalledWith({
       telefono: '+54 9 11 1234-5678',
       subjectIds: [1, 3, 2],
+      rates: user.rates,
     })
     expect(onUserChange).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -231,6 +241,73 @@ describe('ProfilePage', () => {
       }),
     )
     expect(await screen.findByText('Listo, guardamos tus cambios.')).toBeInTheDocument()
+  })
+
+  it('muestra las tarifas guardadas de cada materia, con centavos si hay', async () => {
+    renderProfile({ viewRole: 'teacher' })
+    await screen.findByText('Matemática')
+
+    expect(tarifa('Matemática', 'virtual')).toHaveValue('5000')
+    expect(tarifa('Matemática', 'presencial')).toHaveValue('6500,50')
+    expect(tarifa('Matemática', 'híbrida')).toHaveValue('')
+  })
+
+  it('avisa qué materia no tiene ninguna tarifa', async () => {
+    renderProfile({ viewRole: 'teacher' })
+    await screen.findByText('Matemática')
+
+    expect(
+      screen.getByText('Sin tarifas: los alumnos no pueden reservar Álgebra con vos.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/reservar Matemática con vos/)).not.toBeInTheDocument()
+  })
+
+  it('guarda las tarifas en centavos, y vaciar un campo la saca', async () => {
+    renderProfile({ viewRole: 'teacher' })
+    await screen.findByText('Matemática')
+
+    await userEvent.type(tarifa('Álgebra', 'híbrida'), '7.200,5')
+    await userEvent.clear(tarifa('Matemática', 'presencial'))
+    await userEvent.click(botonGuardar())
+
+    await waitFor(() => expect(updateProfile).toHaveBeenCalledTimes(1))
+    expect(updateProfile.mock.calls[0][0].rates).toEqual([
+      { subjectId: 1, modality: 'virtual', hourlyRateCents: 500000 },
+      { subjectId: 3, modality: 'hybrid', hourlyRateCents: 720050 },
+    ])
+  })
+
+  it('un monto inválido marca el campo y no deja guardar', async () => {
+    renderProfile({ viewRole: 'teacher' })
+    await screen.findByText('Matemática')
+
+    await userEvent.type(tarifa('Álgebra', 'virtual'), 'mil')
+
+    expect(screen.getByText('Un monto en pesos, por ejemplo 5.000 o 5.000,50.')).toBeInTheDocument()
+    expect(tarifa('Álgebra', 'virtual')).toHaveAttribute('aria-invalid', 'true')
+    expect(botonGuardar()).toBeDisabled()
+  })
+
+  it('quitar una materia se lleva sus tarifas', async () => {
+    renderProfile({ viewRole: 'teacher' })
+    await screen.findByText('Matemática')
+
+    await userEvent.click(screen.getByLabelText('Dejar de dar Matemática'))
+    await userEvent.click(botonGuardar())
+
+    await waitFor(() => expect(updateProfile).toHaveBeenCalledTimes(1))
+    expect(updateProfile.mock.calls[0][0]).toMatchObject({ subjectIds: [3], rates: [] })
+  })
+
+  it('como alumno no se mandan tarifas', async () => {
+    renderProfile({ viewRole: 'student' })
+    await esperarMaterias()
+
+    await userEvent.type(telefonoInput(), '9')
+    await userEvent.click(botonGuardar())
+
+    await waitFor(() => expect(updateProfile).toHaveBeenCalledTimes(1))
+    expect(updateProfile.mock.calls[0][0]).not.toHaveProperty('rates')
   })
 
   it('avisa si falla el guardado', async () => {

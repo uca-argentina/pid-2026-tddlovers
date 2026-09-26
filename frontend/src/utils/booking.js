@@ -1,31 +1,27 @@
-// El puente entre los dos mundos de fechas de la app: la disponibilidad, que
-// es una PLANTILLA SEMANAL ({ lunes: [{ start, end }] }, ver availability.js),
-// y las clases, que son FECHAS CONCRETAS ('2026-09-14', ver calendar.js).
-// Hasta ahora no se tocaban: nadie escribió nunca DAY_KEYS[mondayIndex(fecha)],
-// aunque los dos índices arrancan en lunes y están alineados a propósito.
+// Lo que hace la pantalla del alumno con las filas que manda el backend. Cada
+// fila es UNA ventana de un docente en UNA fecha (ver
+// lib/availabilityExpansion.js en el backend): modalidad, cupo, las materias
+// que se pueden reservar con su tarifa (`subjects`), los tramos libres
+// (`free`) y las grupales a las que sumarse (`groups`). Lo que ya está
+// reservado con ese docente ya viene restado; acá solo se cruza con las
+// clases PROPIAS del alumno y se filtra.
 //
-// Es el primer archivo de utils/ que importa de otro utils/, y va en un tercer
-// archivo justamente por eso: calendar.js no tiene por qué saber qué es una
-// materia, y availability.js no tiene por qué saber qué es una fecha. La
-// dirección es siempre booking -> {calendar, availability} y nunca al revés,
-// así que no hay ciclo posible.
+// No hay turnos cerrados: la duración la elige el alumno. De cada tramo libre
+// salen inicios en :00/:30, cada uno con la clase más larga que entra.
 //
-// Todo el archivo trabaja en ÍNDICES DE MEDIA HORA (timeToSlotIndex) y no en
-// minutos: el dominio entero está alineado a :00/:30 (ver CLAUDE.md) y un
-// segundo parser de horas sería una segunda verdad.
+// Es el primer archivo de utils/ que importa de otro utils/: la dirección es
+// siempre booking -> {calendar, availability} y nunca al revés, así que no
+// hay ciclo posible. (windows.js importa de acá, y acá no se importa de
+// windows.js por lo mismo.)
 
-import {
-  DAY_KEYS,
-  dayLabel,
-  formatRangeLabel,
-  slotIndexToTime,
-  SLOTS_PER_CLASS,
-  SLOTS_PER_DAY,
-  timeToSlotIndex,
-} from './availability.js'
-import { addDays, fromISODate, mondayIndex, toISODate } from './calendar.js'
+import { DAY_KEYS, dayLabel, formatRangeLabel } from './availability.js'
+import { fromISODate, mondayIndex } from './calendar.js'
+import { CLASS_MINUTES_STEP, MIN_CLASS_MINUTES } from './rates.js'
 
-/** '2026-09-14' -> 'lunes'. El puente que faltaba. */
+// Los inicios van de a media hora, igual que en el backend.
+const START_STEP = 30
+
+/** '2026-09-14' -> 'lunes'. */
 export function dayKeyFromIso(iso) {
   const date = fromISODate(iso)
   if (Number.isNaN(date.getTime())) return null
@@ -36,16 +32,22 @@ export function dayKeyFromDate(date) {
   return DAY_KEYS[mondayIndex(date)]
 }
 
-/** { start, end } -> { from, to } en índices de media hora. null si no sirve. */
-function toSpan(range) {
-  const from = timeToSlotIndex(range?.start)
-  const to = timeToSlotIndex(range?.end)
-  if (from < 0 || to < 0 || to <= from) return null
-  return { from, to }
+/** 'HH:MM' -> minutos desde medianoche ('24:00' -> 1440), o -1 si no es hora. */
+export function toMinutes(time) {
+  const match = /^([01]\d|2[0-4]):([0-5]\d)$/.exec(time ?? '')
+  if (!match) return -1
+  return Number(match[1]) * 60 + Number(match[2])
 }
 
-function toRange(span) {
-  return { start: slotIndexToTime(span.from), end: slotIndexToTime(span.to) }
+/**
+ * { start, end } -> { from, to } en MINUTOS, no en medias horas: la duración
+ * de las clases es libre, así que una puede terminar 13:45. null si no sirve.
+ */
+function toSpan(range) {
+  const from = toMinutes(range?.start)
+  const to = toMinutes(range?.end)
+  if (from < 0 || to < 0 || to <= from) return null
+  return { from, to }
 }
 
 /**
@@ -59,203 +61,107 @@ export function rangesOverlap(a, b) {
   return spanA.from < spanB.to && spanB.from < spanA.to
 }
 
-/** El pedazo en común, o null si no se tocan. */
-export function intersectRanges(a, b) {
-  const spanA = toSpan(a)
-  const spanB = toSpan(b)
-  if (!spanA || !spanB) return null
+function lessonRange(lesson) {
+  return { start: lesson.startTime, end: lesson.endTime }
+}
 
-  const from = Math.max(spanA.from, spanB.from)
-  const to = Math.min(spanA.to, spanB.to)
-  if (to <= from) return null
-
-  return toRange({ from, to })
+function toTime(minutes) {
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 }
 
 /**
- * Los pedazos de `ranges` que no toca ninguno de `busy`. Un hueco en el medio
- * parte un rango en dos; si lo tapan entero, desaparece.
+ * ¿Esta clase propia ES esta grupal? Pasa cuando el alumno ya se anotó y la
+ * grupal sigue ofreciéndose porque queda lugar para otros.
  */
-export function subtractRanges(ranges, busy) {
-  const ocupados = busy.map(toSpan).filter(Boolean)
-
-  let spans = ranges.map(toSpan).filter(Boolean)
-
-  for (const ocupado of ocupados) {
-    const siguiente = []
-    for (const span of spans) {
-      if (ocupado.to <= span.from || ocupado.from >= span.to) {
-        siguiente.push(span)
-        continue
-      }
-      if (span.from < ocupado.from) siguiente.push({ from: span.from, to: ocupado.from })
-      if (ocupado.to < span.to) siguiente.push({ from: ocupado.to, to: span.to })
-    }
-    spans = siguiente
-  }
-
-  return spans.sort((a, b) => a.from - b.from).map(toRange)
+function isSameClass(lesson, card, group) {
+  return String(lesson.teacherId) === String(card.teacherId) && lesson.startTime === group.start
 }
 
 /**
- * ¿Entra en este rango una clase de 1 h que ARRANQUE entre `fromTime` y
- * `toTime`? Cualquiera de los dos puede venir vacío (sin límite): esa es toda
- * la semántica de los dos selects — solo Desde es "arranca después", solo
- * Hasta es "arranca antes", y los dos juntos es "entre".
- */
-export function rangeOffersStartBetween(range, fromTime, toTime) {
-  const span = toSpan(range)
-  if (!span) return false
-
-  const desde = fromTime ? timeToSlotIndex(fromTime) : 0
-  const hasta = toTime ? timeToSlotIndex(toTime) : SLOTS_PER_DAY
-  if (desde < 0 || hasta < 0) return false
-
-  // El último arranque posible deja lugar para la clase entera.
-  const primero = Math.max(span.from, desde)
-  const ultimo = Math.min(span.to - SLOTS_PER_CLASS, hasta)
-  return primero <= ultimo
-}
-
-/** Los tramos donde entra al menos una clase. El resto no se puede reservar. */
-export function bookableRanges(ranges) {
-  return ranges.filter((range) => {
-    const span = toSpan(range)
-    return span ? span.to - span.from >= SLOTS_PER_CLASS : false
-  })
-}
-
-/**
- * En qué medias horas puede ARRANCAR una clase adentro de estos tramos. Es lo
- * que hace falta para elegir la hora: la clase dura 1 h entera, así que el
- * último arranque de un tramo deja lugar para las dos medias horas.
+ * Los inicios que salen de los tramos libres, cada uno con la clase más larga
+ * que entra (`maxMinutes`, de a 5): hasta el fin del tramo o hasta la
+ * próxima clase propia, lo que llegue primero. `blocked` si ni la clase más
+ * corta entra sin pisarse con una clase propia.
  *
- * Devuelve índices, no horas: la línea de tiempo dibuja por índice.
+ * `busy` son las clases propias del día, { start, end }. Sin ellas (sin
+ * usuario) son todos los inicios del tramo.
  */
-export function startOptions(ranges) {
-  const starts = []
+export function startOptions(free, busy = []) {
+  const ocupado = busy.map(toSpan).filter(Boolean)
+  const opciones = []
 
-  for (const range of ranges) {
-    const span = toSpan(range)
+  for (const tramo of free || []) {
+    const span = toSpan(tramo)
     if (!span) continue
-    for (let index = span.from; index <= span.to - SLOTS_PER_CLASS; index++) {
-      starts.push(index)
+
+    for (let inicio = span.from; inicio + MIN_CLASS_MINUTES <= span.to; inicio += START_STEP) {
+      let limite = span.to
+      let blocked = false
+      for (const clase of ocupado) {
+        if (clase.from < inicio + MIN_CLASS_MINUTES && inicio < clase.to) blocked = true
+        else if (clase.from >= inicio + MIN_CLASS_MINUTES) limite = Math.min(limite, clase.from)
+      }
+      const maxMinutes = Math.floor((limite - inicio) / CLASS_MINUTES_STEP) * CLASS_MINUTES_STEP
+      opciones.push({ start: toTime(inicio), maxMinutes, blocked })
     }
   }
 
-  return starts.sort((a, b) => a - b)
-}
-
-/** Cuántas medias horas suman estos rangos. */
-export function countRangeSlots(ranges) {
-  return ranges.reduce((total, range) => {
-    const span = toSpan(range)
-    return span ? total + (span.to - span.from) : total
-  }, 0)
+  return opciones
 }
 
 /**
- * Plantillas semanales -> filas con fecha. Una fila por (docente, día) con
- * TODOS los rangos de ese día, que es exactamente una tarjeta. La materia no
- * es parte del horario: la fila lleva las que da el docente y el alumno elige
- * una al reservar.
- *
- * Es el mismo cálculo que hace el backend (lib/availabilityExpansion.js); la
- * pantalla ya recibe las filas hechas y esto queda para los tests.
- *
- * entries: [{ teacherId, teacherName, subjects: [{ id, name }], schedule }]
+ * Cruza cada fila con las clases que el alumno ya tiene ese día. No se resta
+ * nada: el rato del docente sigue existiendo, lo que pasa es que este alumno
+ * no lo puede tomar. Queda:
+ *   - `groups`, cada una con `joined` (ya está anotado) y `blocked` (se le
+ *     pisa con otra clase suya, o es la misma);
+ *   - `starts`: los inicios posibles (ver startOptions), ya recortados por
+ *     las clases propias;
+ *   - `clashes`: las clases propias que se pisan con la ventana, sin contar
+ *     aquellas en las que ya está anotado ahí mismo (esas se avisan aparte).
  */
-export function expandAvailability(entries, from, to) {
-  const rows = []
-  const desde = fromISODate(from)
-  const hasta = fromISODate(to)
+export function annotateClashes(cards, myLessons) {
+  return cards.map((card) => {
+    const delDia = myLessons.filter((lesson) => lesson.date === card.date)
 
-  for (let date = desde; date <= hasta; date = addDays(date, 1)) {
-    const iso = toISODate(date)
-    const dayKey = dayKeyFromDate(date)
-
-    for (const entry of entries) {
-      const ranges = entry.schedule?.[dayKey]
-      if (!Array.isArray(ranges) || ranges.length === 0) continue
-
-      rows.push({
-        id: `${iso}|${entry.teacherId}`,
-        date: iso,
-        dayKey,
-        teacherId: entry.teacherId,
-        teacherName: entry.teacherName,
-        subjects: entry.subjects || [],
-        ranges: ranges.map((range) => ({ start: range.start, end: range.end })),
-      })
-    }
-  }
-
-  return rows
-}
-
-/**
- * Saca de cada fila lo que ya está reservado CON ESE DOCENTE ese día, sin
- * mirar la materia: nadie da dos clases a la vez. Una vez reservado, ese
- * horario deja de existir para todo el mundo (ver CLAUDE.md), así que se
- * resta de verdad y no se muestra como aviso.
- *
- * Las filas que quedan sin ningún rango desaparecen.
- */
-export function subtractBookedLessons(rows, lessons) {
-  return rows
-    .map((row) => {
-      const ocupados = lessons.filter(
-        (lesson) => lesson.teacherId === row.teacherId && lesson.date === row.date,
-      )
-      if (ocupados.length === 0) return row
-
-      const ranges = subtractRanges(
-        row.ranges,
-        ocupados.map((lesson) => ({ start: lesson.startTime, end: lesson.endTime })),
-      )
-      return { ...row, ranges }
+    const groups = (card.groups || []).map((group) => {
+      const joined = delDia.some((lesson) => isSameClass(lesson, card, group))
+      const blocked = joined || delDia.some((lesson) => rangesOverlap(group, lessonRange(lesson)))
+      return { ...group, joined, blocked }
     })
-    .filter((row) => row.ranges.length > 0)
-}
 
-/**
- * Agrega a cada fila las clases PROPIAS que se le pisan y qué queda realmente
- * reservable. Estas no se restan: el horario del docente sigue existiendo, lo
- * que pasa es que este alumno no lo puede tomar.
- *
- * Ojo: un choque nunca puede nombrar una clase con EL MISMO docente de la
- * tarjeta, porque esa ya la sacó subtractBookedLessons.
- */
-export function annotateClashes(rows, myLessons) {
-  return rows.map((row) => {
-    const delDia = myLessons.filter((lesson) => lesson.date === row.date)
+    const starts = startOptions(card.free, delDia.map(lessonRange))
 
-    const clashes = delDia.filter((lesson) =>
-      row.ranges.some((range) =>
-        rangesOverlap(range, { start: lesson.startTime, end: lesson.endTime }),
-      ),
-    )
-
-    const free = subtractRanges(
-      row.ranges,
-      delDia.map((lesson) => ({ start: lesson.startTime, end: lesson.endTime })),
-    )
-    const libres = bookableRanges(free)
-
-    return {
-      ...row,
-      totalSlots: countRangeSlots(row.ranges),
-      clashes: clashes.map((lesson) => ({
+    const window = { start: card.start, end: card.end }
+    const clashes = delDia
+      .filter((lesson) => rangesOverlap(window, lessonRange(lesson)))
+      .filter((lesson) => !groups.some((group) => group.joined && isSameClass(lesson, card, group)))
+      .map((lesson) => ({
         id: lesson.id,
         subjectName: lesson.subjectName,
         teacherName: lesson.teacherName,
         startTime: lesson.startTime,
         endTime: lesson.endTime,
-      })),
-      free: libres,
-      bookable: libres.length > 0,
+      }))
+
+    return {
+      ...card,
+      groups,
+      starts,
+      clashes,
+      joined: groups.filter((group) => group.joined),
+      bookable:
+        groups.some((group) => !group.blocked) || starts.some((option) => !option.blocked),
     }
   })
+}
+
+/** La tarifa más baja de la ventana, para el "desde $ X/h" de la tarjeta. */
+export function lowestRate(card) {
+  const tarifas = (card.subjects || []).map((subject) => subject.hourlyRateCents)
+  return tarifas.length > 0 ? Math.min(...tarifas) : null
 }
 
 /** { [iso]: Card[] }, cada lista ordenada por hora y docente. */
@@ -269,41 +175,13 @@ export function groupCardsByDate(cards) {
 
   for (const iso of Object.keys(porFecha)) {
     porFecha[iso].sort((a, b) => {
-      const inicio = (a.ranges[0]?.start || '').localeCompare(b.ranges[0]?.start || '')
+      const inicio = a.start.localeCompare(b.start)
       if (inicio !== 0) return inicio
       return a.teacherName.localeCompare(b.teacherName)
     })
   }
 
   return porFecha
-}
-
-/**
- * ¿La tarjeta es de un docente que da alguna de estas materias? El id se
- * compara como string: puede venir de la URL, y ahí siempre es string aunque
- * el de la tarjeta no lo sea.
- */
-function teachesAny(card, subjectIds) {
-  return (card.subjects || []).some((subject) =>
-    subjectIds.some((id) => String(id) === String(subject.id)),
-  )
-}
-
-/**
- * Qué materia llega ya elegida al modal de reserva, o null si el alumno la
- * tiene que elegir. Solo se elige sola cuando no hay duda: el docente da una
- * sola, o de las que da hay una sola entre las que el alumno filtró. Elegir
- * "la primera" sería reservar algo que el alumno no pidió.
- */
-export function preselectedSubjectId(card, filterSubjectIds = []) {
-  const subjects = card.subjects || []
-  if (subjects.length === 1) return subjects[0].id
-  if (filterSubjectIds.length === 0) return null
-
-  const filtradas = subjects.filter((subject) =>
-    filterSubjectIds.some((id) => String(id) === String(subject.id)),
-  )
-  return filtradas.length === 1 ? filtradas[0].id : null
 }
 
 /** Minúsculas y sin acentos, para comparar lo tipeado contra nombres con tilde. */
@@ -316,30 +194,67 @@ export function normalizeText(text) {
 }
 
 /**
- * Aplica los filtros. Los cuatro se combinan con Y: una lista vacía o un
- * string vacío significa "no filtra".
+ * ¿Alguna clase puede ARRANCAR entre `fromTime` y `toTime`? Cualquiera de
+ * los dos puede venir vacío (sin límite). Cuenta sumarse a una grupal y
+ * cualquier inicio de un tramo libre.
+ */
+export function offersStartBetween(card, fromTime, toTime) {
+  const desde = fromTime ? toMinutes(fromTime) : 0
+  const hasta = toTime ? toMinutes(toTime) : Infinity
+  const inicios = [
+    ...(card.groups || []).map((group) => group.start),
+    ...(card.starts || startOptions(card.free)).map((option) => option.start),
+  ]
+  return inicios.some((start) => {
+    const inicio = toMinutes(start)
+    return inicio >= desde && inicio <= hasta
+  })
+}
+
+/** 'individual' o 'group': el tipo de clase para el filtro. */
+export function cardKind(card) {
+  return card.maxStudents > 1 ? 'group' : 'individual'
+}
+
+/**
+ * Aplica los filtros. Se combinan con Y: una lista vacía o un string vacío
+ * significa "no filtra". Dentro de un mismo grupo de chips es O (Virtual o
+ * Presencial).
  *
- * OJO: el filtro de horas elige qué TARJETAS entran, pero NO recorta los
- * rangos que se muestran. Una tarjeta que dice "13:00 – 15:30" filtrando
- * "Desde 14:00" está diciendo la verdad sobre el docente; recortarla sería
+ * El filtro de materia deja pasar la ventana si el docente da ALGUNA de las
+ * elegidas en esa modalidad: la materia se elige recién al reservar.
+ *
+ * OJO: el filtro de horas elige qué TARJETAS entran, pero NO esconde horarios.
+ * La tarjeta dice la verdad sobre la ventana del docente; recortarla sería
  * inventar una disponibilidad más chica de la que hay.
  */
 export function filterCards(cards, filters = {}) {
-  const { dayKeys = [], subjectIds = [], fromTime = '', toTime = '', teacherQuery = '' } = filters
+  const {
+    dayKeys = [],
+    subjectIds = [],
+    modalities = [],
+    kinds = [],
+    fromTime = '',
+    toTime = '',
+    teacherQuery = '',
+  } = filters
   const docente = normalizeText(teacherQuery)
 
   return cards.filter((card) => {
     if (dayKeys.length > 0 && !dayKeys.includes(card.dayKey)) return false
-    // La tarjeta es de un docente, no de una materia: entra si da alguna de
-    // las elegidas.
-    if (subjectIds.length > 0 && !teachesAny(card, subjectIds)) return false
-    if (docente && !normalizeText(card.teacherName).includes(docente)) return false
-
-    if (fromTime || toTime) {
-      const entra = card.ranges.some((range) => rangeOffersStartBetween(range, fromTime, toTime))
-      if (!entra) return false
+    // El id se compara como string: puede venir de la URL.
+    if (
+      subjectIds.length > 0 &&
+      !(card.subjects || []).some((subject) =>
+        subjectIds.some((id) => String(id) === String(subject.id)),
+      )
+    ) {
+      return false
     }
-
+    if (modalities.length > 0 && !modalities.includes(card.modality)) return false
+    if (kinds.length > 0 && !kinds.includes(cardKind(card))) return false
+    if (docente && !normalizeText(card.teacherName).includes(docente)) return false
+    if ((fromTime || toTime) && !offersStartBetween(card, fromTime, toTime)) return false
     return true
   })
 }
@@ -362,7 +277,7 @@ export function resolveQuery(q, subjects) {
   return { subjectId: null, teacherQuery: q.trim() }
 }
 
-// Cuántos choques se nombran antes de cortar, igual que describeShortRuns.
+// Cuántos choques se nombran antes de cortar.
 const MAX_CLASHES_LISTED = 2
 
 function joinWithY(items) {
@@ -387,17 +302,15 @@ export function formatClashes(clashes, bookable = true) {
       : ''
 
   // Se arma por partes y NO con toLowerCase sobre la frase entera: eso le
-  // comía las mayúsculas a los nombres propios ("base de datos con martín
-  // sosa").
-  const detalleCompleto = `se superpone con ${joinWithY(listados)}${detalle}`
+  // comía las mayúsculas a los nombres propios.
   return bookable
     ? `Se superpone con ${joinWithY(listados)}${detalle}.`
-    : `No te queda una hora libre: ${detalleCompleto}.`
+    : `No te queda ningún horario libre: se superpone con ${joinWithY(listados)}${detalle}.`
 }
 
-/** '3 libres' / '1 libre'. */
-export function formatFreeCount(count) {
-  return `${count} ${count === 1 ? 'libre' : 'libres'}`
+/** '2 de 5 anotados'. */
+export function formatEnrolled(enrolled, maxStudents) {
+  return `${enrolled} de ${maxStudents} ${maxStudents === 1 ? 'anotado' : 'anotados'}`
 }
 
 /** 'Lunes' para el chip del filtro de días. */

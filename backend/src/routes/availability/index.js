@@ -1,17 +1,21 @@
-import { findPublishedAvailability } from '../../db/availability.js';
-import { findBookedSlots } from '../../db/classes.js';
+import { findPublishedWindows } from '../../db/availability.js';
+import { findTakenSlots } from '../../db/classes.js';
 import { expandAvailability } from '../../lib/availabilityExpansion.js';
+import { now } from '../../lib/clock.js';
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export default async function availabilityRoutes(app) {
   /**
    * El tablero del alumno: la disponibilidad YA con fecha y YA neta de lo
-   * reservado. Una fila por (docente, fecha), con las materias del docente
-   * para que el alumno elija una al reservar.
+   * reservado. Una fila por (ventana, fecha), con la modalidad, el cupo, las
+   * materias que se pueden reservar (con su tarifa por hora), los tramos
+   * libres (`free`) y las grupales a las que todavía se puede sumar
+   * (`groups`). La duración la elige el alumno, así que no hay turnos
+   * cerrados: ver openingsForWindow.
    *
-   * El alumno nunca ve una plantilla semanal: el puente entre "los lunes de
-   * 13 a 15:30" y "el lunes 14 de septiembre" se hace acá.
+   * El alumno nunca ve una ventana semanal: el puente entre "los lunes de 13
+   * a 15:30" y "el lunes 14 de septiembre" se hace acá.
    */
   app.get('/', { onRequest: app.requireAuth }, async (request, reply) => {
     const { from, to } = request.query ?? {};
@@ -23,22 +27,13 @@ export default async function availabilityRoutes(app) {
       return reply.code(400).send({ message: 'El rango de fechas está al revés' });
     }
 
-    const [entries, bookings] = await Promise.all([
-      findPublishedAvailability(),
-      findBookedSlots({ from, to }),
+    const [windows, taken] = await Promise.all([
+      findPublishedWindows({ from, to }),
+      findTakenSlots({ from, to }),
     ]);
 
-    const d = new Date();
-    const pad = (n) => String(n).padStart(2, '0');
-
-    const rows = expandAvailability({
-      entries,
-      bookings,
-      from,
-      to,
-      nowIso: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
-      nowTime: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
-    });
+    const { iso, time } = now();
+    const rows = expandAvailability({ windows, taken, from, to, nowIso: iso, nowTime: time });
 
     // El docente logueado no se ofrece a sí mismo como opción reservable.
     return reply.send(rows.filter((row) => row.teacherId !== request.user.id));

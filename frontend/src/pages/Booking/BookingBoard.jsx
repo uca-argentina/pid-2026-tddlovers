@@ -19,16 +19,16 @@ import './BookingBoard.css'
 const SIN_TARJETAS = { slots: null, myLessons: null, cards: [] }
 
 /**
- * La pantalla del alumno: buscar horarios libres para reservar. A la derecha
- * el calendario del mes y a la izquierda las clases del día elegido, con los
+ * La pantalla del alumno: buscar clases para reservar. A la derecha el
+ * calendario del mes y a la izquierda las clases del día elegido, con los
  * filtros arriba.
  *
- * Una tarjeta es un docente y un día: todos los tramos libres de ese día van
- * juntos. La materia no es parte del horario — el docente ofrece horas y el
- * alumno elige para qué materia reserva en el modal. Los horarios que el alumno ya reservó CON ESE DOCENTE ya
- * no están (los restó el backend); los que tiene con OTRO aparecen como aviso
- * gris, porque el horario del docente sigue existiendo aunque este alumno no
- * lo pueda tomar.
+ * Una tarjeta es un horario que ofrece un docente un día: rango, modalidad y
+ * cupo los fijó el docente; la materia (entre las que tarifó), la hora de
+ * inicio y la duración las elige el alumno en el modal (o se suma a una
+ * grupal ya armada). Lo reservado CON ESE DOCENTE ya no está (lo restó el
+ * backend); lo que el alumno tiene con OTRO aparece como aviso gris, porque
+ * el rato del docente sigue existiendo aunque este alumno no lo pueda tomar.
  *
  * El `router` llega por props desde AvailabilityPage en vez de envolver esto
  * en otro withRouter: alcanza con un puente por ruta y así sigue siendo obvio
@@ -50,6 +50,8 @@ class BookingBoard extends Component {
     // --- filtros ---
     dayKeys: [],
     subjectIds: [],
+    modalities: [],
+    kinds: [],
     fromTime: '',
     toTime: '',
     teacherQuery: '',
@@ -183,15 +185,17 @@ class BookingBoard extends Component {
   }
 
   getFilters() {
-    const { dayKeys, subjectIds, fromTime, toTime, teacherQuery } = this.state
-    return { dayKeys, subjectIds, fromTime, toTime, teacherQuery }
+    const { dayKeys, subjectIds, modalities, kinds, fromTime, toTime, teacherQuery } = this.state
+    return { dayKeys, subjectIds, modalities, kinds, fromTime, toTime, teacherQuery }
   }
 
   hasFilters() {
-    const { dayKeys, subjectIds, fromTime, toTime, teacherQuery } = this.state
+    const { dayKeys, subjectIds, modalities, kinds, fromTime, toTime, teacherQuery } = this.state
     return (
       dayKeys.length > 0 ||
       subjectIds.length > 0 ||
+      modalities.length > 0 ||
+      kinds.length > 0 ||
       Boolean(fromTime) ||
       Boolean(toTime) ||
       Boolean(teacherQuery)
@@ -228,13 +232,13 @@ class BookingBoard extends Component {
     return map
   }
 
-  /** Solo las materias que da algún docente con horarios en el rango cargado. */
+  /** Solo las materias que se pueden reservar en algún horario del rango cargado. */
   getFilterSubjects() {
     // Todo se normaliza a string: el id elegido puede venir de la URL (siempre
     // string) y el de las tarjetas del backend, y un Set compara con ===.
     const presentes = new Set()
     for (const card of this.getCards()) {
-      for (const subject of card.subjects || []) presentes.add(String(subject.id))
+      for (const subject of card.subjects) presentes.add(String(subject.id))
     }
     // La elegida se agrega igual: si no, un chip seleccionado que se queda sin
     // resultados desaparecería y no habría forma de sacarlo.
@@ -271,6 +275,24 @@ class BookingBoard extends Component {
     }))
   }
 
+  /** Mismo patrón para modalidad y tipo: prender o apagar una clave de la lista. */
+  toggleIn(key, value) {
+    this.dropQuery()
+    this.setState((prev) => ({
+      [key]: prev[key].includes(value)
+        ? prev[key].filter((item) => item !== value)
+        : [...prev[key], value],
+    }))
+  }
+
+  handleToggleModality = (modality) => () => {
+    this.toggleIn('modalities', modality)
+  }
+
+  handleToggleKind = (kind) => () => {
+    this.toggleIn('kinds', kind)
+  }
+
   /**
    * El slider manda las dos puntas juntas: no se puede mover una sin saber
    * dónde quedó la otra (se empujan entre sí).
@@ -287,7 +309,15 @@ class BookingBoard extends Component {
 
   handleClear = () => {
     this.dropQuery()
-    this.setState({ dayKeys: [], subjectIds: [], fromTime: '', toTime: '', teacherQuery: '' })
+    this.setState({
+      dayKeys: [],
+      subjectIds: [],
+      modalities: [],
+      kinds: [],
+      fromTime: '',
+      toTime: '',
+      teacherQuery: '',
+    })
   }
 
   handleReservar = (card) => () => {
@@ -304,7 +334,7 @@ class BookingBoard extends Component {
    * puede pasar a chocar con tarjetas de otros docentes. Recalcular eso acá
    * sería repetir lo que ya hace el backend, y es una sola llamada.
    *
-   * `booked` lo arma el modal: la tarjeta no sabe qué materia se eligió.
+   * `booked` lo arma el modal con lo que hace falta para el cartel.
    */
   handleBooked = (booked) => {
     const { booking, from, to } = this.state
@@ -351,12 +381,16 @@ class BookingBoard extends Component {
               subjects={this.getFilterSubjects()}
               dayKeys={this.state.dayKeys}
               subjectIds={this.state.subjectIds}
+              modalities={this.state.modalities}
+              kinds={this.state.kinds}
               fromTime={this.state.fromTime}
               toTime={this.state.toTime}
               teacherQuery={this.state.teacherQuery}
               hasFilters={this.hasFilters()}
               onToggleDay={this.handleToggleDay}
               onToggleSubject={this.handleToggleSubject}
+              onToggleModality={this.handleToggleModality}
+              onToggleKind={this.handleToggleKind}
               onChangeRange={this.handleChangeRange}
               onClearTeacher={this.handleClearTeacher}
               onClear={this.handleClear}
@@ -375,8 +409,6 @@ class BookingBoard extends Component {
         {booking ? (
           <BookingDialog
             card={booking}
-            myLessons={this.state.myLessons}
-            filterSubjectIds={this.state.subjectIds}
             onClose={this.handleCloseDialog}
             onBooked={this.handleBooked}
           />

@@ -1,7 +1,6 @@
 import {
   addDays,
   addMonths,
-  addOneHour,
   buildMonthGrid,
   formatDuration,
   formatMonthTitle,
@@ -69,18 +68,6 @@ describe('isSameDay', () => {
 
   it('distingue días de meses distintos', () => {
     expect(isSameDay(new Date(2026, 8, 1), new Date(2026, 7, 1))).toBe(false)
-  })
-})
-
-describe('addOneHour', () => {
-  it('suma una hora manteniendo los minutos', () => {
-    expect(addOneHour('16:30')).toBe('17:30')
-    expect(addOneHour('09:00')).toBe('10:00')
-  })
-
-  it('da la vuelta a medianoche', () => {
-    expect(addOneHour('23:30')).toBe('00:30')
-    expect(addOneHour('23:00')).toBe('00:00')
   })
 })
 

@@ -36,7 +36,10 @@ function fetchCsrfToken() {
 
 async function request(path, options = {}) {
   const method = (options.method || 'GET').toUpperCase()
-  const headers = { 'Content-Type': 'application/json', ...options.headers }
+  // El Content-Type va SOLO si hay body: Fastify rechaza con 400 un
+  // 'application/json' vacío, que es lo que manda un DELETE (o el logout).
+  const headers = { ...options.headers }
+  if (options.body !== undefined) headers['Content-Type'] = 'application/json'
 
   if (!SAFE_METHODS.has(method)) {
     headers['x-csrf-token'] = await fetchCsrfToken()
@@ -110,15 +113,40 @@ export function fetchClasses({ from, to, status }) {
   )
 }
 
-/** La semana del docente: { lunes: [{ start, end }], ... }, sin materia. */
-export function fetchAvailabilityByTeacher(teacherId) {
-  return request(`/api/teachers/${teacherId}/availability`)
+/**
+ * Las ventanas del docente logueado que caen en el rango, SIN expandir: cada
+ * una trae su fecha original y si se repite, que es lo que hace falta para
+ * editarla. La pantalla las ubica en cada día de la semana que muestra.
+ */
+export function fetchMyWindows({ from, to }) {
+  return request(`/api/teachers/me/availability?from=${from}&to=${to}`)
+}
+
+/** Devuelve la ventana guardada, con su id. */
+export function createWindow(window) {
+  return request('/api/teachers/me/availability', {
+    method: 'POST',
+    body: JSON.stringify(window),
+  })
+}
+
+export function updateWindow(id, window) {
+  return request(`/api/teachers/me/availability/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(window),
+  })
+}
+
+export function deleteWindow(id) {
+  return request(`/api/teachers/me/availability/${id}`, { method: 'DELETE' })
 }
 
 /**
  * La disponibilidad YA con fecha y YA neta de lo reservado: una fila por
- * (docente, fecha), con las materias que da ese docente en `subjects`. La pantalla del alumno nunca ve una plantilla
- * semanal — el backend proyecta la semana sobre el rango pedido.
+ * (ventana, fecha), con su modalidad, cupo, las materias que se pueden
+ * reservar con su tarifa (`subjects`), los tramos libres (`free`) y las
+ * grupales a las que sumarse (`groups`). La pantalla del alumno nunca ve una
+ * ventana semanal — el backend la proyecta sobre el rango pedido.
  */
 export function fetchAvailability({ from, to }) {
   return request(`/api/availability?from=${from}&to=${to}`)
@@ -134,31 +162,16 @@ export function fetchMyLessons({ from, to }) {
 }
 
 /**
- * Reservar. El alumno sale de la sesión y la hora de fin la calcula el
- * backend (la clase dura siempre 1 h), así que alcanza con fecha, docente,
- * materia y hora de inicio. Devuelve la clase guardada, sin envolver.
+ * Reservar una clase en una ventana: qué día, a qué hora, de qué materia y
+ * cuántos minutos. La modalidad sale de la ventana y el precio lo calcula el
+ * backend con la tarifa del docente. Si a esa hora ya hay una grupal de la
+ * misma materia y duración, es sumarse a ella. Devuelve la clase guardada,
+ * sin envolver.
  */
-export function bookLesson(lesson) {
+export function bookLesson({ windowId, date, startTime, subjectId, durationMinutes }) {
   return request('/api/classes', {
     method: 'POST',
-    body: JSON.stringify({
-      date: lesson.date,
-      teacherId: lesson.teacherId,
-      subjectId: lesson.subjectId,
-      startTime: lesson.startTime,
-    }),
-  })
-}
-
-/**
- * Reemplaza la semana entera del docente logueado: lo que no va en `schedule`
- * se borra. Es una sola semana, sin materia — la materia la elige el alumno
- * al reservar. El docente sale de la sesión en el backend, no se manda.
- */
-export function saveAvailability(schedule) {
-  return request('/api/teachers/me/availability', {
-    method: 'PUT',
-    body: JSON.stringify({ schedule }),
+    body: JSON.stringify({ windowId, date, startTime, subjectId, durationMinutes }),
   })
 }
 
@@ -166,6 +179,9 @@ export function saveAvailability(schedule) {
  * Guarda el perfil. Devuelve el usuario completo y actualizado (no envuelto
  * en { user }), igual que login y /me. El id sale de la sesión en el backend,
  * así que mandarlo en el body no cambiaría nada.
+ *
+ * `rates` es la lista ENTERA de tarifas del docente,
+ * [{ subjectId, modality, hourlyRateCents }], y reemplaza a la que había.
  */
 export function updateProfile(payload) {
   return request('/api/users/me', {
@@ -173,6 +189,7 @@ export function updateProfile(payload) {
     body: JSON.stringify({
       telefono: payload.telefono,
       subjectIds: payload.subjectIds,
+      rates: payload.rates,
     }),
   })
 }

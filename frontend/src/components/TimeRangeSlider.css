@@ -120,3 +120,7 @@
 .time-range-input::-moz-range-track {
   background: none;
 }
+
+.time-range.is-disabled {
+  opacity: 0.55;
+}

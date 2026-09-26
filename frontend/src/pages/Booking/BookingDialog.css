@@ -31,14 +31,24 @@
   color: var(--color-text);
 }
 
-.booking-dialog-subjects {
+.booking-dialog-details .booking-dialog-wide {
+  flex-basis: 100%;
+}
+
+.booking-dialog-note {
+  margin-top: -6px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.booking-dialog-slots {
   margin: 0;
   padding: 0;
   border: none;
   min-width: 0;
 }
 
-.booking-dialog-subjects legend {
+.booking-dialog-slots legend {
   padding: 0;
   margin-bottom: 8px;
   font-size: 12px;
@@ -48,10 +58,138 @@
   color: var(--color-text-muted);
 }
 
-.booking-dialog-subject-chips {
-  display: flex;
-  flex-wrap: wrap;
+/* Columnas del mismo ancho y no chips que se envuelven: los horarios tienen
+   todos el mismo largo y en grilla se leen como una tabla de horas. */
+.booking-dialog-slot-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
   gap: 8px;
+}
+
+/* Los inicios son solo una hora ("13:30"): entran más por fila. */
+.booking-dialog-slot-list.is-compact {
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+}
+
+.booking-dialog-subjects {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.booking-subject {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1.5px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  text-align: left;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.booking-subject:hover:not(:disabled) {
+  border-color: var(--color-primary);
+}
+
+.booking-subject.is-selected {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.booking-subject-name {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.booking-subject-rate {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+
+.booking-dialog-duration-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.booking-dialog-duration-field label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.booking-dialog-select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1.5px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 15px;
+}
+
+.booking-dialog-select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.booking-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 8px;
+  border: 1.5px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.booking-slot:hover:not(:disabled) {
+  border-color: var(--color-primary);
+}
+
+.booking-slot.is-group {
+  border-color: color-mix(in srgb, var(--color-success) 45%, var(--color-border));
+}
+
+.booking-slot.is-selected {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: #fff;
+}
+
+/* Un horario que choca con otra clase propia se sigue viendo —existe— pero
+   no se puede tocar: mismo gris que el aviso de la tarjeta. */
+.booking-slot:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+.booking-slot-time {
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.booking-slot-note {
+  font-size: 11.5px;
+  color: var(--color-success);
+}
+
+.booking-slot.is-selected .booking-slot-note {
+  color: inherit;
 }
 
 .booking-dialog-hint,
@@ -68,9 +206,19 @@
 }
 
 .booking-dialog-pick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 16px;
   font-weight: 700;
   color: var(--color-primary);
   font-variant-numeric: tabular-nums;
+}
+
+.booking-dialog-price {
+  font-size: 17px;
+  color: var(--color-text);
 }
 
 .booking-dialog-duration {
