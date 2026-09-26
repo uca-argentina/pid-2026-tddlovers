@@ -271,7 +271,12 @@ export function resolveQuery(q, subjects) {
   const texto = normalizeText(q)
   if (!texto) return { subjectId: null, teacherQuery: '' }
 
-  const materia = subjects.find((subject) => normalizeText(subject.name).startsWith(texto))
+  // El nombre exacto gana: el buscador predictivo manda el nombre completo de
+  // la materia elegida, y "Física" no puede terminar en "Física II" solo
+  // porque esa vino primero en el catálogo.
+  const materia =
+    subjects.find((subject) => normalizeText(subject.name) === texto) ||
+    subjects.find((subject) => normalizeText(subject.name).startsWith(texto))
   if (materia) return { subjectId: materia.id, teacherQuery: '' }
 
   return { subjectId: null, teacherQuery: q.trim() }

@@ -3,10 +3,10 @@ import { SearchIcon } from '../../components/icons.jsx'
 import './SearchResultsPage.css'
 
 /**
- * Destino del buscador. Todavía no muestra resultados: el input de la barra
- * superior es solo la cáscara visual (ver el TODO en components/SearchBar.jsx)
- * y el backend no tiene endpoint de búsqueda. Existe para que la ruta
- * /buscar no quede rota.
+ * Pantalla de /buscar, todavía sin contenido. El buscador de la barra ya
+ * sugiere mientras se tipea y lleva a la pantalla de reservar (ver
+ * components/SearchBar.jsx); esta ruta queda para una página de resultados
+ * completa más adelante y existe para que /buscar no quede rota.
  */
 class SearchResultsPage extends Component {
   render() {

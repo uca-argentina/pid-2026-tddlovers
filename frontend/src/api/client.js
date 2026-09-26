@@ -114,6 +114,14 @@ export function fetchClasses({ from, to, status }) {
 }
 
 /**
+ * Los docentes con las materias que ofrecen ({ id, nombre, apellido,
+ * subjects }), para las sugerencias del buscador.
+ */
+export function fetchTeachers() {
+  return request('/api/teachers')
+}
+
+/**
  * Las ventanas del docente logueado que caen en el rango, SIN expandir: cada
  * una trae su fecha original y si se repite, que es lo que hace falta para
  * editarla. La pantalla las ubica en cada día de la semana que muestra.
