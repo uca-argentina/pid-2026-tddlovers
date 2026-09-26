@@ -13,6 +13,10 @@ vi.mock('../../db/rates.js', () => ({
   teacherHasRateFor: vi.fn(),
 }));
 
+vi.mock('../../db/users.js', () => ({
+  listTeachers: vi.fn(),
+}));
+
 vi.mock('../../db/sessions.js', () => ({
   createSession: vi.fn(),
   findValidSession: vi.fn(),
@@ -24,6 +28,7 @@ const { createWindow, deleteWindow, findTeacherWindows, updateWindow } = await i
   '../../db/availability.js'
 );
 const { teacherHasRateFor } = await import('../../db/rates.js');
+const { listTeachers } = await import('../../db/users.js');
 const { findValidSession } = await import('../../db/sessions.js');
 const { buildApp } = await import('../../app.js');
 
@@ -264,5 +269,40 @@ describe('teacher availability windows', () => {
     });
 
     expect(res.statusCode).toBe(404);
+  });
+});
+
+describe('teacher list', () => {
+  let app;
+
+  beforeEach(() => {
+    app = buildApp({ logger: false });
+  });
+
+  afterEach(async () => {
+    vi.clearAllMocks();
+    await app.close();
+  });
+
+  it('GET requires a session', async () => {
+    await app.ready();
+
+    const res = await app.inject({ method: 'GET', url: '/api/teachers' });
+
+    expect(res.statusCode).toBe(401);
+    expect(listTeachers).not.toHaveBeenCalled();
+  });
+
+  it('GET returns the teachers with their subjects', async () => {
+    const docentes = [
+      { id: 't1', nombre: 'Laura', apellido: 'Gómez', subjects: [{ id: 's1', name: 'Física' }] },
+    ];
+    listTeachers.mockResolvedValueOnce(docentes);
+    const headers = await authedHeaders(app, 'student');
+
+    const res = await app.inject({ method: 'GET', url: '/api/teachers', headers });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual(docentes);
   });
 });

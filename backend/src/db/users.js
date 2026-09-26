@@ -57,6 +57,31 @@ export async function findSubjectIdsByTeacher(teacherId) {
 }
 
 /**
+ * Los docentes para el buscador, con las materias que ofrecen. Una materia
+ * cuenta si el docente le puso tarifa en alguna modalidad: es el mismo
+ * criterio con el que findPublishedWindows ofrece una ventana, así que el
+ * buscador no sugiere a nadie a quien no se le pueda reservar nada. Solo
+ * nombre y materias — el buscador no tiene por qué ver el mail ni el
+ * teléfono de nadie.
+ */
+export async function listTeachers() {
+  const result = await getPool().query(
+    `SELECT u.id, u.nombre, u.apellido, subj.subjects
+     FROM users u
+     JOIN LATERAL (
+       SELECT json_agg(json_build_object('id', s.id, 'name', s.name) ORDER BY s.name) AS subjects
+       FROM subjects s
+       WHERE EXISTS (
+         SELECT 1 FROM teacher_rates r WHERE r.teacher_id = u.id AND r.subject_id = s.id
+       )
+     ) subj ON subj.subjects IS NOT NULL
+     WHERE u.role = 'teacher'
+     ORDER BY u.nombre, u.apellido`
+  );
+  return result.rows;
+}
+
+/**
  * Actualiza el perfil y, si es docente, reemplaza sus materias y sus tarifas
  * por las que llegan. Todo en una transacción: si falla una tarifa, ni el
  * teléfono ni las materias se guardan, y nunca queda un docente a medio

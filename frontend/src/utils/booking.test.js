@@ -303,6 +303,14 @@ describe('resolveQuery', () => {
     expect(resolveQuery('fisica', subjects)).toEqual({ subjectId: 2, teacherQuery: '' })
   })
 
+  it('el nombre exacto gana sobre otro que empieza igual', () => {
+    const conSegunda = [
+      { id: 5, name: 'Física II' },
+      { id: 2, name: 'Física' },
+    ]
+    expect(resolveQuery('Física', conSegunda)).toEqual({ subjectId: 2, teacherQuery: '' })
+  })
+
   it('lo que no es materia es nombre de docente', () => {
     // startsWith y no includes: si no, 'gómez' podría pegar con una materia.
     expect(resolveQuery('gómez', subjects)).toEqual({ subjectId: null, teacherQuery: 'gómez' })

@@ -5,6 +5,7 @@ import {
   updateWindow,
 } from '../../db/availability.js';
 import { teacherHasRateFor } from '../../db/rates.js';
+import { listTeachers } from '../../db/users.js';
 import { validateWindow } from '../../lib/availabilityWindow.js';
 import { todayIso } from '../../lib/clock.js';
 
@@ -13,8 +14,18 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 export default async function teachersRoutes(app) {
   /**
-   * Todas las rutas son del docente logueado (`me`): la disponibilidad sale
-   * de la sesión, así que nadie puede leer ni tocar la de otro. Lo que ve el
+   * Los docentes que ofrecen alguna materia, para las sugerencias del
+   * buscador. Se pide una vez y el front filtra mientras se tipea: son pocos
+   * y así no hay un pedido por tecla. Es la única ruta de acá que no es del
+   * docente logueado: la usa cualquiera con sesión.
+   */
+  app.get('/', { onRequest: app.requireAuth }, async (request, reply) => {
+    return reply.send(await listTeachers());
+  });
+
+  /**
+   * Las rutas de disponibilidad son del docente logueado (`me`): sale de la
+   * sesión, así que nadie puede leer ni tocar la de otro. Lo que ve el
    * alumno es /api/availability, ya expandido y sin los links.
    */
   function onlyTeachers(request, reply, done) {
