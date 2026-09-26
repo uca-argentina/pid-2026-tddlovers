@@ -2,7 +2,7 @@ import { Component } from 'react'
 import { NavLink } from 'react-router-dom'
 import SearchBar from './SearchBar.jsx'
 import ThemeToggle from './ThemeToggle.jsx'
-import { CalendarIcon, ClockIcon, UserIcon } from './icons.jsx'
+import { CalendarIcon, ClockIcon, ListCheckIcon, UserIcon } from './icons.jsx'
 import { getInitials } from '../utils/user.js'
 import './NavBar.css'
 
@@ -70,7 +70,10 @@ class NavBar extends Component {
             <ClockIcon />
             <span className="navbar-item-label">{etiquetaDisponibilidad}</span>
           </NavLink>
-          
+          <NavLink to="/reservas" className={this.getLinkClass} aria-label="Mis reservas">
+            <ListCheckIcon />
+            <span className="navbar-item-label">Reservas</span>
+          </NavLink>
         </nav>
 
         <div className="navbar-foot">

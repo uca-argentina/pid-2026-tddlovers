@@ -161,12 +161,54 @@ export function fetchAvailability({ from, to }) {
 }
 
 /**
- * Las clases que ya reservó el alumno logueado, para pintar en gris los
- * horarios que le chocan. Es el mismo endpoint que fetchClasses: el backend
- * ya filtra por la sesión.
+ * Las clases que ya reservó el alumno logueado y siguen en pie, para pintar
+ * en gris los horarios que le chocan. Todo lo que no está cancelado ocupa el
+ * horario (pendiente incluida), y eso ya no se pide con un solo ?status: se
+ * traen todas y se filtra acá.
  */
 export function fetchMyLessons({ from, to }) {
-  return request(`/api/classes?from=${from}&to=${to}&status=reservada`)
+  return request(`/api/classes?from=${from}&to=${to}`).then((lessons) =>
+    Array.isArray(lessons) ? lessons.filter((lesson) => lesson.status !== 'cancelada') : lessons,
+  )
+}
+
+/** Una clase propia (como alumno o como docente), con su estado. */
+export function fetchClass(id) {
+  return request(`/api/classes/${id}`)
+}
+
+// Las acciones sobre una reserva. Todas devuelven la clase ya actualizada; si
+// no se puede (la regla de 24 h, ya empezó, el otro la canceló), el backend
+// dice por qué en el message del error.
+
+export function acceptLesson(id) {
+  return request(`/api/classes/${id}/accept`, { method: 'POST' })
+}
+
+export function cancelLesson(id) {
+  return request(`/api/classes/${id}/cancel`, { method: 'POST' })
+}
+
+export function payLesson(id) {
+  return request(`/api/classes/${id}/pay`, { method: 'POST' })
+}
+
+export function markAttendance(id, attended) {
+  return request(`/api/classes/${id}/attendance`, {
+    method: 'POST',
+    body: JSON.stringify({ attended }),
+  })
+}
+
+/**
+ * Reprogramar: mismo body que reservar, sin materia (es la de la clase
+ * vieja). Devuelve la reserva nueva, que nace pendiente.
+ */
+export function rescheduleLesson(id, { windowId, date, startTime, durationMinutes }) {
+  return request(`/api/classes/${id}/reschedule`, {
+    method: 'POST',
+    body: JSON.stringify({ windowId, date, startTime, durationMinutes }),
+  })
 }
 
 /**

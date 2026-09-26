@@ -1,4 +1,5 @@
 import { Component } from 'react'
+import ClassActions from '../../components/ClassActions.jsx'
 import { PinIcon, SpinnerIcon, UsersIcon, VideoIcon } from '../../components/icons.jsx'
 import { formatRangeLabel } from '../../utils/availability.js'
 import { formatDayLong, formatDuration } from '../../utils/calendar.js'
@@ -21,10 +22,10 @@ import './DayAgenda.css'
  * del docente y un docente ve el del alumno. Sin fetch propio: los datos
  * bajan por props.
  *
- * Acá solo llegan clases reservadas (CalendarPage filtra por status), así que
- * ya no se muestra la pastillita de estado: diría "reservada" en el 100% de
- * las filas. El campo `status` sigue viviendo en el dato para la pantalla de
- * disponibilidad.
+ * Acá llega todo lo que no está cancelado (CalendarPage lo filtra), así que
+ * cada clase muestra su estado y lo que se puede hacer con ella (aceptar,
+ * pagar, tomar lista...) con ClassActions. En una grupal el docente ve a cada
+ * alumno con su propia reserva: acepta y toma lista de a uno.
  */
 class DayAgenda extends Component {
   /** El nombre de la contraparte, según desde qué rol se esté mirando. */
@@ -42,9 +43,8 @@ class DayAgenda extends Component {
     if (this.props.viewRole === 'teacher') {
       return {
         label: 'Alumno',
-        // Defensivo: acá solo llegan clases reservadas, así que siempre
-        // debería haber alumno. Si el backend manda una sin nombre, preferimos
-        // este texto antes que un "Alumno: undefined".
+        // Defensivo: toda reserva tiene alumno. Si el backend manda una sin
+        // nombre, preferimos este texto antes que un "Alumno: undefined".
         name: item.studentName || 'Sin reservar',
         empty: !item.studentName,
       }
@@ -109,6 +109,27 @@ class DayAgenda extends Component {
     )
   }
 
+  /**
+   * El estado y los botones. Una grupal vista por el docente tiene una
+   * reserva por alumno, cada una con su nombre; en todo lo demás hay una
+   * sola.
+   */
+  renderActions(item) {
+    const { viewRole, onClassChange } = this.props
+    const rows = item.rows && item.rows.length > 0 ? item.rows : [item]
+    const porAlumno = viewRole === 'teacher' && rows.length > 1
+
+    return rows.map((row) => (
+      <ClassActions
+        key={row.id}
+        cls={row}
+        viewRole={viewRole}
+        label={porAlumno ? row.studentName : null}
+        onChange={onClassChange}
+      />
+    ))
+  }
+
   renderItem(item) {
     const counterpart = this.getCounterpart(item)
     // En centavos, calculado al reservar (tarifa × duración). Defensivo por
@@ -146,6 +167,7 @@ class DayAgenda extends Component {
         )}
 
         {tienePrecio ? <p className="day-agenda-price">{formatMoney(item.priceCents)}</p> : null}
+        {this.renderActions(item)}
       </li>
     )
   }
@@ -181,6 +203,7 @@ DayAgenda.defaultProps = {
   classes: [],
   loading: false,
   viewRole: 'student',
+  onClassChange: () => {},
 }
 
 export default DayAgenda

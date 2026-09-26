@@ -6,20 +6,25 @@ import withRouter from '../../routes/withRouter.jsx'
 import { toISODate } from '../../utils/calendar.js'
 import { dayKeyFromIso } from '../../utils/booking.js'
 
-const { bookLesson, fetchAvailability, fetchMyLessons, fetchSubjects } = vi.hoisted(() => ({
-  bookLesson: vi.fn(),
-  fetchAvailability: vi.fn(),
-  fetchMyLessons: vi.fn(),
-  fetchSubjects: vi.fn(),
-}))
+const { bookLesson, fetchAvailability, fetchClass, fetchMyLessons, fetchSubjects, rescheduleLesson } =
+  vi.hoisted(() => ({
+    bookLesson: vi.fn(),
+    fetchAvailability: vi.fn(),
+    fetchClass: vi.fn(),
+    fetchMyLessons: vi.fn(),
+    fetchSubjects: vi.fn(),
+    rescheduleLesson: vi.fn(),
+  }))
 
 // La fábrica reemplaza el módulo ENTERO: lo que no esté acá llega como
 // undefined. bookLesson lo usa BookingDialog, no el tablero.
 vi.mock('../../api/client.js', () => ({
   bookLesson,
   fetchAvailability,
+  fetchClass,
   fetchMyLessons,
   fetchSubjects,
+  rescheduleLesson,
 }))
 
 const MATERIAS = [
@@ -584,5 +589,73 @@ describe('BookingBoard', () => {
 
     expect(fetchMyLessons).not.toHaveBeenCalled()
     expect(screen.queryByText(/Se superpone/)).not.toBeInTheDocument()
+  })
+
+  describe('reprogramar', () => {
+    // Una clase de Física con Carla, hoy de 9 a 10, ya pagada.
+    const vieja = {
+      id: 'c9',
+      date: HOY,
+      startTime: '09:00',
+      endTime: '10:00',
+      teacherId: 4,
+      teacherName: 'Carla Benítez',
+      subjectId: 2,
+      subjectName: 'Física',
+      status: 'confirmada',
+    }
+
+    beforeEach(() => {
+      fetchClass.mockReset().mockResolvedValue(vieja)
+      rescheduleLesson.mockReset().mockResolvedValue({ id: 'nueva' })
+      fetchAvailability.mockResolvedValue([slot(), carla()])
+      // La clase vieja también llega entre las propias.
+      fetchMyLessons.mockResolvedValue([vieja])
+    })
+
+    it('muestra solo los horarios del mismo docente, con la misma materia', async () => {
+      renderBoard('/disponibilidad?reprogramar=c9')
+      await esperarCarga()
+
+      expect(await screen.findByText(/Reprogramando tu clase de/)).toHaveTextContent('Física')
+      expect(fetchClass).toHaveBeenCalledWith('c9')
+      expect(screen.getByRole('button', { name: RESERVAR_CARLA })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /Laura Gómez/ })).not.toBeInTheDocument()
+
+      await userEvent.click(screen.getByRole('button', { name: RESERVAR_CARLA }))
+      const modal = screen.getByRole('dialog', { name: 'Reprogramar clase' })
+      // Carla también da Matemática, pero se reprograma la misma materia.
+      expect(within(modal).queryByText('Matemática')).not.toBeInTheDocument()
+      // La clase vieja no choca con su propio horario: se puede correr ahí.
+      expect(within(modal).getByRole('button', { name: '09:00' })).toBeEnabled()
+    })
+
+    it('pide el cambio en vez de una reserva nueva, y lo avisa', async () => {
+      renderBoard('/disponibilidad?reprogramar=c9')
+      await esperarCarga()
+      await userEvent.click(await screen.findByRole('button', { name: RESERVAR_CARLA }))
+      const modal = screen.getByRole('dialog')
+
+      await userEvent.click(within(modal).getByRole('button', { name: '10:00' }))
+      await userEvent.click(within(modal).getByRole('button', { name: 'Pedir nuevo horario' }))
+
+      expect(rescheduleLesson).toHaveBeenCalledWith(
+        'c9',
+        expect.objectContaining({ windowId: 'w-carla', startTime: '10:00' }),
+      )
+      expect(bookLesson).not.toHaveBeenCalled()
+      expect(await screen.findByText(/Pediste el nuevo horario de Física/)).toBeInTheDocument()
+    })
+
+    it('se puede dejar de reprogramar y volver a ver todo', async () => {
+      renderBoard('/disponibilidad?reprogramar=c9')
+      await esperarCarga()
+      await screen.findByText(/Reprogramando tu clase de/)
+
+      await userEvent.click(screen.getByRole('button', { name: 'Dejar de reprogramar' }))
+
+      expect(screen.queryByText(/Reprogramando tu clase de/)).not.toBeInTheDocument()
+      expect(await screen.findByRole('button', { name: /Laura Gómez/ })).toBeInTheDocument()
+    })
   })
 })

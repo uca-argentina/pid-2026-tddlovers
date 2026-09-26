@@ -70,3 +70,33 @@
     order: 1;
   }
 }
+
+/* Aviso de "estás reprogramando", arriba del mes como los banners. */
+.booking-reschedule {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+}
+
+.booking-reschedule p {
+  margin: 0;
+  flex: 1 1 260px;
+}
+
+.booking-reschedule-stop {
+  font: inherit;
+  font-weight: 600;
+  color: var(--color-primary);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}

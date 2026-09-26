@@ -6,6 +6,7 @@ import CalendarPage from './pages/Calendar/CalendarPage.jsx'
 import LoginPage from './pages/Login/LoginPage.jsx'
 import ProfilePage from './pages/Profile/ProfilePage.jsx'
 import RegisterPage from './pages/Register/RegisterPage.jsx'
+import ReservationsPage from './pages/Reservations/ReservationsPage.jsx'
 import SearchResultsPage from './pages/Search/SearchResultsPage.jsx'
 import { fetchCurrentUser, logoutAccount } from './api/client.js'
 
@@ -123,6 +124,7 @@ class App extends Component {
                 />
               }
             />
+            <Route path="/reservas" element={<ReservationsPage viewRole={viewRole} />} />
             <Route path="/buscar" element={<SearchResultsPage />} />
             {/* Dos rutas para la misma pantalla. La materia solo le sirve al
                 alumno (entra con esa materia filtrada); el docente tiene una

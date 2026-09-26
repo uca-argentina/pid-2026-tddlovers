@@ -2,7 +2,7 @@ import { Component } from 'react'
 import Modal from '../../components/Modal.jsx'
 import Banner from '../../components/Banner.jsx'
 import { SpinnerIcon } from '../../components/icons.jsx'
-import { bookLesson } from '../../api/client.js'
+import { bookLesson, rescheduleLesson } from '../../api/client.js'
 import { formatDayLongWithYear, fromISODate } from '../../utils/calendar.js'
 import { formatRangeLabel } from '../../utils/availability.js'
 import { formatEnrolled, toMinutes } from '../../utils/booking.js'
@@ -149,20 +149,38 @@ class BookingDialog extends Component {
 
     this.setState({ saving: true, error: null })
 
-    bookLesson({
+    const { rescheduleOf } = this.props
+    const pedido = {
       windowId: card.windowId,
       date: card.date,
       startTime: selection.start,
       subjectId: subject.id,
       durationMinutes: selection.minutes,
-    })
-      .then(() => onBooked({ subjectName: subject.name, teacherName: card.teacherName }))
+    }
+    // Reprogramar manda lo mismo que reservar, salvo la materia: la pone el
+    // backend, es la de la clase vieja (la tarjeta ya viene recortada a esa).
+    const guardar = rescheduleOf ? rescheduleLesson(rescheduleOf.id, pedido) : bookLesson(pedido)
+
+    guardar
+      .then(() =>
+        onBooked({
+          subjectName: subject.name,
+          teacherName: card.teacherName,
+          rescheduled: Boolean(rescheduleOf),
+        }),
+      )
       .catch((error) => {
         this.setState({
           saving: false,
           error: error.message || 'No se pudo reservar la clase. Probá de nuevo.',
         })
       })
+  }
+
+  renderConfirmLabel() {
+    const { saving } = this.state
+    if (this.props.rescheduleOf) return saving ? 'Reprogramando...' : 'Pedir nuevo horario'
+    return saving ? 'Reservando...' : 'Confirmar reserva'
   }
 
   renderPrivateNote() {
@@ -351,7 +369,7 @@ class BookingDialog extends Component {
     const listo = Boolean(selection && this.getSubject(selection.subjectId))
 
     return (
-      <Modal title="Reservar clase" onClose={onClose}>
+      <Modal title={this.props.rescheduleOf ? 'Reprogramar clase' : 'Reservar clase'} onClose={onClose}>
         <div className="booking-dialog">
           <dl className="booking-dialog-details">
             <div>
@@ -406,7 +424,7 @@ class BookingDialog extends Component {
               disabled={!listo || saving}
             >
               {saving ? <SpinnerIcon className="spin" /> : null}
-              {saving ? 'Reservando...' : 'Confirmar reserva'}
+              {this.renderConfirmLabel()}
             </button>
           </div>
         </div>

@@ -52,4 +52,9 @@ describe('NavBar', () => {
     expect(screen.getByLabelText('Disponibilidad')).toHaveAttribute('aria-current', 'page')
     expect(screen.getByLabelText('Mi calendario')).not.toHaveAttribute('aria-current')
   })
+
+  it('linkea a mis reservas', () => {
+    renderAt('/')
+    expect(screen.getByLabelText('Mis reservas')).toHaveAttribute('href', '/reservas')
+  })
 })
