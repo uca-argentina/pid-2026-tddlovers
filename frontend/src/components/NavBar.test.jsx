@@ -41,6 +41,11 @@ describe('NavBar', () => {
     expect(input).toHaveValue('álgebra')
   })
 
+  it('al docente no le muestra el buscador', () => {
+    renderAt('/', { viewRole: 'teacher' })
+    expect(screen.queryByLabelText('Buscar docentes o materias')).not.toBeInTheDocument()
+  })
+
   it('linkea a la disponibilidad', () => {
     renderAt('/')
     expect(screen.getByLabelText('Disponibilidad')).toHaveAttribute('href', '/disponibilidad')
@@ -51,5 +56,10 @@ describe('NavBar', () => {
     renderAt('/disponibilidad/3')
     expect(screen.getByLabelText('Disponibilidad')).toHaveAttribute('aria-current', 'page')
     expect(screen.getByLabelText('Mi calendario')).not.toHaveAttribute('aria-current')
+  })
+
+  it('linkea a mis reservas', () => {
+    renderAt('/')
+    expect(screen.getByLabelText('Mis reservas')).toHaveAttribute('href', '/reservas')
   })
 })

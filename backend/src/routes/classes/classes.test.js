@@ -2,9 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../db/classes.js', () => ({
   bookClass: vi.fn(),
+  expireStartedPending: vi.fn().mockResolvedValue(undefined),
   findClassById: vi.fn(),
   findClassesForUser: vi.fn(),
   hasOverlappingClass: vi.fn(),
+  rescheduleClass: vi.fn(),
+  transitionClass: vi.fn(),
 }));
 
 vi.mock('../../db/availability.js', () => ({
@@ -22,7 +25,15 @@ vi.mock('../../db/sessions.js', () => ({
   deleteExpiredSessions: vi.fn().mockResolvedValue(undefined),
 }));
 
-const { bookClass, findClassById, hasOverlappingClass } = await import('../../db/classes.js');
+const {
+  bookClass,
+  expireStartedPending,
+  findClassById,
+  findClassesForUser,
+  hasOverlappingClass,
+  rescheduleClass,
+  transitionClass,
+} = await import('../../db/classes.js');
 const { findWindowById } = await import('../../db/availability.js');
 const { findRate } = await import('../../db/rates.js');
 const { findValidSession } = await import('../../db/sessions.js');
@@ -331,5 +342,248 @@ describe('POST /api/classes', () => {
     const res = await app.inject({ method: 'POST', url: '/api/classes', headers, payload: reserva() });
 
     expect(res.statusCode).toBe(403);
+  });
+});
+
+// --- Estados ------------------------------------------------------------------
+
+const CLASE_ID = '0d9c8b7a-6f5e-4d3c-8b2a-190817263544';
+const ALUMNO = 'user-1';
+
+// La sesión de los tests es siempre 'user-1': según el caso, es el alumno o
+// el docente de la clase.
+const clase = (over = {}) => ({
+  id: CLASE_ID,
+  date: '2099-09-14',
+  startTime: '13:00',
+  status: 'pendiente',
+  paidAt: null,
+  teacherId: DOCENTE,
+  studentId: ALUMNO,
+  subjectId: MATE,
+  ...over,
+});
+const comoDocente = (over = {}) => clase({ teacherId: 'user-1', studentId: 'otro-alumno', ...over });
+// Una fecha que ya pasó, para "la clase ya empezó".
+const PASADA = '2020-03-02';
+
+describe('class states', () => {
+  let app;
+
+  beforeEach(() => {
+    app = buildApp({ logger: false });
+    transitionClass.mockResolvedValue(true);
+  });
+
+  afterEach(async () => {
+    vi.clearAllMocks();
+    await app.close();
+  });
+
+  async function post(path, { role = 'student', payload } = {}) {
+    const headers = await authedHeaders(app, role);
+    return app.inject({ method: 'POST', url: `/api/classes/${CLASE_ID}/${path}`, headers, payload });
+  }
+
+  it('listing expires pending classes that already started first', async () => {
+    findClassesForUser.mockResolvedValueOnce([]);
+    const headers = await authedHeaders(app);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/classes?from=2099-09-01&to=2099-09-30',
+      headers,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(expireStartedPending).toHaveBeenCalled();
+  });
+
+  it('accepts the new statuses as a filter and rejects the old one', async () => {
+    findClassesForUser.mockResolvedValue([]);
+    const headers = await authedHeaders(app);
+    const url = (status) => `/api/classes?from=2099-09-01&to=2099-09-30&status=${status}`;
+
+    expect((await app.inject({ method: 'GET', url: url('confirmada'), headers })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'GET', url: url('reservada'), headers })).statusCode).toBe(400);
+  });
+
+  it('someone else\'s class is a 404', async () => {
+    findClassById.mockResolvedValue(clase({ teacherId: DOCENTE, studentId: 'otro' }));
+
+    const res = await post('cancel');
+
+    expect(res.statusCode).toBe(404);
+    expect(transitionClass).not.toHaveBeenCalled();
+  });
+
+  it('the teacher accepts a pending class', async () => {
+    findClassById.mockResolvedValue(comoDocente());
+
+    const res = await post('accept', { role: 'teacher' });
+
+    expect(res.statusCode).toBe(200);
+    expect(transitionClass).toHaveBeenCalledWith(CLASE_ID, { from: 'pendiente', to: 'aceptada' });
+  });
+
+  it('the student cannot accept their own booking', async () => {
+    findClassById.mockResolvedValue(clase());
+
+    const res = await post('accept');
+
+    expect(res.statusCode).toBe(403);
+    expect(transitionClass).not.toHaveBeenCalled();
+  });
+
+  it('a teacher saying no to a pending class rejects it', async () => {
+    findClassById.mockResolvedValue(comoDocente());
+
+    await post('cancel', { role: 'teacher' });
+
+    expect(transitionClass).toHaveBeenCalledWith(CLASE_ID, {
+      from: 'pendiente',
+      to: 'cancelada',
+      cancelledBy: 'teacher',
+      cancelReason: 'rechazada',
+    });
+  });
+
+  it('the student cancels a confirmed class well in advance', async () => {
+    findClassById.mockResolvedValue(clase({ status: 'confirmada' }));
+
+    const res = await post('cancel');
+
+    expect(res.statusCode).toBe(200);
+    expect(transitionClass).toHaveBeenCalledWith(CLASE_ID, {
+      from: 'confirmada',
+      to: 'cancelada',
+      cancelledBy: 'student',
+      cancelReason: 'cancelada',
+    });
+  });
+
+  it('a class that already started cannot be cancelled', async () => {
+    findClassById.mockResolvedValue(clase({ status: 'confirmada', date: PASADA }));
+
+    const res = await post('cancel');
+
+    expect(res.statusCode).toBe(409);
+    expect(transitionClass).not.toHaveBeenCalled();
+  });
+
+  it('paying an accepted class confirms it', async () => {
+    findClassById.mockResolvedValue(clase({ status: 'aceptada' }));
+
+    const res = await post('pay');
+
+    expect(res.statusCode).toBe(200);
+    expect(transitionClass).toHaveBeenCalledWith(CLASE_ID, {
+      from: 'aceptada',
+      to: 'confirmada',
+      paid: true,
+    });
+  });
+
+  it('paying a class that was already given keeps its status', async () => {
+    findClassById.mockResolvedValue(clase({ status: 'realizada', date: PASADA }));
+
+    await post('pay');
+
+    expect(transitionClass).toHaveBeenCalledWith(CLASE_ID, {
+      from: 'realizada',
+      to: 'realizada',
+      paid: true,
+    });
+  });
+
+  it('a pending class cannot be paid yet', async () => {
+    findClassById.mockResolvedValue(clase());
+
+    const res = await post('pay');
+
+    expect(res.statusCode).toBe(409);
+  });
+
+  it('the teacher takes attendance once the class started', async () => {
+    findClassById.mockResolvedValue(comoDocente({ status: 'aceptada', date: PASADA }));
+
+    const presente = await post('attendance', { role: 'teacher', payload: { attended: true } });
+    expect(presente.statusCode).toBe(200);
+    expect(transitionClass).toHaveBeenLastCalledWith(CLASE_ID, { from: 'aceptada', to: 'realizada' });
+
+    await post('attendance', { role: 'teacher', payload: { attended: false } });
+    expect(transitionClass).toHaveBeenLastCalledWith(CLASE_ID, {
+      from: 'aceptada',
+      to: 'no_presentada',
+    });
+  });
+
+  it('attendance needs to say whether the student came', async () => {
+    findClassById.mockResolvedValue(comoDocente({ status: 'confirmada', date: PASADA }));
+
+    const res = await post('attendance', { role: 'teacher', payload: {} });
+
+    expect(res.statusCode).toBe(400);
+    expect(transitionClass).not.toHaveBeenCalled();
+  });
+
+  it('attendance cannot be taken before the class starts', async () => {
+    findClassById.mockResolvedValue(comoDocente({ status: 'confirmada' }));
+
+    const res = await post('attendance', { role: 'teacher', payload: { attended: true } });
+
+    expect(res.statusCode).toBe(409);
+  });
+
+  it('if the other side changed the class meanwhile, nothing is overwritten', async () => {
+    findClassById.mockResolvedValue(clase());
+    transitionClass.mockResolvedValue(false);
+
+    const res = await post('cancel');
+
+    expect(res.statusCode).toBe(409);
+  });
+
+  describe('reschedule', () => {
+    beforeEach(() => {
+      findWindowById.mockResolvedValue(ventana({ id: VENTANA_ID }));
+      hasOverlappingClass.mockResolvedValue(false);
+      findRate.mockResolvedValue(500000);
+      rescheduleClass.mockResolvedValue({ id: 'nueva' });
+    });
+
+    const nuevoHorario = { windowId: VENTANA_ID, date: '2099-09-14', startTime: '14:00', durationMinutes: 60 };
+
+    it('cancels the confirmed class and books a new pending one with the same subject', async () => {
+      findClassById.mockResolvedValue(clase({ status: 'confirmada', date: '2099-09-07' }));
+
+      const res = await post('reschedule', { payload: { ...nuevoHorario, subjectId: 'otra-cosa' } });
+
+      expect(res.statusCode).toBe(201);
+      expect(rescheduleClass).toHaveBeenCalledWith(
+        CLASE_ID,
+        expect.objectContaining({ subjectId: MATE, startTime: '14:00', endTime: '15:00' })
+      );
+      // Su propia clase vieja no cuenta como choque.
+      expect(hasOverlappingClass).toHaveBeenCalledWith(expect.objectContaining({ excludeId: CLASE_ID }));
+    });
+
+    it('only with the same teacher', async () => {
+      findClassById.mockResolvedValue(clase({ status: 'confirmada', teacherId: 'otro-docente' }));
+
+      const res = await post('reschedule', { payload: nuevoHorario });
+
+      expect(res.statusCode).toBe(409);
+      expect(rescheduleClass).not.toHaveBeenCalled();
+    });
+
+    it('only a confirmed class', async () => {
+      findClassById.mockResolvedValue(clase({ status: 'aceptada' }));
+
+      const res = await post('reschedule', { payload: nuevoHorario });
+
+      expect(res.statusCode).toBe(409);
+      expect(rescheduleClass).not.toHaveBeenCalled();
+    });
   });
 });

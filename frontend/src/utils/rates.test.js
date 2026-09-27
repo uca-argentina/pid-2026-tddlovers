@@ -1,7 +1,6 @@
 import {
   centsToInput,
   classPriceCents,
-  durationOptions,
   formatHourlyRate,
   formatMoney,
   parseMoney,
@@ -62,14 +61,6 @@ describe('classPriceCents', () => {
     expect(classPriceCents(500000, 60)).toBe(500000)
     expect(classPriceCents(500000, 50)).toBe(416667)
     expect(classPriceCents(0, 90)).toBe(0)
-  })
-})
-
-describe('durationOptions', () => {
-  it('de 30 minutos hasta el máximo, de a 5', () => {
-    expect(durationOptions(50)).toEqual([30, 35, 40, 45, 50])
-    expect(durationOptions(30)).toEqual([30])
-    expect(durationOptions(25)).toEqual([])
   })
 })
 

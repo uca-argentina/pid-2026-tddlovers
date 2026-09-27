@@ -1,5 +1,6 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render as rtlRender, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import CalendarPage from './CalendarPage.jsx'
 import { addMonths, formatMonthTitle, toISODate } from '../../utils/calendar.js'
 
@@ -9,10 +10,14 @@ const { fetchClasses } = vi.hoisted(() => ({ fetchClasses: vi.fn() }))
 
 vi.mock('../../api/client.js', () => ({ fetchClasses }))
 
+// Las clases traen links (reprogramar, ver solicitudes): hace falta un router.
+function render(ui) {
+  return rtlRender(<MemoryRouter>{ui}</MemoryRouter>)
+}
+
 const today = new Date()
 
-// El calendario es "mis clases": solo muestra reservadas, así que las
-// fixtures tienen que serlo o las filtra antes de llegar a la pantalla.
+// El calendario es "mis clases": muestra todo lo que no está cancelado.
 function classOn(iso, overrides = {}) {
   return {
     id: `c-${iso}`,
@@ -22,7 +27,7 @@ function classOn(iso, overrides = {}) {
     subjectName: 'Álgebra',
     teacherName: 'Laura Gómez',
     studentName: 'Sofía Ramírez',
-    status: 'reservada',
+    status: 'confirmada',
     ...overrides,
   }
 }
@@ -87,24 +92,47 @@ describe('CalendarPage', () => {
     expect(screen.queryByText(/Laura Gómez/)).not.toBeInTheDocument()
   })
 
-  it('pide solo las clases reservadas', async () => {
+  it('pide todas las clases, no un solo estado', async () => {
     render(<CalendarPage />)
     await waitFor(() => expect(fetchClasses).toHaveBeenCalled())
-    expect(fetchClasses.mock.calls[0][0].status).toBe('reservada')
+    expect(fetchClasses.mock.calls[0][0].status).toBeUndefined()
   })
 
-  it('no muestra turnos libres aunque vengan en la respuesta', async () => {
-    // El backend todavía no existe; si algún día ignora el ?status, un turno
-    // libre acá se leería como una clase que nadie reservó.
+  it('no muestra las canceladas', async () => {
     const iso = toISODate(today)
     fetchClasses.mockResolvedValue([
-      classOn(iso, { status: 'disponible', subjectName: 'Fantasma' }),
+      classOn(iso, { status: 'cancelada', subjectName: 'Fantasma' }),
     ])
 
     render(<CalendarPage />)
 
     expect(await screen.findByText('0 clases')).toBeInTheDocument()
     expect(screen.queryByText('Fantasma')).not.toBeInTheDocument()
+  })
+
+  it('muestra el estado de cada clase, pendientes incluidas', async () => {
+    const iso = toISODate(today)
+    fetchClasses.mockResolvedValue([classOn(iso, { status: 'pendiente', subjectName: 'Química' })])
+
+    render(<CalendarPage />)
+
+    expect((await screen.findAllByText('Química')).length).toBeGreaterThan(0)
+    expect(screen.getByText('Pendiente')).toBeInTheDocument()
+  })
+
+  it('al docente le avisa cuántas solicitudes esperan respuesta', async () => {
+    fetchClasses.mockImplementation(({ status }) =>
+      Promise.resolve(
+        status === 'pendiente'
+          ? [classOn('2099-01-01', { id: 'p1', status: 'pendiente' }), classOn('2099-01-02', { id: 'p2', status: 'pendiente' })]
+          : [],
+      ),
+    )
+
+    render(<CalendarPage viewRole="teacher" />)
+
+    expect(await screen.findByText(/Tenés 2 solicitudes de clase esperando respuesta/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Ver solicitudes' })).toHaveAttribute('href', '/reservas')
   })
 
   it('defensivo: una clase sin alumno no rompe la vista de docente', async () => {

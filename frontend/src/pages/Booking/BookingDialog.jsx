@@ -1,14 +1,16 @@
 import { Component } from 'react'
 import Modal from '../../components/Modal.jsx'
 import Banner from '../../components/Banner.jsx'
+import DurationSlider from '../../components/DurationSlider.jsx'
 import { SpinnerIcon } from '../../components/icons.jsx'
-import { bookLesson } from '../../api/client.js'
+import { bookLesson, rescheduleLesson } from '../../api/client.js'
 import { formatDayLongWithYear, fromISODate } from '../../utils/calendar.js'
 import { formatRangeLabel } from '../../utils/availability.js'
 import { formatEnrolled, toMinutes } from '../../utils/booking.js'
 import {
+  CLASS_MINUTES_STEP,
+  MIN_CLASS_MINUTES,
   classPriceCents,
-  durationOptions,
   formatHourlyRate,
   formatMoney,
 } from '../../utils/rates.js'
@@ -136,8 +138,8 @@ class BookingDialog extends Component {
     })
   }
 
-  handleMinutes = (event) => {
-    this.setState({ minutes: Number(event.target.value), error: null })
+  handleMinutes = (minutes) => {
+    this.setState({ minutes, error: null })
   }
 
   handleConfirm = () => {
@@ -149,20 +151,38 @@ class BookingDialog extends Component {
 
     this.setState({ saving: true, error: null })
 
-    bookLesson({
+    const { rescheduleOf } = this.props
+    const pedido = {
       windowId: card.windowId,
       date: card.date,
       startTime: selection.start,
       subjectId: subject.id,
       durationMinutes: selection.minutes,
-    })
-      .then(() => onBooked({ subjectName: subject.name, teacherName: card.teacherName }))
+    }
+    // Reprogramar manda lo mismo que reservar, salvo la materia: la pone el
+    // backend, es la de la clase vieja (la tarjeta ya viene recortada a esa).
+    const guardar = rescheduleOf ? rescheduleLesson(rescheduleOf.id, pedido) : bookLesson(pedido)
+
+    guardar
+      .then(() =>
+        onBooked({
+          subjectName: subject.name,
+          teacherName: card.teacherName,
+          rescheduled: Boolean(rescheduleOf),
+        }),
+      )
       .catch((error) => {
         this.setState({
           saving: false,
           error: error.message || 'No se pudo reservar la clase. Probá de nuevo.',
         })
       })
+  }
+
+  renderConfirmLabel() {
+    const { saving } = this.state
+    if (this.props.rescheduleOf) return saving ? 'Reprogramando...' : 'Pedir nuevo horario'
+    return saving ? 'Reservando...' : 'Confirmar reserva'
   }
 
   renderPrivateNote() {
@@ -293,22 +313,24 @@ class BookingDialog extends Component {
     const option = this.getStartOption()
     if (!option || this.state.groupStart !== null) return null
 
+    const { minutes } = this.state
+    const hasta = minutesToTime(toMinutes(option.start) + minutes)
+
     return (
       <div className="booking-dialog-duration-field">
         <label htmlFor="booking-dialog-minutes">¿Cuánto dura?</label>
-        <select
+        <DurationSlider
           id="booking-dialog-minutes"
-          className="booking-dialog-select"
-          value={this.state.minutes ?? ''}
+          value={minutes}
+          min={MIN_CLASS_MINUTES}
+          max={option.maxMinutes}
+          step={CLASS_MINUTES_STEP}
           onChange={this.handleMinutes}
           disabled={this.state.saving}
-        >
-          {durationOptions(option.maxMinutes).map((minutes) => (
-            <option key={minutes} value={minutes}>
-              {formatMinutes(minutes)} (hasta las {minutesToTime(toMinutes(option.start) + minutes)})
-            </option>
-          ))}
-        </select>
+          valueLabel={`${formatMinutes(minutes)} · ${formatRangeLabel(option.start, hasta)}`}
+          minLabel={formatMinutes(MIN_CLASS_MINUTES)}
+          maxLabel={formatMinutes(option.maxMinutes)}
+        />
       </div>
     )
   }
@@ -351,7 +373,7 @@ class BookingDialog extends Component {
     const listo = Boolean(selection && this.getSubject(selection.subjectId))
 
     return (
-      <Modal title="Reservar clase" onClose={onClose}>
+      <Modal title={this.props.rescheduleOf ? 'Reprogramar clase' : 'Reservar clase'} onClose={onClose}>
         <div className="booking-dialog">
           <dl className="booking-dialog-details">
             <div>
@@ -406,7 +428,7 @@ class BookingDialog extends Component {
               disabled={!listo || saving}
             >
               {saving ? <SpinnerIcon className="spin" /> : null}
-              {saving ? 'Reservando...' : 'Confirmar reserva'}
+              {this.renderConfirmLabel()}
             </button>
           </div>
         </div>

@@ -256,6 +256,20 @@ export function BookIcon(props) {
 }
 
 /** Tacho: borrar. */
+export function ListCheckIcon(props) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M3.5 5.5l1.5 1.5 2.5-2.5M3.5 13.5l1.5 1.5 2.5-2.5M10.5 6h6M10.5 14h6"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 export function TrashIcon(props) {
   return (
     <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" {...props}>

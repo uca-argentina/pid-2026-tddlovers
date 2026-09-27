@@ -2,13 +2,13 @@ import { Component } from 'react'
 import { NavLink } from 'react-router-dom'
 import SearchBar from './SearchBar.jsx'
 import ThemeToggle from './ThemeToggle.jsx'
-import { CalendarIcon, ClockIcon, UserIcon } from './icons.jsx'
+import { CalendarIcon, ClockIcon, ListCheckIcon, UserIcon } from './icons.jsx'
 import { getInitials } from '../utils/user.js'
 import './NavBar.css'
 
 /**
- * Barra lateral fija: la marca arriba, el buscador, los destinos de la app
- * con ícono y etiqueta, y abajo el interruptor de tema. Se monta una sola
+ * Barra lateral fija: la marca arriba, el buscador (solo para el alumno), los
+ * destinos de la app con ícono y etiqueta, y abajo el interruptor de tema. Se monta una sola
  * vez desde AppLayout, así que navegar entre pantallas no la remonta (el
  * texto del buscador no se pierde).
  *
@@ -56,9 +56,13 @@ class NavBar extends Component {
           <ThemeToggle />
         </div>
 
-        <div className="navbar-search">
-          <SearchBar />
-        </div>
+        {/* Buscar docentes o materias es para reservar: el docente no tiene
+            nada que hacer con eso. */}
+        {esDocente ? null : (
+          <div className="navbar-search">
+            <SearchBar />
+          </div>
+        )}
 
         <nav className="navbar-nav">
           {/* `end` para que "/" no quede activo en todas las rutas. */}
@@ -70,7 +74,10 @@ class NavBar extends Component {
             <ClockIcon />
             <span className="navbar-item-label">{etiquetaDisponibilidad}</span>
           </NavLink>
-          
+          <NavLink to="/reservas" className={this.getLinkClass} aria-label="Mis reservas">
+            <ListCheckIcon />
+            <span className="navbar-item-label">Reservas</span>
+          </NavLink>
         </nav>
 
         <div className="navbar-foot">

@@ -70,15 +70,6 @@ export function classPriceCents(hourlyRateCents, minutes) {
   return Math.round((hourlyRateCents * minutes) / 60)
 }
 
-/** Las duraciones que se pueden elegir hasta `maxMinutes`: 30, 35, 40... */
-export function durationOptions(maxMinutes) {
-  const opciones = []
-  for (let minutos = MIN_CLASS_MINUTES; minutos <= maxMinutes; minutos += CLASS_MINUTES_STEP) {
-    opciones.push(minutos)
-  }
-  return opciones
-}
-
 /** Las modalidades en las que el docente tiene al menos una tarifa. */
 export function rateModalities(rates) {
   return [...new Set((rates || []).map((rate) => rate.modality))]

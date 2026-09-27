@@ -1,14 +1,19 @@
 import { Component } from 'react'
+import { Link } from 'react-router-dom'
 import Banner from '../../components/Banner.jsx'
 import MonthPane from './MonthPane.jsx'
 import DayAgenda from './DayAgenda.jsx'
-import { fromISODate, toISODate } from '../../utils/calendar.js'
+import { addDays, fromISODate, toISODate } from '../../utils/calendar.js'
 import { fetchClasses } from '../../api/client.js'
 import './CalendarPage.css'
 
-// Esta pantalla es "mis clases": solo las reservadas/confirmadas. Los turnos
-// libres son de la pantalla de disponibilidad, no de acá.
-const CALENDAR_STATUS = 'reservada'
+// Esta pantalla es "mis clases": todo lo que sigue en pie, en cualquier
+// estado (pendiente, aceptada, confirmada, realizada, no presentada). Las
+// canceladas no ocupan lugar en el calendario: se ven en "Mis reservas".
+const isOnCalendar = (item) => Boolean(item.status) && item.status !== 'cancelada'
+
+// Hasta dónde se buscan solicitudes pendientes para el aviso del docente.
+const PENDING_LOOKAHEAD_DAYS = 90
 
 /**
  * Pantalla principal: a la derecha el calendario del mes (con las clases de
@@ -33,6 +38,9 @@ class CalendarPage extends Component {
     classes: [],
     classesLoading: false,
     classesError: null,
+    // Solo para el docente: cuántas reservas esperan que responda, en
+    // cualquier mes (no solo el que se está mirando).
+    pendingCount: 0,
   }
 
   // Contador para descartar respuestas viejas: si se cambia de mes mientras
@@ -41,8 +49,35 @@ class CalendarPage extends Component {
   // desarrollo.
   fetchToken = 0
 
+  pendingToken = 0
+
+  componentDidMount() {
+    if (this.props.viewRole === 'teacher') this.loadPending()
+  }
+
   componentWillUnmount() {
     this.fetchToken += 1
+    this.pendingToken += 1
+  }
+
+  loadPending = () => {
+    const token = ++this.pendingToken
+    const hoy = new Date()
+    fetchClasses({
+      from: toISODate(hoy),
+      to: toISODate(addDays(hoy, PENDING_LOOKAHEAD_DAYS)),
+      status: 'pendiente',
+    })
+      .then((pendientes) => {
+        if (token !== this.pendingToken) return
+        const lista = Array.isArray(pendientes) ? pendientes : []
+        // Defensivo, igual que el calendario: no depender de que el backend
+        // respete el filtro.
+        this.setState({ pendingCount: lista.filter((item) => item.status === 'pendiente').length })
+      })
+      .catch(() => {
+        // El aviso es un extra: si falla, el calendario sigue andando.
+      })
   }
 
   /**
@@ -50,26 +85,26 @@ class CalendarPage extends Component {
    *
    * Una grupal llega como una fila por alumno (así está en la base), pero es
    * UNA clase: el docente la ve una sola vez con todos sus alumnos en
-   * `students`. Al alumno nunca le llegan dos filas del mismo turno, así que
-   * para él no cambia nada.
+   * `students`. Cada alumno sigue teniendo su propia reserva, con su estado,
+   * y esas filas van en `rows`: el docente acepta y toma lista de a uno. Al
+   * alumno nunca le llegan dos filas del mismo turno, así que para él no
+   * cambia nada.
    */
   getClassesByDate() {
     const map = {}
     const porTurno = {}
 
     for (const item of this.state.classes) {
-      // Se las pedimos al backend con ?status=reservada, pero no queremos
-      // depender de que respete el filtro: un turno libre acá se leería como
-      // una clase que nadie reservó.
-      if (item.status && item.status !== CALENDAR_STATUS) continue
+      if (!isOnCalendar(item)) continue
 
       const turno = `${item.teacherId}|${item.date}|${item.startTime}`
       if (porTurno[turno]) {
         porTurno[turno].students.push(item.studentName)
+        porTurno[turno].rows.push(item)
         continue
       }
 
-      const clase = { ...item, students: [item.studentName] }
+      const clase = { ...item, students: [item.studentName], rows: [item] }
       porTurno[turno] = clase
       if (!map[item.date]) map[item.date] = []
       map[item.date].push(clase)
@@ -94,7 +129,7 @@ class CalendarPage extends Component {
     const token = ++this.fetchToken
 
     this.setState({ classesLoading: true, classesError: null })
-    fetchClasses({ from, to, status: CALENDAR_STATUS })
+    fetchClasses({ from, to })
       .then((classes) => {
         if (token !== this.fetchToken) return
         // Defensivo: si el backend devuelve algo que no es un array,
@@ -117,6 +152,32 @@ class CalendarPage extends Component {
     this.setState({ selectedIso: iso })
   }
 
+  /**
+   * Una reserva cambió de estado (la aceptó, la pagó, la canceló): se
+   * reemplaza esa fila y listo, no hace falta volver a pedir el mes. Si quedó
+   * cancelada, getClassesByDate ya no la muestra.
+   */
+  handleClassChange = (updated) => {
+    if (!updated?.id) return
+    this.setState((prev) => ({
+      classes: prev.classes.map((item) => (String(item.id) === String(updated.id) ? updated : item)),
+    }))
+    if (this.props.viewRole === 'teacher') this.loadPending()
+  }
+
+  renderPending() {
+    const { pendingCount } = this.state
+    if (this.props.viewRole !== 'teacher' || pendingCount === 0) return null
+    return (
+      <p className="calendar-pending" role="status">
+        {pendingCount === 1
+          ? 'Tenés 1 solicitud de clase esperando respuesta.'
+          : `Tenés ${pendingCount} solicitudes de clase esperando respuesta.`}{' '}
+        <Link to="/reservas">Ver solicitudes</Link>
+      </p>
+    )
+  }
+
   render() {
     const { selectedIso, classesLoading, classesError } = this.state
     const classesByDate = this.getClassesByDate()
@@ -130,6 +191,7 @@ class CalendarPage extends Component {
           onSelectDay={this.handleSelectDay}
           onRangeChange={this.handleRangeChange}
         >
+          {this.renderPending()}
           {classesError ? <Banner type="danger">{classesError}</Banner> : null}
         </MonthPane>
 
@@ -143,6 +205,7 @@ class CalendarPage extends Component {
             classes={classesByDate[selectedIso] || []}
             loading={classesLoading}
             viewRole={this.props.viewRole}
+            onClassChange={this.handleClassChange}
           />
         </aside>
       </div>
