@@ -14,10 +14,10 @@
 import { toMinutes } from './availabilityExpansion.js';
 
 export const MODALITIES = ['virtual', 'in_person', 'hybrid'];
-export const MAX_STUDENTS_LIMIT = 50;
+const MAX_STUDENTS_LIMIT = 50;
 // La clase más corta que se puede reservar: la ventana tiene que tener lugar
 // para al menos una.
-export const MIN_DURATION = 30;
+const MIN_DURATION = 30;
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // 'HH:MM' en :00 o :30. '24:00' vale solo como fin (ver CLAUDE.md).

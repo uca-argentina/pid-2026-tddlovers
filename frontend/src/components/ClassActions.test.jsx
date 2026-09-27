@@ -2,6 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import ClassActions from './ClassActions.jsx'
+import { apiClass } from '../testing/fixtures.js'
 
 const { acceptLesson, cancelLesson, markAttendance, payLesson } = vi.hoisted(() => ({
   acceptLesson: vi.fn(),
@@ -17,16 +18,7 @@ const LEJOS = { iso: '2099-09-10', time: '10:00' }
 const CASI = { iso: '2099-09-13', time: '20:00' }
 const EMPEZADA = { iso: '2099-09-14', time: '13:30' }
 
-const clase = (over = {}) => ({
-  id: 'c1',
-  date: '2099-09-14',
-  startTime: '13:00',
-  endTime: '14:00',
-  subjectName: 'Matemática',
-  status: 'pendiente',
-  paidAt: null,
-  ...over,
-})
+const clase = (over = {}) => apiClass(over)
 
 function renderActions(props) {
   const onChange = vi.fn()
@@ -44,7 +36,7 @@ beforeEach(() => {
 
 describe('ClassActions', () => {
   it('muestra el estado', () => {
-    renderActions({ cls: clase({ status: 'confirmada', paidAt: 'x' }) })
+    renderActions({ cls: clase({ status: 'confirmada', paidAt: '2099-09-01T12:00:00.000Z' }) })
 
     expect(screen.getByText('Confirmada')).toBeInTheDocument()
   })
@@ -74,7 +66,7 @@ describe('ClassActions', () => {
   })
 
   it('el alumno paga una aceptada', async () => {
-    payLesson.mockResolvedValue(clase({ status: 'confirmada', paidAt: 'x' }))
+    payLesson.mockResolvedValue(clase({ status: 'confirmada', paidAt: '2099-09-01T12:00:00.000Z' }))
     renderActions({ cls: clase({ status: 'aceptada' }) })
 
     await userEvent.click(screen.getByRole('button', { name: 'Pagar' }))
@@ -83,7 +75,7 @@ describe('ClassActions', () => {
   })
 
   it('a menos de 24 h el alumno ya no puede cancelar ni reprogramar, y se le dice', () => {
-    renderActions({ cls: clase({ status: 'confirmada', paidAt: 'x' }), now: CASI })
+    renderActions({ cls: clase({ status: 'confirmada', paidAt: '2099-09-01T12:00:00.000Z' }), now: CASI })
 
     expect(screen.queryByRole('button', { name: 'Cancelar clase' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Reprogramar' })).not.toBeInTheDocument()
@@ -91,7 +83,7 @@ describe('ClassActions', () => {
   })
 
   it('con tiempo, reprogramar lleva a elegir otro horario', () => {
-    renderActions({ cls: clase({ status: 'confirmada', paidAt: 'x' }) })
+    renderActions({ cls: clase({ status: 'confirmada', paidAt: '2099-09-01T12:00:00.000Z' }) })
 
     expect(screen.getByRole('link', { name: 'Reprogramar' })).toHaveAttribute(
       'href',
@@ -101,7 +93,7 @@ describe('ClassActions', () => {
 
   it('el docente toma lista cuando empezó la clase', async () => {
     markAttendance.mockResolvedValue(clase({ status: 'no_presentada' }))
-    renderActions({ cls: clase({ status: 'confirmada', paidAt: 'x' }), viewRole: 'teacher', now: EMPEZADA })
+    renderActions({ cls: clase({ status: 'confirmada', paidAt: '2099-09-01T12:00:00.000Z' }), viewRole: 'teacher', now: EMPEZADA })
 
     await userEvent.click(screen.getByRole('button', { name: 'Ausente' }))
 

@@ -14,7 +14,7 @@
 // hay ciclo posible. (windows.js importa de acá, y acá no se importa de
 // windows.js por lo mismo.)
 
-import { DAY_KEYS, dayLabel, formatRangeLabel } from './availability.js'
+import { DAY_KEYS, formatRangeLabel } from './availability.js'
 import { fromISODate, mondayIndex } from './calendar.js'
 import { CLASS_MINUTES_STEP, MIN_CLASS_MINUTES } from './rates.js'
 
@@ -25,10 +25,6 @@ const START_STEP = 30
 export function dayKeyFromIso(iso) {
   const date = fromISODate(iso)
   if (Number.isNaN(date.getTime())) return null
-  return DAY_KEYS[mondayIndex(date)]
-}
-
-export function dayKeyFromDate(date) {
   return DAY_KEYS[mondayIndex(date)]
 }
 
@@ -316,9 +312,4 @@ export function formatClashes(clashes, bookable = true) {
 /** '2 de 5 anotados'. */
 export function formatEnrolled(enrolled, maxStudents) {
   return `${enrolled} de ${maxStudents} ${maxStudents === 1 ? 'anotado' : 'anotados'}`
-}
-
-/** 'Lunes' para el chip del filtro de días. */
-export function dayChipLabel(dayKey) {
-  return dayLabel(dayKey)
 }

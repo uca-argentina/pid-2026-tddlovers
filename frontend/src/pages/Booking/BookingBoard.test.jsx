@@ -5,6 +5,7 @@ import BookingBoard from './BookingBoard.jsx'
 import withRouter from '../../routes/withRouter.jsx'
 import { toISODate } from '../../utils/calendar.js'
 import { dayKeyFromIso } from '../../utils/booking.js'
+import { apiClass, apiUser } from '../../testing/fixtures.js'
 
 const { bookLesson, fetchAvailability, fetchClass, fetchMyLessons, fetchSubjects, rescheduleLesson } =
   vi.hoisted(() => ({
@@ -32,7 +33,13 @@ const MATERIAS = [
   { id: 2, name: 'Física' },
 ]
 
-const alumno = { id: 7, nombre: 'Sofía', role: 'student' }
+const alumno = apiUser({
+  id: 7,
+  email: 'sofia@example.com',
+  role: 'student',
+  nombre: 'Sofía',
+  apellido: 'Ramírez',
+})
 
 // Todo se arma sobre HOY, que es el día que la pantalla trae seleccionado.
 const HOY = toISODate(new Date())
@@ -112,7 +119,7 @@ async function abrirFiltro(nombre) {
 
 describe('BookingBoard', () => {
   beforeEach(() => {
-    bookLesson.mockReset().mockResolvedValue({ lesson: {} })
+    bookLesson.mockReset().mockResolvedValue(apiClass({ id: 'nueva' }))
     fetchSubjects.mockReset().mockResolvedValue(MATERIAS)
     fetchMyLessons.mockReset().mockResolvedValue([])
     fetchAvailability.mockReset().mockResolvedValue([slot()])
@@ -167,7 +174,7 @@ describe('BookingBoard', () => {
 
   it('avisa cuando se superpone con una clase propia', async () => {
     fetchMyLessons.mockResolvedValue([
-      {
+      apiClass({
         id: 'sl-1',
         date: HOY,
         teacherId: 4,
@@ -176,7 +183,7 @@ describe('BookingBoard', () => {
         subjectName: 'Física',
         startTime: '14:00',
         endTime: '15:00',
-      },
+      }),
     ])
     renderBoard()
     await esperarCarga()
@@ -529,7 +536,7 @@ describe('BookingBoard', () => {
 
   it('una clase propia bloquea los inicios que pisa y acorta los de antes', async () => {
     fetchMyLessons.mockResolvedValue([
-      {
+      apiClass({
         id: 'mia',
         date: HOY,
         teacherId: 4,
@@ -537,7 +544,7 @@ describe('BookingBoard', () => {
         subjectName: 'Física',
         startTime: '14:30',
         endTime: '15:00',
-      },
+      }),
     ])
     renderBoard()
     await esperarCarga()
@@ -596,7 +603,7 @@ describe('BookingBoard', () => {
 
   describe('reprogramar', () => {
     // Una clase de Física con Carla, hoy de 9 a 10, ya pagada.
-    const vieja = {
+    const vieja = apiClass({
       id: 'c9',
       date: HOY,
       startTime: '09:00',
@@ -606,11 +613,12 @@ describe('BookingBoard', () => {
       subjectId: 2,
       subjectName: 'Física',
       status: 'confirmada',
-    }
+      paidAt: '2099-09-01T12:00:00.000Z',
+    })
 
     beforeEach(() => {
       fetchClass.mockReset().mockResolvedValue(vieja)
-      rescheduleLesson.mockReset().mockResolvedValue({ id: 'nueva' })
+      rescheduleLesson.mockReset().mockResolvedValue(apiClass({ id: 'nueva', teacherId: 4 }))
       fetchAvailability.mockResolvedValue([slot(), carla()])
       // La clase vieja también llega entre las propias.
       fetchMyLessons.mockResolvedValue([vieja])

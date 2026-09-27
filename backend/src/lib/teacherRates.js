@@ -9,11 +9,11 @@
 import { MODALITIES } from './availabilityWindow.js';
 
 // El mismo techo que el CHECK de teacher_rates: $ 10.000.000 la hora.
-export const MAX_HOURLY_RATE_CENTS = 1000000000;
+const MAX_HOURLY_RATE_CENTS = 1000000000;
 
 // La duración que elige el alumno va de a 5 minutos, desde media hora.
 export const MIN_CLASS_MINUTES = 30;
-export const CLASS_MINUTES_STEP = 5;
+const CLASS_MINUTES_STEP = 5;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

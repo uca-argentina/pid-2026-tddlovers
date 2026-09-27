@@ -172,8 +172,3 @@ export async function findUserById(id) {
   );
   return result.rows[0] ?? null;
 }
-
-export async function emailExists(email) {
-  const result = await getPool().query(`SELECT 1 FROM users WHERE email = $1`, [email]);
-  return result.rowCount > 0;
-}

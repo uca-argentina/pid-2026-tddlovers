@@ -14,7 +14,7 @@
 // bien de casualidad, pero restar strings no.
 
 import { dayLabel } from './availability.js'
-import { addDays, mondayIndex, toISODate } from './calendar.js'
+import { addDays, mondayIndex } from './calendar.js'
 import { dayKeyFromIso } from './booking.js'
 
 // Los valores viajan por la API y viven en la base: en inglés. Lo que se lee
@@ -263,9 +263,4 @@ export function validateDraft(draft, { rateModalities = null } = {}) {
   }
 
   return errors
-}
-
-/** El día de hoy como 'YYYY-MM-DD', para saber qué ya pasó. */
-export function todayIso() {
-  return toISODate(new Date())
 }

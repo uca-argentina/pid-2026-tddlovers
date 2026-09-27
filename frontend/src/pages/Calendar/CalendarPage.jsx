@@ -32,9 +32,6 @@ const PENDING_LOOKAHEAD_DAYS = 90
 class CalendarPage extends Component {
   state = {
     selectedIso: toISODate(new Date()),
-    // El rango lo decide MonthPane y llega por onRangeChange.
-    from: null,
-    to: null,
     classes: [],
     classesLoading: false,
     classesError: null,
@@ -121,7 +118,6 @@ class CalendarPage extends Component {
 
   /** MonthPane avisa qué rango abarca la grilla; recién ahí se pide. */
   handleRangeChange = (from, to) => {
-    this.setState({ from, to })
     this.loadClasses(from, to)
   }
 

@@ -33,7 +33,7 @@ describe('validateWindow', () => {
     expect(validar({ start: '23:00', end: '24:00' }).value).toBeDefined();
   });
 
-  it('no longer carries subject, duration or price: the student picks them', () => {
+  it("keeps only the window's own fields: subject, duration and price are the student's", () => {
     const { value } = validar({ subjectId: 'x', durationMinutes: 45, price: 100 });
     expect(value).not.toHaveProperty('subjectId');
     expect(value).not.toHaveProperty('durationMinutes');

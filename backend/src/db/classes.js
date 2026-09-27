@@ -1,6 +1,6 @@
 import { getPool } from './pool.js';
 
-// La fila tal como la espera el front (ver PID-Front/CLAUDE.md): fechas
+// La fila tal como la espera el front (ver CLAUDE.md en la raíz): fechas
 // 'YYYY-MM-DD' y horas 'HH:MM', sin zona horaria. Mandar un timestamp UTC
 // correría el día para nuestros usuarios.
 const CLASS_COLUMNS = `

@@ -7,7 +7,6 @@ vi.mock('../../db/users.js', () => ({
   createUser: vi.fn(),
   findUserByEmail: vi.fn(),
   findUserById: vi.fn(),
-  emailExists: vi.fn(),
   findSubjectIdsByTeacher: vi.fn(),
   updateUserProfile: vi.fn(),
 }));
@@ -29,7 +28,7 @@ vi.mock('../../db/subjects.js', () => ({
   countExistingSubjectIds: vi.fn(),
 }));
 
-const { createUser, findUserByEmail, findUserById, emailExists, findSubjectIdsByTeacher } =
+const { createUser, findUserByEmail, findUserById, findSubjectIdsByTeacher } =
   await import('../../db/users.js');
 const { createSession, findValidSession, deleteExpiredSessions } = await import(
   '../../db/sessions.js'
@@ -72,32 +71,6 @@ describe('auth routes', () => {
     vi.resetAllMocks();
     deleteExpiredSessions.mockResolvedValue(undefined);
     await app.close();
-  });
-
-  describe('GET /api/auth/check-email', () => {
-    it('rejects an invalid email', async () => {
-      const res = await app.inject({ method: 'GET', url: '/api/auth/check-email?email=nope' });
-      expect(res.statusCode).toBe(400);
-    });
-
-    it('reports availability for a free email', async () => {
-      emailExists.mockResolvedValueOnce(false);
-      const res = await app.inject({
-        method: 'GET',
-        url: '/api/auth/check-email?email=free@example.com',
-      });
-      expect(res.statusCode).toBe(200);
-      expect(res.json()).toEqual({ available: true });
-    });
-
-    it('reports unavailability for a taken email', async () => {
-      emailExists.mockResolvedValueOnce(true);
-      const res = await app.inject({
-        method: 'GET',
-        url: '/api/auth/check-email?email=taken@example.com',
-      });
-      expect(res.json()).toEqual({ available: false });
-    });
   });
 
   describe('POST /api/auth/register', () => {

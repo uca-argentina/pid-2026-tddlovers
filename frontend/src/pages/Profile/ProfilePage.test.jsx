@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import ProfilePage from './ProfilePage.jsx'
+import { apiUser, updatedUser } from '../../testing/fixtures.js'
 
 const { fetchSubjects, updateProfile } = vi.hoisted(() => ({
   fetchSubjects: vi.fn(),
@@ -16,20 +17,15 @@ const MATERIAS = [
   { id: 3, name: 'Álgebra' },
 ]
 
-const user = {
-  id: 1,
-  nombre: 'Agustín',
-  apellido: 'Klos',
-  email: 'agustin@example.com',
+const user = apiUser({
   telefono: '+54 11 5555-5555',
-  role: 'teacher',
   subjectIds: [1, 3],
   // Matemática: $ 5.000/h virtual y $ 6.500,50/h presencial.
   rates: [
     { subjectId: 1, modality: 'virtual', hourlyRateCents: 500000 },
     { subjectId: 1, modality: 'in_person', hourlyRateCents: 650050 },
   ],
-}
+})
 
 function renderProfile(props) {
   return render(
@@ -62,7 +58,7 @@ function botonGuardar() {
 describe('ProfilePage', () => {
   beforeEach(() => {
     fetchSubjects.mockReset().mockResolvedValue(MATERIAS)
-    updateProfile.mockReset().mockImplementation((payload) => Promise.resolve(payload))
+    updateProfile.mockReset().mockImplementation((payload) => Promise.resolve(updatedUser(user, payload)))
   })
 
   it('muestra los datos del usuario', async () => {

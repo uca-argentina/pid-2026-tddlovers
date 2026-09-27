@@ -290,7 +290,7 @@ class ProfilePage extends Component {
         // El dueño de `user` es App: sin esto, salir del perfil y volver
         // mostraría de nuevo el teléfono viejo. El backend devuelve el usuario
         // ya actualizado, así que se usa ese y no lo que mandamos.
-        this.props.onUserChange?.({ ...this.props.user, ...(user || payload) })
+        this.props.onUserChange?.({ ...this.props.user, ...user })
       })
       .catch((error) => {
         this.setState({

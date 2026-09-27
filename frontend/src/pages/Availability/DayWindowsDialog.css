@@ -186,13 +186,6 @@
   height: 13px;
 }
 
-.window-card-subject {
-  margin-top: 2px;
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--color-text);
-}
-
 .window-card-facts {
   list-style: none;
   margin: 10px 0 0;
@@ -216,11 +209,6 @@
   width: 15px;
   height: 15px;
   color: var(--color-text-muted);
-}
-
-.window-card-facts .window-card-price {
-  font-weight: 700;
-  color: var(--color-success);
 }
 
 /* La dirección exacta se alinea con el texto de la localidad (sin ícono

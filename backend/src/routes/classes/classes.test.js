@@ -74,7 +74,42 @@ const ventana = (over = {}) => ({
   modality: 'virtual',
   maxStudents: 1,
   meetingUrl: 'https://meet.example.com/abc',
+  locality: null,
   address: null,
+  teacherName: 'Laura Gómez',
+  ...over,
+});
+
+const CLASE_ID = '0d9c8b7a-6f5e-4d3c-8b2a-190817263544';
+const ALUMNO = 'user-1';
+
+// Una clase tal como la devuelve findClassById (CLASS_COLUMNS en
+// db/classes.js). La sesión de los tests es siempre 'user-1': según el caso,
+// es el alumno o el docente de la clase.
+const clase = (over = {}) => ({
+  id: CLASE_ID,
+  date: '2099-09-14',
+  startTime: '13:00',
+  endTime: '14:30',
+  subjectId: MATE,
+  subjectName: 'Matemática',
+  teacherId: DOCENTE,
+  teacherName: 'Laura Gómez',
+  studentId: ALUMNO,
+  studentName: 'Sofía Ramírez',
+  status: 'pendiente',
+  availabilityId: VENTANA_ID,
+  modality: 'virtual',
+  maxStudents: 1,
+  meetingUrl: 'https://meet.example.com/abc',
+  address: null,
+  locality: null,
+  priceCents: 750000,
+  paidAt: null,
+  cancelledBy: null,
+  cancelReason: null,
+  rescheduledFrom: null,
+  enrolled: 1,
   ...over,
 });
 
@@ -96,8 +131,8 @@ describe('POST /api/classes', () => {
     hasOverlappingClass.mockResolvedValue(false);
     // $ 5.000 la hora.
     findRate.mockResolvedValue(500000);
-    bookClass.mockResolvedValue({ id: 'c1' });
-    findClassById.mockResolvedValue({ id: 'c1' });
+    bookClass.mockResolvedValue({ id: CLASE_ID });
+    findClassById.mockResolvedValue(clase());
   });
 
   afterEach(async () => {
@@ -347,22 +382,6 @@ describe('POST /api/classes', () => {
 
 // --- Estados ------------------------------------------------------------------
 
-const CLASE_ID = '0d9c8b7a-6f5e-4d3c-8b2a-190817263544';
-const ALUMNO = 'user-1';
-
-// La sesión de los tests es siempre 'user-1': según el caso, es el alumno o
-// el docente de la clase.
-const clase = (over = {}) => ({
-  id: CLASE_ID,
-  date: '2099-09-14',
-  startTime: '13:00',
-  status: 'pendiente',
-  paidAt: null,
-  teacherId: DOCENTE,
-  studentId: ALUMNO,
-  subjectId: MATE,
-  ...over,
-});
 const comoDocente = (over = {}) => clase({ teacherId: 'user-1', studentId: 'otro-alumno', ...over });
 // Una fecha que ya pasó, para "la clase ya empezó".
 const PASADA = '2020-03-02';

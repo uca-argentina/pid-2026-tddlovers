@@ -4,7 +4,7 @@ import { findRatesByTeacher } from '../db/rates.js';
 /**
  * La forma del usuario que sale por la API. Vive acá y no en una ruta porque
  * la usan register, login, /me y el PATCH del perfil, y el front espera
- * exactamente los mismos campos en las cuatro (ver PID-Front/CLAUDE.md).
+ * exactamente los mismos campos en las cuatro (ver CLAUDE.md en la raíz).
  *
  * `subjectIds` va siempre, incluso vacío: si faltara, la pantalla de perfil
  * no podría distinguir "todavía no cargó" de "no da ninguna materia". Lo

@@ -34,9 +34,6 @@ export const DAY_LABELS = [
   'Domingo',
 ]
 
-// Medias horas que tiene un día: es el índice de '24:00'.
-const SLOTS_PER_DAY = 48
-
 const LABEL_BY_KEY = DAY_KEYS.reduce((acc, key, index) => {
   acc[key] = DAY_LABELS[index]
   return acc
@@ -45,21 +42,6 @@ const LABEL_BY_KEY = DAY_KEYS.reduce((acc, key, index) => {
 /** 'miercoles' -> 'Miércoles'. */
 export function dayLabel(dayKey) {
   return LABEL_BY_KEY[dayKey] || dayKey
-}
-
-/**
- * En qué media hora del día cae una hora: '00:00' -> 0, '13:30' -> 27.
- * Acepta también '24:00' -> 48, que es el fin exclusivo de un rango que
- * llega hasta las 23:30. Devuelve -1 si no es una hora en punto o y media.
- */
-export function timeToSlotIndex(time) {
-  if (typeof time !== 'string') return -1
-  if (time === '24:00') return SLOTS_PER_DAY
-
-  const match = /^([01]\d|2[0-3]):(00|30)$/.exec(time)
-  if (!match) return -1
-
-  return Number(match[1]) * 2 + (match[2] === '30' ? 1 : 0)
 }
 
 /** '14:00 – 15:00'. Raya (–), no guion, y 24 h como el resto de la app. */

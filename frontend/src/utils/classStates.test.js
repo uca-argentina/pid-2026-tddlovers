@@ -5,15 +5,10 @@ import {
   owesPayment,
   statusLabel,
 } from './classStates.js'
+import { apiClass } from '../testing/fixtures.js'
 
 // La clase es el lunes 14/9/2099 a las 13:00.
-const clase = (over = {}) => ({
-  date: '2099-09-14',
-  startTime: '13:00',
-  status: 'pendiente',
-  paidAt: null,
-  ...over,
-})
+const clase = (over = {}) => apiClass(over)
 
 const LEJOS = { iso: '2099-09-10', time: '10:00' }
 const JUSTO_24H = { iso: '2099-09-13', time: '13:00' }
@@ -35,11 +30,11 @@ describe('allowedActions', () => {
   })
 
   it('confirmada: reprogramar con 24 h, y el docente toma lista desde que empieza', () => {
-    expect(allowedActions(clase({ status: 'confirmada', paidAt: 'x' }), 'student', LEJOS)).toEqual([
+    expect(allowedActions(clase({ status: 'confirmada', paidAt: '2099-09-01T12:00:00.000Z' }), 'student', LEJOS)).toEqual([
       'cancel',
       'reschedule',
     ])
-    expect(allowedActions(clase({ status: 'confirmada', paidAt: 'x' }), 'teacher', EMPEZADA)).toEqual([
+    expect(allowedActions(clase({ status: 'confirmada', paidAt: '2099-09-01T12:00:00.000Z' }), 'teacher', EMPEZADA)).toEqual([
       'attend',
     ])
   })
@@ -47,7 +42,7 @@ describe('allowedActions', () => {
   it('una clase dada sin pagar todavía se paga', () => {
     expect(allowedActions(clase({ status: 'realizada' }), 'student', EMPEZADA)).toEqual(['pay'])
     expect(owesPayment(clase({ status: 'realizada' }))).toBe(true)
-    expect(owesPayment(clase({ status: 'realizada', paidAt: 'x' }))).toBe(false)
+    expect(owesPayment(clase({ status: 'realizada', paidAt: '2099-09-01T12:00:00.000Z' }))).toBe(false)
   })
 
   it('cancelada no admite nada', () => {

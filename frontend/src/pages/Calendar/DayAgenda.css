@@ -155,13 +155,6 @@
   color: var(--color-text-muted);
 }
 
-.day-agenda-legacy {
-  margin-top: 8px;
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--color-text-muted);
-}
-
 .day-agenda-price {
   margin-top: 8px;
   font-size: 13.5px;
