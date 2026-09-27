@@ -53,6 +53,6 @@ describe('DayAgenda', () => {
     renderAgenda([{ ...clase, students: ['Sofía Ramírez'], rows: [clase] }], 'student')
 
     expect(screen.getByText('Aceptada')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Confirmar (pagar)' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Pagar' })).toBeInTheDocument()
   })
 })

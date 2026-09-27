@@ -77,7 +77,7 @@ describe('ClassActions', () => {
     payLesson.mockResolvedValue(clase({ status: 'confirmada', paidAt: 'x' }))
     renderActions({ cls: clase({ status: 'aceptada' }) })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Confirmar (pagar)' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Pagar' }))
 
     expect(payLesson).toHaveBeenCalledWith('c1')
   })
@@ -103,7 +103,7 @@ describe('ClassActions', () => {
     markAttendance.mockResolvedValue(clase({ status: 'no_presentada' }))
     renderActions({ cls: clase({ status: 'confirmada', paidAt: 'x' }), viewRole: 'teacher', now: EMPEZADA })
 
-    await userEvent.click(screen.getByRole('button', { name: 'No vino' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Ausente' }))
 
     expect(markAttendance).toHaveBeenCalledWith('c1', false)
   })
@@ -112,7 +112,7 @@ describe('ClassActions', () => {
     renderActions({ cls: clase({ status: 'realizada' }), now: EMPEZADA })
 
     expect(screen.getByText('Pago pendiente')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Confirmar (pagar)' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Pagar' })).toBeInTheDocument()
   })
 
   it('explica por qué está cancelada', () => {

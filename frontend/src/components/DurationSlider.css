@@ -1,0 +1,18 @@
+/* Lo visual viene de TimeRangeSlider.css. Acá solo lo que cambia con una
+   sola manija. */
+
+/* Allá los inputs ignoran el puntero para que uno no tape al otro. Con uno
+   solo no hay nada que tapar, y así un toque en la barra también mueve la
+   manija, que en el celular es lo que uno espera. */
+.duration-slider-input {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.duration-slider-ends {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}

@@ -37,17 +37,21 @@
     max-width: 100%;
   }
 
-  /* El padding de arriba deja lugar al buscador, que en este ancho está
-     fijo arriba de todo (ver NavBar.css) y por lo tanto fuera del flujo. */
   .app-main {
     padding: 14px;
+    padding-top: calc(14px + env(safe-area-inset-top));
+  }
+
+  /* Con buscador (el alumno), el padding de arriba le deja lugar: en este
+     ancho está fijo arriba de todo (ver NavBar.css) y fuera del flujo. */
+  .app-main.has-search {
     padding-top: calc(62px + env(safe-area-inset-top));
   }
 }
 
 @media (max-width: 600px) {
   /* Solo los laterales: el de arriba lo fija el bloque de 900px, que
-     reserva el alto del buscador. */
+     reserva el alto del buscador cuando lo hay. */
   .app-main {
     padding-inline: 12px;
     padding-bottom: 12px;

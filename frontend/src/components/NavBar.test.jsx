@@ -41,6 +41,11 @@ describe('NavBar', () => {
     expect(input).toHaveValue('álgebra')
   })
 
+  it('al docente no le muestra el buscador', () => {
+    renderAt('/', { viewRole: 'teacher' })
+    expect(screen.queryByLabelText('Buscar docentes o materias')).not.toBeInTheDocument()
+  })
+
   it('linkea a la disponibilidad', () => {
     renderAt('/')
     expect(screen.getByLabelText('Disponibilidad')).toHaveAttribute('href', '/disponibilidad')

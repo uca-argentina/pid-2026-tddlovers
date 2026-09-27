@@ -95,15 +95,15 @@ class ClassActions extends Component {
       botones.push(this.renderButton('accept', 'Aceptar', this.handleAccept, 'primary'))
     }
     if (actions.includes('pay')) {
-      botones.push(this.renderButton('pay', 'Confirmar (pagar)', this.handlePay, 'primary'))
+      botones.push(this.renderButton('pay', 'Pagar', this.handlePay, 'primary'))
     }
     if (actions.includes('attend')) {
       // Si ya tomó lista, se ofrece solo la otra marca, para corregir.
       if (cls.status !== 'realizada') {
-        botones.push(this.renderButton('present', 'Estuvo', this.handleAttend(true), 'primary'))
+        botones.push(this.renderButton('present', 'Presente', this.handleAttend(true), 'primary'))
       }
       if (cls.status !== 'no_presentada') {
-        botones.push(this.renderButton('absent', 'No vino', this.handleAttend(false)))
+        botones.push(this.renderButton('absent', 'Ausente', this.handleAttend(false)))
       }
     }
     if (actions.includes('reschedule')) {

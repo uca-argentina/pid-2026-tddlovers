@@ -379,9 +379,13 @@ describe('BookingBoard', () => {
     // Arranca en 1 h, y deja hasta lo que entra (14:00 a 17:00 = 3 h).
     const duracion = within(modal).getByLabelText('¿Cuánto dura?')
     expect(duracion).toHaveValue('60')
-    expect(within(duracion).getAllByRole('option').at(-1)).toHaveTextContent('3 h (hasta las 17:00)')
+    expect(duracion).toHaveAttribute('min', '30')
+    expect(duracion).toHaveAttribute('max', '180')
+    expect(duracion).toHaveAttribute('step', '5')
+    expect(duracion).toHaveAttribute('aria-valuetext', '1 h · 14:00 – 15:00')
 
-    await userEvent.selectOptions(duracion, '50')
+    fireEvent.change(duracion, { target: { value: '50' } })
+    expect(duracion).toHaveAttribute('aria-valuetext', '50 min · 14:00 – 14:50')
     expect(within(modal).getByText('14:00 – 14:50')).toBeInTheDocument()
     // $ 5.000/h por 50 min.
     expect(within(modal).getByText(/^\$\s4\.166,67$/)).toBeInTheDocument()
@@ -431,7 +435,7 @@ describe('BookingBoard', () => {
     const modal = screen.getByRole('dialog')
 
     await userEvent.click(within(modal).getByRole('button', { name: '13:00' }))
-    await userEvent.selectOptions(within(modal).getByLabelText('¿Cuánto dura?'), '90')
+    fireEvent.change(within(modal).getByLabelText('¿Cuánto dura?'), { target: { value: '90' } })
     await userEvent.click(within(modal).getByRole('button', { name: '14:00' }))
     expect(within(modal).getByLabelText('¿Cuánto dura?')).toHaveValue('90')
 
@@ -545,8 +549,7 @@ describe('BookingBoard', () => {
 
     // De 13:00 hasta su clase de las 14:30: como mucho 1 h 30 min.
     await userEvent.click(within(modal).getByRole('button', { name: '13:00' }))
-    const opciones = within(within(modal).getByLabelText('¿Cuánto dura?')).getAllByRole('option')
-    expect(opciones.at(-1)).toHaveTextContent('1 h 30 min (hasta las 14:30)')
+    expect(within(modal).getByLabelText('¿Cuánto dura?')).toHaveAttribute('max', '90')
   })
 
   it('con un solo horario posible llega elegido', async () => {

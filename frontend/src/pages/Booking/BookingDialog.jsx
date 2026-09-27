@@ -1,14 +1,16 @@
 import { Component } from 'react'
 import Modal from '../../components/Modal.jsx'
 import Banner from '../../components/Banner.jsx'
+import DurationSlider from '../../components/DurationSlider.jsx'
 import { SpinnerIcon } from '../../components/icons.jsx'
 import { bookLesson, rescheduleLesson } from '../../api/client.js'
 import { formatDayLongWithYear, fromISODate } from '../../utils/calendar.js'
 import { formatRangeLabel } from '../../utils/availability.js'
 import { formatEnrolled, toMinutes } from '../../utils/booking.js'
 import {
+  CLASS_MINUTES_STEP,
+  MIN_CLASS_MINUTES,
   classPriceCents,
-  durationOptions,
   formatHourlyRate,
   formatMoney,
 } from '../../utils/rates.js'
@@ -136,8 +138,8 @@ class BookingDialog extends Component {
     })
   }
 
-  handleMinutes = (event) => {
-    this.setState({ minutes: Number(event.target.value), error: null })
+  handleMinutes = (minutes) => {
+    this.setState({ minutes, error: null })
   }
 
   handleConfirm = () => {
@@ -311,22 +313,24 @@ class BookingDialog extends Component {
     const option = this.getStartOption()
     if (!option || this.state.groupStart !== null) return null
 
+    const { minutes } = this.state
+    const hasta = minutesToTime(toMinutes(option.start) + minutes)
+
     return (
       <div className="booking-dialog-duration-field">
         <label htmlFor="booking-dialog-minutes">¿Cuánto dura?</label>
-        <select
+        <DurationSlider
           id="booking-dialog-minutes"
-          className="booking-dialog-select"
-          value={this.state.minutes ?? ''}
+          value={minutes}
+          min={MIN_CLASS_MINUTES}
+          max={option.maxMinutes}
+          step={CLASS_MINUTES_STEP}
           onChange={this.handleMinutes}
           disabled={this.state.saving}
-        >
-          {durationOptions(option.maxMinutes).map((minutes) => (
-            <option key={minutes} value={minutes}>
-              {formatMinutes(minutes)} (hasta las {minutesToTime(toMinutes(option.start) + minutes)})
-            </option>
-          ))}
-        </select>
+          valueLabel={`${formatMinutes(minutes)} · ${formatRangeLabel(option.start, hasta)}`}
+          minLabel={formatMinutes(MIN_CLASS_MINUTES)}
+          maxLabel={formatMinutes(option.maxMinutes)}
+        />
       </div>
     )
   }
