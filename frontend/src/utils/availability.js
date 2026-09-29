@@ -1,5 +1,6 @@
-// Los días de la semana y las horas 'HH:MM' de a media hora. No dependen de
-// React, así que van como funciones sueltas (igual que calendar.js).
+// Los días de la semana (claves y nombres para mostrar) y cómo se escribe un
+// rango horario en pantalla. No dependen de React, así que van como funciones
+// sueltas (igual que calendar.js).
 //
 // Dos convenciones que valen para todo el archivo:
 //
@@ -10,9 +11,10 @@
 //     Mac y Windows (ver CLAUDE.md y el .gitattributes). Para mostrar están
 //     DAY_LABELS acá y WEEKDAY_LABELS en calendar.js.
 //
-//   - `end` es exclusivo: un rango que llega hasta las 23:30 inclusive
-//     termina en '24:00' y no en '00:00', porque si no se rompe start < end
-//     para cualquiera que ordene o valide (incluida la base).
+//   - El `end` de un rango es exclusivo, y uno que llega hasta la medianoche
+//     termina en '24:00' y no en '00:00': si no, se rompe start < end para
+//     cualquiera que ordene o valide (incluida la base). formatRangeLabel lo
+//     muestra tal cual llega.
 
 export const DAY_KEYS = [
   'lunes',

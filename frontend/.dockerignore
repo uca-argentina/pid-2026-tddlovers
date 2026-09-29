@@ -1,0 +1,7 @@
+# Lo que no tiene que viajar al build: las dependencias se instalan adentro
+# de la imagen con npm ci (y las de la Mac no sirven en Alpine), y leer miles
+# de archivos desde iCloud hace que "transferring context" tarde minutos.
+node_modules
+dist
+npm-debug.log*
+.DS_Store
