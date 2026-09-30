@@ -20,6 +20,13 @@
   text-align: left;
 }
 
+.subject-load-error {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 0 16px;
+}
+
 .subject-loading {
   display: flex;
   align-items: center;

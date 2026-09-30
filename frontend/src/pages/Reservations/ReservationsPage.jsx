@@ -101,7 +101,6 @@ class ReservationsPage extends Component {
       viewRole === 'teacher'
         ? `Alumno: ${item.studentName || 'Sin nombre'}`
         : `Docente: ${item.teacherName}`
-    const tienePrecio = item.priceCents !== null && item.priceCents !== undefined
 
     return (
       <li key={item.id} className="reservation-item">
@@ -112,8 +111,8 @@ class ReservationsPage extends Component {
         <p className="reservation-subject">{item.subjectName}</p>
         <p className="reservation-meta">
           {otro}
-          {item.modality ? ` · ${modalityLabel(item.modality)}` : ''}
-          {tienePrecio ? ` · ${formatMoney(item.priceCents)}` : ''}
+          {` · ${modalityLabel(item.modality)}`}
+          {` · ${formatMoney(item.priceCents)}`}
         </p>
         <ClassActions cls={item} viewRole={viewRole} onChange={this.handleChange} />
       </li>

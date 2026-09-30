@@ -14,7 +14,7 @@ export function isValidPhone(phone) {
   return PHONE_RE.test(phone.trim())
 }
 
-export function passwordRules(password) {
+function passwordRules(password) {
   return {
     minLength: password.length >= 10,
     hasLower: /[a-z]/.test(password),

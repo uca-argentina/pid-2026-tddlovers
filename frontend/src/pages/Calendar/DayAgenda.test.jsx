@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import DayAgenda from './DayAgenda.jsx'
+import { apiClass } from '../../testing/fixtures.js'
 
 vi.mock('../../api/client.js', () => ({
   acceptLesson: vi.fn(),
@@ -10,19 +11,8 @@ vi.mock('../../api/client.js', () => ({
 }))
 
 // En el futuro, para que todavía se pueda aceptar.
-const fila = (over = {}) => ({
-  id: 'a',
-  date: '2099-09-14',
-  startTime: '13:00',
-  endTime: '14:00',
-  subjectName: 'Física',
-  teacherName: 'Carla Benítez',
-  studentName: 'Sofía Ramírez',
-  maxStudents: 4,
-  status: 'pendiente',
-  paidAt: null,
-  ...over,
-})
+const fila = (over = {}) =>
+  apiClass({ id: 'a', subjectName: 'Física', teacherName: 'Carla Benítez', maxStudents: 4, ...over })
 
 function renderAgenda(items, viewRole = 'teacher') {
   return render(
@@ -35,7 +25,7 @@ function renderAgenda(items, viewRole = 'teacher') {
 describe('DayAgenda', () => {
   it('en una grupal el docente ve a cada alumno con su propia reserva', () => {
     const sofia = fila()
-    const tomas = fila({ id: 'b', studentName: 'Tomás Díaz', status: 'confirmada', paidAt: 'x' })
+    const tomas = fila({ id: 'b', studentName: 'Tomás Díaz', status: 'confirmada', paidAt: '2099-09-01T12:00:00.000Z' })
     const grupal = { ...sofia, students: ['Sofía Ramírez', 'Tomás Díaz'], rows: [sofia, tomas] }
 
     renderAgenda([grupal])

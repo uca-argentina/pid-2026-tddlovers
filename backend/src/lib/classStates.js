@@ -7,7 +7,7 @@
 // argentina, sin zona) y `now` es lo que devuelve now() de lib/clock.js.
 
 /** Con cuánta anticipación puede el alumno cancelar o reprogramar. */
-export const CANCEL_NOTICE_HOURS = 24;
+const CANCEL_NOTICE_HOURS = 24;
 
 export const CLASS_STATUSES = [
   'pendiente',
@@ -98,8 +98,6 @@ const RULES = {
   },
 };
 
-export const ACTIONS = Object.keys(RULES);
-
 /**
  * null si `role` puede hacer `action` sobre la clase ahora, o { status,
  * message } con el código HTTP y el motivo para mostrar. No chequea que el
@@ -110,11 +108,6 @@ export function checkAction(action, cls, ctx) {
   const rule = RULES[action];
   if (!rule) return deny(400, 'Acción inválida');
   return rule(cls, ctx);
-}
-
-/** Las acciones que ese rol puede hacer ahora sobre la clase. */
-export function allowedActions(cls, ctx) {
-  return ACTIONS.filter((action) => checkAction(action, cls, ctx) === null);
 }
 
 /**

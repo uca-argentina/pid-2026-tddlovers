@@ -6,7 +6,6 @@ vi.mock('../../db/users.js', () => ({
   createUser: vi.fn(),
   findUserByEmail: vi.fn(),
   findUserById: vi.fn(),
-  emailExists: vi.fn(),
   findSubjectIdsByTeacher: vi.fn(),
   updateUserProfile: vi.fn(),
 }));

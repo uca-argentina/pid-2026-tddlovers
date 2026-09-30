@@ -2,6 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import ReservationsPage from './ReservationsPage.jsx'
+import { apiClass } from '../../testing/fixtures.js'
 
 const { acceptLesson, fetchClasses } = vi.hoisted(() => ({
   acceptLesson: vi.fn(),
@@ -17,20 +18,7 @@ vi.mock('../../api/client.js', () => ({
 }))
 
 // Siempre en el futuro, para que "ya empezó" no dependa del reloj.
-const reserva = (over = {}) => ({
-  id: 'r1',
-  date: '2099-09-14',
-  startTime: '13:00',
-  endTime: '14:00',
-  subjectName: 'Matemática',
-  teacherName: 'Laura Gómez',
-  studentName: 'Sofía Ramírez',
-  status: 'pendiente',
-  paidAt: null,
-  modality: 'virtual',
-  priceCents: 500000,
-  ...over,
-})
+const reserva = (over = {}) => apiClass({ id: 'r1', ...over })
 
 function renderPage(viewRole = 'student') {
   return render(
@@ -49,7 +37,7 @@ describe('ReservationsPage', () => {
   it('agrupa las reservas por estado, canceladas incluidas', async () => {
     fetchClasses.mockResolvedValue([
       reserva({ id: 'a', subjectName: 'Física' }),
-      reserva({ id: 'b', status: 'confirmada', paidAt: 'x', subjectName: 'Química' }),
+      reserva({ id: 'b', status: 'confirmada', paidAt: '2099-09-01T12:00:00.000Z', subjectName: 'Química' }),
       reserva({ id: 'c', status: 'cancelada', cancelReason: 'rechazada', cancelledBy: 'teacher', subjectName: 'Historia' }),
     ])
 

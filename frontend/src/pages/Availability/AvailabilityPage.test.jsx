@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import AvailabilityPage from './AvailabilityPage.jsx'
 import { addDays, toISODate } from '../../utils/calendar.js'
 import { startOfWeek } from '../../utils/windows.js'
+import { apiUser } from '../../testing/fixtures.js'
 
 // Ojo: vi.mock con factory reemplaza el módulo ENTERO, así que todo lo que
 // importe cualquier pantalla de esta ruta tiene que estar acá — la del alumno
@@ -44,18 +45,21 @@ const MATERIAS = [
 ]
 
 // Matemática y Álgebra virtuales, Álgebra también presencial. Nada híbrido.
-const docente = {
-  id: 1,
-  nombre: 'Agustín',
-  role: 'teacher',
+const docente = apiUser({
   subjectIds: [1, 3, 5],
   rates: [
     { subjectId: 1, modality: 'virtual', hourlyRateCents: 500000 },
     { subjectId: 3, modality: 'virtual', hourlyRateCents: 600000 },
     { subjectId: 3, modality: 'in_person', hourlyRateCents: 750050 },
   ],
-}
-const alumno = { id: 7, nombre: 'Sofía', role: 'student', subjectIds: [] }
+})
+const alumno = apiUser({
+  id: 7,
+  email: 'sofia@example.com',
+  role: 'student',
+  nombre: 'Sofía',
+  apellido: 'Ramírez',
+})
 
 // Todo se arma sobre HOY: es la semana que la pantalla muestra al entrar.
 const HOY = toISODate(new Date())
@@ -83,7 +87,6 @@ function renderAt(path, props, { strict = true } = {}) {
     <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/disponibilidad" element={<AvailabilityPage {...props} />} />
-        <Route path="/disponibilidad/:materiaId" element={<AvailabilityPage {...props} />} />
       </Routes>
     </MemoryRouter>
   )
@@ -118,16 +121,6 @@ describe('AvailabilityPage — vista de alumno', () => {
 
     expect(fetchAvailability).toHaveBeenCalled()
     expect(fetchMyLessons).not.toHaveBeenCalled()
-  })
-
-  it('la materia de la URL queda elegida', async () => {
-    renderAt('/disponibilidad/1', { viewRole: 'student', user: alumno })
-    await esperarTablero()
-
-    expect(await screen.findByRole('button', { name: 'Matemática' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    )
   })
 })
 
@@ -444,15 +437,6 @@ describe('AvailabilityPage — vista de docente', () => {
     await entrar()
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Se cayó todo.')
-  })
-
-  it('una URL vieja con materia se limpia y pide una sola vez', async () => {
-    // Sin StrictMode: acá se cuentan pedidos, y en StrictMode montar dos
-    // veces pide dos veces.
-    renderAt('/disponibilidad/3', { viewRole: 'teacher', user: docente }, { strict: false })
-
-    await bloque()
-    expect(fetchMyWindows).toHaveBeenCalledTimes(1)
   })
 
   it('sin sesión pide iniciarla', () => {

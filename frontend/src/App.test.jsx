@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App.jsx'
 import { formatMonthTitle } from './utils/calendar.js'
+import { apiUser, updatedUser } from './testing/fixtures.js'
 
 // Mockeamos el cliente entero para no esperar la latencia simulada de los
 // datos de mentira y para controlar qué devuelve cada llamada.
@@ -44,14 +45,7 @@ vi.mock('./api/client.js', () => ({
   logoutAccount,
 }))
 
-const user = {
-  id: 1,
-  nombre: 'Agustín',
-  apellido: 'Klos',
-  email: 'agustin@example.com',
-  role: 'teacher',
-  subjectIds: [],
-}
+const user = apiUser()
 
 function go(path) {
   window.history.pushState({}, '', path)
@@ -62,8 +56,8 @@ describe('App', () => {
     loginAccount.mockReset().mockResolvedValue(user)
     fetchClasses.mockReset().mockResolvedValue([])
     fetchSubjects.mockReset().mockResolvedValue([])
-    registerAccount.mockReset().mockResolvedValue({ user })
-    updateProfile.mockReset().mockImplementation((payload) => Promise.resolve(payload))
+    registerAccount.mockReset().mockResolvedValue(user)
+    updateProfile.mockReset().mockImplementation((payload) => Promise.resolve(updatedUser(user, payload)))
     fetchMyWindows.mockReset().mockResolvedValue([])
     fetchAvailability.mockReset().mockResolvedValue([])
     fetchMyLessons.mockReset().mockResolvedValue([])

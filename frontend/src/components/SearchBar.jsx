@@ -126,9 +126,9 @@ class SearchBar extends Component {
 
   select(option) {
     this.setState({ query: option.label, open: false, activeIndex: -1 })
-    // Las dos van por ?q=: resolveQuery ya distingue materia de docente y,
-    // a diferencia de /disponibilidad/:materiaId, pisa también el filtro de
-    // docente que hubiera quedado de una búsqueda anterior.
+    // Las dos van por ?q=: resolveQuery ya distingue materia de docente y
+    // pisa también el filtro de docente que hubiera quedado de una búsqueda
+    // anterior.
     this.goTo(option.label)
   }
 

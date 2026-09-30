@@ -76,10 +76,6 @@ export function fetchSubjects() {
   return request('/api/subjects')
 }
 
-export function checkEmailAvailability(email) {
-  return request(`/api/auth/check-email?email=${encodeURIComponent(email)}`)
-}
-
 export function registerAccount(payload) {
   return request('/api/auth/register', {
     method: 'POST',

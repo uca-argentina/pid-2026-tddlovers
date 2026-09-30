@@ -61,8 +61,7 @@ class App extends Component {
   /**
    * App es el dueño de `user`, así que el perfil avisa para acá cuando
    * guarda. Sin esto, salir del perfil lo desmonta y al volver se vería el
-   * dato viejo. No se toca `viewRole`: ese lo maneja el interruptor de la
-   * barra, no lo que se guardó.
+   * dato viejo.
    */
   handleUserChange = (user) => {
     this.setState({ user })
@@ -124,16 +123,8 @@ class App extends Component {
               }
             />
             <Route path="/reservas" element={<ReservationsPage viewRole={viewRole} />} />
-            {/* Dos rutas para la misma pantalla. La materia solo le sirve al
-                alumno (entra con esa materia filtrada); el docente tiene una
-                sola semana y la ignora. La v7 de react-router sacó los
-                parámetros opcionales, así que no se puede escribir en una. */}
             <Route
               path="/disponibilidad"
-              element={<AvailabilityPage viewRole={viewRole} user={user} />}
-            />
-            <Route
-              path="/disponibilidad/:materiaId"
               element={<AvailabilityPage viewRole={viewRole} user={user} />}
             />
           </Route>

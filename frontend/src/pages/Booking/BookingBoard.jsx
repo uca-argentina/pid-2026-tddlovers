@@ -91,9 +91,6 @@ class BookingBoard extends Component {
         this.loadReschedule()
       }
     }
-    if (prevProps.subjectId !== this.props.subjectId) {
-      this.applySubjectFromRoute()
-    }
   }
 
   componentWillUnmount() {
@@ -146,22 +143,13 @@ class BookingBoard extends Component {
    */
   applyQuery() {
     const q = this.getQuery()
-    if (!q) {
-      this.applySubjectFromRoute()
-      return
-    }
+    if (!q) return
 
     const { subjectId, teacherQuery } = resolveQuery(q, this.state.subjects)
     this.setState({
       teacherQuery,
       subjectIds: subjectId ? [subjectId] : [],
     })
-  }
-
-  /** /disponibilidad/:materiaId deja esa materia ya elegida. */
-  applySubjectFromRoute() {
-    const { subjectId } = this.props
-    if (subjectId) this.setState({ subjectIds: [subjectId] })
   }
 
   /**

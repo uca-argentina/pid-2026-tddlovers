@@ -13,6 +13,7 @@ import {
   resolveQuery,
   startOptions,
 } from './booking.js'
+import { apiClass } from '../testing/fixtures.js'
 
 // 2026-09-14 es lunes. Una fila tal como la manda /api/availability.
 const tarjeta = (over = {}) => ({
@@ -38,16 +39,16 @@ const tarjeta = (over = {}) => ({
 
 const inicios = (options) => options.map((option) => option.start)
 
-const clase = (over = {}) => ({
-  id: 'c1',
-  date: '2026-09-14',
-  startTime: '14:00',
-  endTime: '15:00',
-  teacherId: 't2',
-  teacherName: 'Carla Benítez',
-  subjectName: 'Física',
-  ...over,
-})
+const clase = (over = {}) =>
+  apiClass({
+    date: '2026-09-14',
+    startTime: '14:00',
+    endTime: '15:00',
+    teacherId: 't2',
+    teacherName: 'Carla Benítez',
+    subjectName: 'Física',
+    ...over,
+  })
 
 describe('dayKeyFromIso', () => {
   it('traduce la fecha al día de la semana', () => {

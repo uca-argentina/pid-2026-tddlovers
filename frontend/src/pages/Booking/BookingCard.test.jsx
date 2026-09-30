@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import BookingCard from './BookingCard.jsx'
+import { apiClass } from '../../testing/fixtures.js'
 
 // Una fila ya pasada por annotateClashes, que es lo que recibe la tarjeta.
 function card(overrides = {}) {
@@ -117,15 +118,7 @@ describe('BookingCard', () => {
 
   it('avisa en gris con qué clase se superpone, y sigue siendo reservable', () => {
     renderCard({
-      clashes: [
-        {
-          id: 'c1',
-          subjectName: 'Física',
-          teacherName: 'Carla Benítez',
-          startTime: '13:00',
-          endTime: '14:00',
-        },
-      ],
+      clashes: [apiClass({ subjectName: 'Física', teacherName: 'Carla Benítez' })],
     })
     expect(
       screen.getByText('Se superpone con Física con Carla Benítez (13:00 – 14:00).'),

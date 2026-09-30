@@ -29,7 +29,7 @@ export function storeTheme(theme) {
 }
 
 /** Lo que pide el sistema operativo, si el navegador sabe contestarlo. */
-export function prefersDark() {
+function prefersDark() {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
     return false
   }

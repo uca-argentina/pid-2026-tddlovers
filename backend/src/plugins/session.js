@@ -7,7 +7,7 @@ import {
   findValidSession,
 } from '../db/sessions.js';
 
-export const SESSION_COOKIE = 'sid';
+const SESSION_COOKIE = 'sid';
 
 // Decora el request con helpers para abrir y cerrar una sesión guardada en la
 // base, y agrega `request.user` cuando hay una cookie de sesión válida. Las

@@ -7,9 +7,9 @@ import { formatDayLong, fromISODate, toISODate } from './calendar.js'
 // vuelve a chequear todo (y dice por qué no, si algo cambió en el medio). Si
 // se toca una regla allá, hay que tocarla acá.
 
-export const CANCEL_NOTICE_HOURS = 24
+const CANCEL_NOTICE_HOURS = 24
 
-export const STATUS_LABELS = {
+const STATUS_LABELS = {
   pendiente: 'Pendiente',
   aceptada: 'Aceptada',
   confirmada: 'Confirmada',
@@ -45,11 +45,11 @@ function toEpochMinutes(iso, time) {
   return Date.UTC(y, m - 1, d, hh, mm) / 60000
 }
 
-export function minutesUntilStart(cls, now) {
+function minutesUntilStart(cls, now) {
   return toEpochMinutes(cls.date, cls.startTime) - toEpochMinutes(now.iso, now.time)
 }
 
-export function hasStarted(cls, now) {
+function hasStarted(cls, now) {
   return minutesUntilStart(cls, now) <= 0
 }
 

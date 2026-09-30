@@ -57,7 +57,6 @@ class DayAgenda extends Component {
    * no quiénes). El docente ya ve los nombres en la línea de alumnos.
    */
   renderCapacity(item) {
-    if (!item.maxStudents) return null
     const grupal = item.maxStudents > 1
     const anotados =
       grupal && this.props.viewRole !== 'teacher' && item.enrolled
@@ -77,8 +76,7 @@ class DayAgenda extends Component {
 
   /**
    * Dónde es la clase: el link para entrar y/o la dirección exacta con su
-   * localidad abajo. Las clases de antes de que existiera la modalidad no
-   * tienen nada de esto, y ahí no se muestra.
+   * localidad abajo, según la modalidad.
    */
   renderPlace(item) {
     const link = needsMeetingUrl(item.modality) && item.meetingUrl
@@ -132,41 +130,26 @@ class DayAgenda extends Component {
 
   renderItem(item) {
     const counterpart = this.getCounterpart(item)
-    // En centavos, calculado al reservar (tarifa × duración). Defensivo por
-    // si llega una clase sin él.
-    const tienePrecio = item.priceCents !== null && item.priceCents !== undefined
 
     return (
       <li key={item.id} className="day-agenda-item">
         <div className="day-agenda-head">
           <span className="day-agenda-time">{formatRangeLabel(item.startTime, item.endTime)}</span>
           <span className="day-agenda-duration">{formatDuration(item.startTime, item.endTime)}</span>
-          {item.modality ? (
-            <span className="day-agenda-modality">{modalityLabel(item.modality)}</span>
-          ) : null}
+          <span className="day-agenda-modality">{modalityLabel(item.modality)}</span>
         </div>
         <p className="day-agenda-subject">{item.subjectName}</p>
         <p className={`day-agenda-person ${counterpart.empty ? 'is-empty' : ''}`}>
           <span className="day-agenda-person-label">{counterpart.label}:</span> {counterpart.name}
         </p>
 
-        {/* Reservada antes de que las clases tuvieran modalidad, cupo, precio y
-            ubicación: esos datos no existen y no hay de dónde sacarlos (la
-            ventana de origen ya no está). Se dice, en vez de mostrar una
-            tarjeta a medias sin explicación. */}
-        {item.modality ? (
-          <ul className="day-agenda-facts">
-            {this.renderCapacity(item)}
-            {this.renderPlace(item)}
-          </ul>
-        ) : (
-          <p className="day-agenda-legacy">
-            Reservada antes de que las clases tuvieran modalidad, lugar y precio. Consultalos con{' '}
-            {this.props.viewRole === 'teacher' ? 'el alumno' : 'el docente'}.
-          </p>
-        )}
+        <ul className="day-agenda-facts">
+          {this.renderCapacity(item)}
+          {this.renderPlace(item)}
+        </ul>
 
-        {tienePrecio ? <p className="day-agenda-price">{formatMoney(item.priceCents)}</p> : null}
+        {/* En centavos, calculado al reservar (tarifa × duración). */}
+        <p className="day-agenda-price">{formatMoney(item.priceCents)}</p>
         {this.renderActions(item)}
       </li>
     )

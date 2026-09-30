@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import CalendarPage from './CalendarPage.jsx'
 import { addMonths, formatMonthTitle, toISODate } from '../../utils/calendar.js'
+import { apiClass } from '../../testing/fixtures.js'
 
 // El mock del cliente evita depender de los datos de mentira reales: acá
 // definimos exactamente qué clases hay y en qué día.
@@ -19,17 +20,15 @@ const today = new Date()
 
 // El calendario es "mis clases": muestra todo lo que no está cancelado.
 function classOn(iso, overrides = {}) {
-  return {
+  return apiClass({
     id: `c-${iso}`,
     date: iso,
     startTime: '09:00',
     endTime: '10:00',
     subjectName: 'Álgebra',
-    teacherName: 'Laura Gómez',
-    studentName: 'Sofía Ramírez',
     status: 'confirmada',
     ...overrides,
-  }
+  })
 }
 
 describe('CalendarPage', () => {
@@ -176,7 +175,12 @@ describe('CalendarPage', () => {
   it('una clase presencial reservada muestra la dirección exacta y la zona', async () => {
     const iso = toISODate(today)
     fetchClasses.mockResolvedValue([
-      classOn(iso, { modality: 'in_person', address: 'Honduras 4800, 2° B', locality: 'Palermo' }),
+      classOn(iso, {
+        modality: 'in_person',
+        meetingUrl: null,
+        address: 'Honduras 4800, 2° B',
+        locality: 'Palermo',
+      }),
     ])
 
     render(<CalendarPage />)
@@ -232,17 +236,6 @@ describe('CalendarPage', () => {
     expect(screen.getByText('Sin cargo')).toBeInTheDocument()
   })
 
-  it('una clase reservada antes de la modalidad avisa por qué le faltan datos', async () => {
-    const iso = toISODate(today)
-    fetchClasses.mockResolvedValue([classOn(iso)])
-
-    render(<CalendarPage />)
-
-    expect(
-      await screen.findByText(/Reservada antes de que las clases tuvieran modalidad/),
-    ).toHaveTextContent('Consultalos con el docente.')
-  })
-
   it('ordena las clases del día por hora', async () => {
     const iso = toISODate(today)
     fetchClasses.mockResolvedValue([
@@ -253,8 +246,10 @@ describe('CalendarPage', () => {
 
     render(<CalendarPage />)
 
-    const items = await screen.findAllByRole('listitem')
-    const orden = items.map((item) => item.querySelector('.day-agenda-subject').textContent)
+    // Cada clase es un <li> con su lista de datos (cupo, link) adentro: se
+    // toman solo las materias, una por clase.
+    await waitFor(() => expect(document.querySelectorAll('.day-agenda-subject')).toHaveLength(3))
+    const orden = [...document.querySelectorAll('.day-agenda-subject')].map((el) => el.textContent)
     expect(orden).toEqual(['Física', 'Inglés', 'Química'])
   })
 

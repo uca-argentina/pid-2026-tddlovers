@@ -1,5 +1,5 @@
 import { Component } from 'react'
-import { Link, Navigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import withRouter from '../../routes/withRouter.jsx'
 import TeacherAvailability from './TeacherAvailability.jsx'
 import BookingBoard from '../Booking/BookingBoard.jsx'
@@ -11,17 +11,11 @@ import './AvailabilityPage.css'
  *     horarios (cuándo, modalidad y cupo; la materia y la duración las elige
  *     el alumno). Ver TeacherAvailability.
  *   - Alumno: el tablero para buscar horarios libres y reservar (ver
- *     pages/Booking). /disponibilidad/:materiaId solo tiene sentido ahí —
- *     deja esa materia filtrada.
+ *     pages/Booking).
  *
  * Por eso el primer guard de renderBody es el rol y no el usuario.
  */
 class AvailabilityPage extends Component {
-  /** Solo la usa el tablero del alumno. */
-  getSubjectId() {
-    return this.props.router.params.materiaId || null
-  }
-
   /**
    * La pantalla del alumno: buscar horarios libres y (desde la ronda 2)
    * reservar. Va PRIMERO en renderBody y sin pedir usuario, igual que el
@@ -36,7 +30,6 @@ class AvailabilityPage extends Component {
       <BookingBoard
         router={this.props.router}
         user={this.props.user}
-        subjectId={this.getSubjectId()}
       />
     )
   }
@@ -59,10 +52,6 @@ class AvailabilityPage extends Component {
         </div>
       )
     }
-
-    // Links viejos del perfil (una disponibilidad por materia): al docente
-    // la materia no le dice nada acá, así que se limpia la URL.
-    if (this.getSubjectId() !== null) return <Navigate to="/disponibilidad" replace />
 
     return <TeacherAvailability user={user} />
   }

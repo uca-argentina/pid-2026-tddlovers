@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  allowedActions,
   cancelReasonFor,
   checkAction,
   hasStarted,
@@ -139,17 +138,5 @@ describe('reprogramar', () => {
     expect(checkAction('reschedule', clase({ status: 'confirmada' }), alumno(NOW_24H))).toBeNull();
     expect(checkAction('reschedule', clase({ status: 'confirmada' }), alumno(NOW_CASI)).status).toBe(409);
     expect(checkAction('reschedule', clase({ status: 'aceptada' }), alumno(NOW_LEJOS)).status).toBe(409);
-  });
-});
-
-describe('allowedActions', () => {
-  it('lista lo que cada uno puede hacer ahora', () => {
-    expect(allowedActions(clase(), docente(NOW_LEJOS))).toEqual(['accept', 'cancel']);
-    expect(allowedActions(clase({ status: 'aceptada' }), alumno(NOW_LEJOS))).toEqual(['cancel', 'pay']);
-    expect(allowedActions(clase({ status: 'confirmada' }), alumno(NOW_LEJOS))).toEqual([
-      'cancel',
-      'reschedule',
-    ]);
-    expect(allowedActions(clase({ status: 'confirmada' }), docente(NOW_EMPEZADA))).toEqual(['attend']);
   });
 });

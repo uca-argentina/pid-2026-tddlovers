@@ -84,7 +84,8 @@ describe('teacher availability windows', () => {
   });
 
   it('GET returns the windows of the logged-in teacher for the range', async () => {
-    findTeacherWindows.mockResolvedValueOnce([{ id: VENTANA_ID }]);
+    const guardada = { id: VENTANA_ID, teacherId: 'user-1', ...ventana() };
+    findTeacherWindows.mockResolvedValueOnce([guardada]);
     const headers = await authedHeaders(app);
 
     const res = await app.inject({
@@ -94,7 +95,7 @@ describe('teacher availability windows', () => {
     });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual([{ id: VENTANA_ID }]);
+    expect(res.json()).toEqual([guardada]);
     expect(findTeacherWindows).toHaveBeenCalledWith({
       teacherId: 'user-1',
       from: '2026-09-14',
@@ -137,7 +138,9 @@ describe('teacher availability windows', () => {
       method: 'POST',
       url: '/api/teachers/me/availability',
       headers,
-      payload: ventana(),
+      // Con campos que no son de la ventana: la ruta tiene que guardar lo
+      // validado, no el body tal como llegó.
+      payload: ventana({ subjectId: 'x', durationMinutes: 45, price: 100 }),
     });
 
     expect(res.statusCode).toBe(201);
@@ -145,8 +148,9 @@ describe('teacher availability windows', () => {
     // Presencial: el link que haya quedado escrito no se guarda.
     const guardada = createWindow.mock.calls[0][1];
     expect(guardada).toMatchObject({ modality: 'in_person', meetingUrl: null, maxStudents: 4 });
-    // Materia, duración y precio ya no son de la ventana.
+    // Materia, duración y precio los elige el alumno al reservar.
     expect(guardada).not.toHaveProperty('subjectId');
+    expect(guardada).not.toHaveProperty('durationMinutes');
     expect(guardada).not.toHaveProperty('price');
   });
 
@@ -256,19 +260,6 @@ describe('teacher availability windows', () => {
 
     expect(res.statusCode).toBe(404);
     expect(deleteWindow).not.toHaveBeenCalled();
-  });
-
-  it('the old weekly template endpoint is gone', async () => {
-    const headers = await authedHeaders(app);
-
-    const res = await app.inject({
-      method: 'PUT',
-      url: '/api/teachers/me/availability',
-      headers,
-      payload: { schedule: { lunes: [{ start: '13:00', end: '15:30' }] } },
-    });
-
-    expect(res.statusCode).toBe(404);
   });
 });
 
