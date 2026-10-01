@@ -12,7 +12,7 @@
 
 .calendar-aside {
   order: -1;
-  width: 320px;
+  width: 290px;
   flex-shrink: 0;
   min-height: 0;
 }
@@ -30,4 +30,20 @@
     order: 0;
     width: 100%;
   }
+}
+
+/* Aviso del docente: reservas que esperan respuesta. Mismo lugar que los
+   banners de error (arriba del mes), en el tono de "espera algo". */
+.calendar-pending {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  color: var(--color-warning);
+  background: var(--color-warning-bg);
+}
+
+.calendar-pending a {
+  color: inherit;
+  font-weight: 600;
 }

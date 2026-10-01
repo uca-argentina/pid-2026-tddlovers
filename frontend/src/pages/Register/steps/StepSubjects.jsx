@@ -4,14 +4,10 @@ import SubjectPicker from '../../../components/SubjectPicker.jsx'
 import { SpinnerIcon } from '../../../components/icons.jsx'
 
 /**
- * Paso 3 del registro: elegir materias. La pregunta cambia según el rol
- * elegido en el paso anterior (docente da materias, alumno se interesa).
+ * Paso 3 del registro: elegir materias. Solo lo ve el docente; el alumno se
+ * registra directo desde el paso del rol.
  */
 class StepSubjects extends Component {
-  getQuestion() {
-    return this.props.role === 'teacher' ? '¿Qué materias das?' : '¿Qué materias te interesan?'
-  }
-
   render() {
     const {
       subjects,
@@ -20,6 +16,8 @@ class StepSubjects extends Component {
       onBack,
       onSubmit,
       loading = false,
+      loadError,
+      onRetry,
       submitting = false,
       error,
     } = this.props
@@ -28,12 +26,22 @@ class StepSubjects extends Component {
 
     return (
       <div className="step-subjects">
-        <h2>{this.getQuestion()}</h2>
+        <h2>¿Qué materias das?</h2>
         {error ? <Banner type="danger">{error}</Banner> : null}
+        {/* Si la carga falló, el selector vacío diría "No se encontraron
+            materias" y el docente creería que no hay ninguna: se muestra el
+            error y cómo reintentar, en lugar de la lista. */}
         {loading ? (
           <p className="subject-loading">
             <SpinnerIcon className="spin" /> Cargando materias...
           </p>
+        ) : loadError ? (
+          <div className="subject-load-error">
+            <Banner type="danger">{loadError}</Banner>
+            <button type="button" className="btn btn-ghost" onClick={onRetry}>
+              Reintentar
+            </button>
+          </div>
         ) : (
           <SubjectPicker subjects={subjects} selectedIds={selectedIds} onToggle={onToggle} />
         )}

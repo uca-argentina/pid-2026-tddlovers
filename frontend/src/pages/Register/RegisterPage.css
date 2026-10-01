@@ -1,5 +1,5 @@
 /* El encabezado decorativo, la tarjeta y el título viven en styles/ui.css
-   (.auth-shell / .auth-hero / .auth-card / .auth-title) — se comparten con
+   (.auth-page / .auth-hero / .auth-panel / .auth-card / .auth-title) — se comparten con
    LoginPage. Acá solo queda lo específico del flujo de 3 pasos. */
 
 .register-step-viewport {
@@ -18,6 +18,13 @@
   font-weight: 700;
   margin: 0 0 16px;
   text-align: left;
+}
+
+.subject-load-error {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 0 16px;
 }
 
 .subject-loading {

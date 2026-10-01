@@ -1,3 +1,5 @@
 .env
 node_modules/
 .vscode/
+# Metadatos que macOS crea en cada carpeta que abre Finder.
+.DS_Store

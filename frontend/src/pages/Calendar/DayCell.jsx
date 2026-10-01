@@ -81,7 +81,7 @@ class DayCell extends Component {
             <span className="day-event day-event-free">
               <span className="day-event-dot" />
               <span className="day-event-free-count">{freeCount}</span>
-              <span className="day-event-title">libres</span>
+              <span className="day-event-title">{freeCount === 1 ? 'libre' : 'libres'}</span>
             </span>
           ) : null}
           {visible.map((item) => (

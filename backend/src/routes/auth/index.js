@@ -1,4 +1,4 @@
-import { createUser, emailExists, findUserByEmail, findUserById } from '../../db/users.js';
+import { createUser, findUserByEmail, findUserById } from '../../db/users.js';
 import { countExistingSubjectIds } from '../../db/subjects.js';
 import { checkPasswordStrength, hashPassword, verifyPassword } from '../../lib/password.js';
 import { toPublicUser } from '../../lib/publicUser.js';
@@ -6,7 +6,7 @@ import { toPublicUser } from '../../lib/publicUser.js';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // En inglés, como el resto del código: son los valores que viajan por la API
 // y los que guarda el enum user_role de la base. El frontend manda estos dos
-// (ver PID-Front/CLAUDE.md); lo que el usuario ve en pantalla se traduce allá.
+// (ver CLAUDE.md en la raíz); lo que el usuario ve en pantalla se traduce allá.
 const ROLES = ['teacher', 'student'];
 
 export default async function authRoutes(app) {
@@ -14,15 +14,6 @@ export default async function authRoutes(app) {
   // en el header `x-csrf-token` en register/login/logout.
   app.get('/csrf-token', async (request, reply) => {
     return reply.send({ csrfToken: await reply.generateCsrf() });
-  });
-
-  app.get('/check-email', async (request, reply) => {
-    const email = request.query?.email;
-    if (typeof email !== 'string' || !EMAIL_RE.test(email)) {
-      return reply.code(400).send({ message: 'Email inválido' });
-    }
-    const taken = await emailExists(email.toLowerCase());
-    return reply.send({ available: !taken });
   });
 
   app.post(

@@ -82,8 +82,8 @@ class LoginPage extends Component {
 
     return (
       <div className="auth-page">
-        <div className="auth-shell">
-          <AuthHero showBack={false} />
+        <AuthHero showBack={false} />
+        <div className="auth-panel">
           <div className="auth-card">
             <h1 className="auth-title">Bienvenido</h1>
             {successMessage ? <Banner type="success">{successMessage}</Banner> : null}

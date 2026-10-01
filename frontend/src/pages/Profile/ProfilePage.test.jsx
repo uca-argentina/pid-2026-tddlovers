@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import ProfilePage from './ProfilePage.jsx'
+import { apiUser, updatedUser } from '../../testing/fixtures.js'
 
 const { fetchSubjects, updateProfile } = vi.hoisted(() => ({
   fetchSubjects: vi.fn(),
@@ -16,15 +17,15 @@ const MATERIAS = [
   { id: 3, name: 'Álgebra' },
 ]
 
-const user = {
-  id: 1,
-  nombre: 'Agustín',
-  apellido: 'Klos',
-  email: 'agustin@example.com',
+const user = apiUser({
   telefono: '+54 11 5555-5555',
-  role: 'teacher',
   subjectIds: [1, 3],
-}
+  // Matemática: $ 5.000/h virtual y $ 6.500,50/h presencial.
+  rates: [
+    { subjectId: 1, modality: 'virtual', hourlyRateCents: 500000 },
+    { subjectId: 1, modality: 'in_person', hourlyRateCents: 650050 },
+  ],
+})
 
 function renderProfile(props) {
   return render(
@@ -46,6 +47,10 @@ function telefonoInput() {
   return screen.getByLabelText('Teléfono (opcional)')
 }
 
+function tarifa(materia, modalidad) {
+  return screen.getByLabelText(`Tarifa por hora de ${materia}, ${modalidad}`)
+}
+
 function botonGuardar() {
   return screen.getByRole('button', { name: 'Guardar cambios' })
 }
@@ -53,7 +58,7 @@ function botonGuardar() {
 describe('ProfilePage', () => {
   beforeEach(() => {
     fetchSubjects.mockReset().mockResolvedValue(MATERIAS)
-    updateProfile.mockReset().mockImplementation((payload) => Promise.resolve(payload))
+    updateProfile.mockReset().mockImplementation((payload) => Promise.resolve(updatedUser(user, payload)))
   })
 
   it('muestra los datos del usuario', async () => {
@@ -128,7 +133,7 @@ describe('ProfilePage', () => {
     await esperarMaterias()
 
     expect(screen.queryByText('Matemática')).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /Disponibilidad de/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /disponibilidad/i })).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/Dejar de dar/)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/Agregar/)).not.toBeInTheDocument()
     // Sin sección no hay catálogo que traer.
@@ -154,20 +159,13 @@ describe('ProfilePage', () => {
     expect(await screen.findByLabelText('Dejar de dar Matemática')).toBeInTheDocument()
   })
 
-  it('como docente cada materia linkea a su disponibilidad', async () => {
+  it('como docente hay un solo link a la disponibilidad, no uno por materia', async () => {
     renderProfile({ viewRole: 'teacher' })
     await screen.findByText('Matemática')
 
-    // El nombre accesible incluye la materia: con solo "Disponibilidad" no
-    // se distinguirían entre sí ni del ícono de la barra.
-    expect(screen.getByRole('link', { name: 'Disponibilidad de Matemática' })).toHaveAttribute(
-      'href',
-      '/disponibilidad/1',
-    )
-    expect(screen.getByRole('link', { name: 'Disponibilidad de Álgebra' })).toHaveAttribute(
-      'href',
-      '/disponibilidad/3',
-    )
+    const links = screen.getAllByRole('link', { name: /disponibilidad/i })
+    expect(links).toHaveLength(1)
+    expect(links[0]).toHaveAttribute('href', '/disponibilidad')
   })
 
   it('como docente se agregan y se quitan materias', async () => {
@@ -229,6 +227,7 @@ describe('ProfilePage', () => {
     expect(updateProfile).toHaveBeenCalledWith({
       telefono: '+54 9 11 1234-5678',
       subjectIds: [1, 3, 2],
+      rates: user.rates,
     })
     expect(onUserChange).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -238,6 +237,73 @@ describe('ProfilePage', () => {
       }),
     )
     expect(await screen.findByText('Listo, guardamos tus cambios.')).toBeInTheDocument()
+  })
+
+  it('muestra las tarifas guardadas de cada materia, con centavos si hay', async () => {
+    renderProfile({ viewRole: 'teacher' })
+    await screen.findByText('Matemática')
+
+    expect(tarifa('Matemática', 'virtual')).toHaveValue('5000')
+    expect(tarifa('Matemática', 'presencial')).toHaveValue('6500,50')
+    expect(tarifa('Matemática', 'híbrida')).toHaveValue('')
+  })
+
+  it('avisa qué materia no tiene ninguna tarifa', async () => {
+    renderProfile({ viewRole: 'teacher' })
+    await screen.findByText('Matemática')
+
+    expect(
+      screen.getByText('Sin tarifas: los alumnos no pueden reservar Álgebra con vos.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/reservar Matemática con vos/)).not.toBeInTheDocument()
+  })
+
+  it('guarda las tarifas en centavos, y vaciar un campo la saca', async () => {
+    renderProfile({ viewRole: 'teacher' })
+    await screen.findByText('Matemática')
+
+    await userEvent.type(tarifa('Álgebra', 'híbrida'), '7.200,5')
+    await userEvent.clear(tarifa('Matemática', 'presencial'))
+    await userEvent.click(botonGuardar())
+
+    await waitFor(() => expect(updateProfile).toHaveBeenCalledTimes(1))
+    expect(updateProfile.mock.calls[0][0].rates).toEqual([
+      { subjectId: 1, modality: 'virtual', hourlyRateCents: 500000 },
+      { subjectId: 3, modality: 'hybrid', hourlyRateCents: 720050 },
+    ])
+  })
+
+  it('un monto inválido marca el campo y no deja guardar', async () => {
+    renderProfile({ viewRole: 'teacher' })
+    await screen.findByText('Matemática')
+
+    await userEvent.type(tarifa('Álgebra', 'virtual'), 'mil')
+
+    expect(screen.getByText('Un monto en pesos, por ejemplo 5.000 o 5.000,50.')).toBeInTheDocument()
+    expect(tarifa('Álgebra', 'virtual')).toHaveAttribute('aria-invalid', 'true')
+    expect(botonGuardar()).toBeDisabled()
+  })
+
+  it('quitar una materia se lleva sus tarifas', async () => {
+    renderProfile({ viewRole: 'teacher' })
+    await screen.findByText('Matemática')
+
+    await userEvent.click(screen.getByLabelText('Dejar de dar Matemática'))
+    await userEvent.click(botonGuardar())
+
+    await waitFor(() => expect(updateProfile).toHaveBeenCalledTimes(1))
+    expect(updateProfile.mock.calls[0][0]).toMatchObject({ subjectIds: [3], rates: [] })
+  })
+
+  it('como alumno no se mandan tarifas', async () => {
+    renderProfile({ viewRole: 'student' })
+    await esperarMaterias()
+
+    await userEvent.type(telefonoInput(), '9')
+    await userEvent.click(botonGuardar())
+
+    await waitFor(() => expect(updateProfile).toHaveBeenCalledTimes(1))
+    expect(updateProfile.mock.calls[0][0]).not.toHaveProperty('rates')
   })
 
   it('avisa si falla el guardado', async () => {

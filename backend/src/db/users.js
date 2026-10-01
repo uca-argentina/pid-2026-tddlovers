@@ -57,14 +57,40 @@ export async function findSubjectIdsByTeacher(teacherId) {
 }
 
 /**
- * Actualiza el perfil y, si es docente, reemplaza sus materias por las que
- * llegan. Todo en una transacción: si falla el vínculo con las materias, el
- * teléfono tampoco se guarda, y nunca queda un docente a medio actualizar.
- *
- * `subjectIds` se ignora para los alumnos: teacher_subjects está pensada para
- * docentes, y el registro tampoco les pide materias.
+ * Los docentes para el buscador, con las materias que ofrecen. Una materia
+ * cuenta si el docente le puso tarifa en alguna modalidad: es el mismo
+ * criterio con el que findPublishedWindows ofrece una ventana, así que el
+ * buscador no sugiere a nadie a quien no se le pueda reservar nada. Solo
+ * nombre y materias — el buscador no tiene por qué ver el mail ni el
+ * teléfono de nadie.
  */
-export async function updateUserProfile(userId, { telefono, subjectIds }) {
+export async function listTeachers() {
+  const result = await getPool().query(
+    `SELECT u.id, u.nombre, u.apellido, subj.subjects
+     FROM users u
+     JOIN LATERAL (
+       SELECT json_agg(json_build_object('id', s.id, 'name', s.name) ORDER BY s.name) AS subjects
+       FROM subjects s
+       WHERE EXISTS (
+         SELECT 1 FROM teacher_rates r WHERE r.teacher_id = u.id AND r.subject_id = s.id
+       )
+     ) subj ON subj.subjects IS NOT NULL
+     WHERE u.role = 'teacher'
+     ORDER BY u.nombre, u.apellido`
+  );
+  return result.rows;
+}
+
+/**
+ * Actualiza el perfil y, si es docente, reemplaza sus materias y sus tarifas
+ * por las que llegan. Todo en una transacción: si falla una tarifa, ni el
+ * teléfono ni las materias se guardan, y nunca queda un docente a medio
+ * actualizar.
+ *
+ * `subjectIds` y `rates` se ignoran para los alumnos: el registro tampoco les
+ * pide materias. Cualquiera de los dos puede venir undefined = no se toca.
+ */
+export async function updateUserProfile(userId, { telefono, subjectIds, rates }) {
   const client = await getPool().connect();
   try {
     await client.query('BEGIN');
@@ -97,6 +123,26 @@ export async function updateUserProfile(userId, { telefono, subjectIds }) {
       }
     }
 
+    // Después de las materias: sacar una materia ya se llevó sus tarifas
+    // (FK con cascada), y las nuevas solo pueden ser de materias que quedan.
+    if (user.role === 'teacher' && Array.isArray(rates)) {
+      await client.query(`DELETE FROM teacher_rates WHERE teacher_id = $1`, [userId]);
+      if (rates.length > 0) {
+        await client.query(
+          `INSERT INTO teacher_rates (teacher_id, subject_id, modality, hourly_rate_cents)
+           SELECT $1, r.subject_id, r.modality, r.cents
+           FROM unnest($2::uuid[], $3::class_modality[], $4::int[])
+             AS r(subject_id, modality, cents)`,
+          [
+            userId,
+            rates.map((rate) => rate.subjectId),
+            rates.map((rate) => rate.modality),
+            rates.map((rate) => rate.hourlyRateCents),
+          ]
+        );
+      }
+    }
+
     await client.query('COMMIT');
     return user;
   } catch (err) {
@@ -125,9 +171,4 @@ export async function findUserById(id) {
     [id]
   );
   return result.rows[0] ?? null;
-}
-
-export async function emailExists(email) {
-  const result = await getPool().query(`SELECT 1 FROM users WHERE email = $1`, [email]);
-  return result.rowCount > 0;
 }

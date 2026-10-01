@@ -7,7 +7,6 @@ vi.mock('../../db/users.js', () => ({
   createUser: vi.fn(),
   findUserByEmail: vi.fn(),
   findUserById: vi.fn(),
-  emailExists: vi.fn(),
   findSubjectIdsByTeacher: vi.fn(),
   updateUserProfile: vi.fn(),
 }));
@@ -19,17 +18,23 @@ vi.mock('../../db/sessions.js', () => ({
   deleteExpiredSessions: vi.fn().mockResolvedValue(undefined),
 }));
 
+// Las tarifas del docente también viajan en cada usuario (lib/publicUser).
+vi.mock('../../db/rates.js', () => ({
+  findRatesByTeacher: vi.fn(),
+}));
+
 vi.mock('../../db/subjects.js', () => ({
   listSubjects: vi.fn(),
   countExistingSubjectIds: vi.fn(),
 }));
 
-const { createUser, findUserByEmail, findUserById, emailExists, findSubjectIdsByTeacher } =
+const { createUser, findUserByEmail, findUserById, findSubjectIdsByTeacher } =
   await import('../../db/users.js');
 const { createSession, findValidSession, deleteExpiredSessions } = await import(
   '../../db/sessions.js'
 );
 const { countExistingSubjectIds } = await import('../../db/subjects.js');
+const { findRatesByTeacher } = await import('../../db/rates.js');
 const { hashPassword } = await import('../../lib/password.js');
 const { buildApp } = await import('../../app.js');
 
@@ -56,6 +61,7 @@ describe('auth routes', () => {
     // Toda respuesta con un usuario adentro pasa por acá (ver lib/publicUser).
     // Por defecto sin materias; el test que las necesita lo pisa.
     findSubjectIdsByTeacher.mockResolvedValue([]);
+    findRatesByTeacher.mockResolvedValue([]);
   });
 
   afterEach(async () => {
@@ -65,32 +71,6 @@ describe('auth routes', () => {
     vi.resetAllMocks();
     deleteExpiredSessions.mockResolvedValue(undefined);
     await app.close();
-  });
-
-  describe('GET /api/auth/check-email', () => {
-    it('rejects an invalid email', async () => {
-      const res = await app.inject({ method: 'GET', url: '/api/auth/check-email?email=nope' });
-      expect(res.statusCode).toBe(400);
-    });
-
-    it('reports availability for a free email', async () => {
-      emailExists.mockResolvedValueOnce(false);
-      const res = await app.inject({
-        method: 'GET',
-        url: '/api/auth/check-email?email=free@example.com',
-      });
-      expect(res.statusCode).toBe(200);
-      expect(res.json()).toEqual({ available: true });
-    });
-
-    it('reports unavailability for a taken email', async () => {
-      emailExists.mockResolvedValueOnce(true);
-      const res = await app.inject({
-        method: 'GET',
-        url: '/api/auth/check-email?email=taken@example.com',
-      });
-      expect(res.json()).toEqual({ available: false });
-    });
   });
 
   describe('POST /api/auth/register', () => {
@@ -209,6 +189,7 @@ describe('auth routes', () => {
         apellido: 'Lovelace',
         telefono: null,
         subjectIds: [],
+        rates: [],
       });
       expect(res.cookies.some((c) => c.name === 'sid')).toBe(true);
       expect(createUser).toHaveBeenCalledWith(
@@ -320,6 +301,7 @@ describe('auth routes', () => {
         apellido: 'Lovelace',
         telefono: null,
         subjectIds: [],
+        rates: [],
       });
       expect(res.cookies.some((c) => c.name === 'sid')).toBe(true);
     });
@@ -383,6 +365,7 @@ describe('auth routes', () => {
         apellido: 'Lovelace',
         telefono: null,
         subjectIds: [],
+        rates: [],
       });
     });
   });

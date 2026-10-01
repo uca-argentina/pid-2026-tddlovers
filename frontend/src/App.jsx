@@ -6,7 +6,7 @@ import CalendarPage from './pages/Calendar/CalendarPage.jsx'
 import LoginPage from './pages/Login/LoginPage.jsx'
 import ProfilePage from './pages/Profile/ProfilePage.jsx'
 import RegisterPage from './pages/Register/RegisterPage.jsx'
-import SearchResultsPage from './pages/Search/SearchResultsPage.jsx'
+import ReservationsPage from './pages/Reservations/ReservationsPage.jsx'
 import { fetchCurrentUser, logoutAccount } from './api/client.js'
 
 /**
@@ -61,8 +61,7 @@ class App extends Component {
   /**
    * App es el dueño de `user`, así que el perfil avisa para acá cuando
    * guarda. Sin esto, salir del perfil lo desmonta y al volver se vería el
-   * dato viejo. No se toca `viewRole`: ese lo maneja el interruptor de la
-   * barra, no lo que se guardó.
+   * dato viejo.
    */
   handleUserChange = (user) => {
     this.setState({ user })
@@ -110,7 +109,7 @@ class App extends Component {
 
           {/* Ruta sin path: solo aporta el layout (barra superior) a las de
               adentro, y así el NavBar no se remonta al cambiar de pantalla. */}
-          <Route element={<AppLayout viewRole={viewRole} />}>
+          <Route element={<AppLayout viewRole={viewRole} user={user} />}>
             <Route path="/" element={<CalendarPage viewRole={viewRole} />} />
             <Route
               path="/perfil"
@@ -123,17 +122,9 @@ class App extends Component {
                 />
               }
             />
-            <Route path="/buscar" element={<SearchResultsPage />} />
-            {/* Dos rutas para la misma pantalla: con materia (desde el botón
-                de cada materia del perfil) y sin materia (desde el ícono de
-                la barra). La v7 de react-router sacó los parámetros
-                opcionales, así que no se puede escribir en una sola. */}
+            <Route path="/reservas" element={<ReservationsPage viewRole={viewRole} />} />
             <Route
               path="/disponibilidad"
-              element={<AvailabilityPage viewRole={viewRole} user={user} />}
-            />
-            <Route
-              path="/disponibilidad/:materiaId"
               element={<AvailabilityPage viewRole={viewRole} user={user} />}
             />
           </Route>

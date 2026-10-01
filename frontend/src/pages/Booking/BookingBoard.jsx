@@ -4,8 +4,8 @@ import BookingFilters from './BookingFilters.jsx'
 import BookingResults from './BookingResults.jsx'
 import BookingDialog from './BookingDialog.jsx'
 import Banner from '../../components/Banner.jsx'
-import { fetchAvailability, fetchMyLessons, fetchSubjects } from '../../api/client.js'
-import { fromISODate, toISODate } from '../../utils/calendar.js'
+import { fetchAvailability, fetchClass, fetchMyLessons, fetchSubjects } from '../../api/client.js'
+import { formatDayLong, fromISODate, toISODate } from '../../utils/calendar.js'
 import {
   annotateClashes,
   filterCards,
@@ -16,18 +16,23 @@ import './BookingBoard.css'
 
 // Cuando no hay nada que anotar, SIEMPRE el mismo objeto: lo que sale de acá
 // baja hasta MonthPane y hasta las tarjetas.
-const SIN_TARJETAS = { slots: null, myLessons: null, cards: [] }
+const SIN_TARJETAS = { slots: null, myLessons: null, excludeId: null, cards: [] }
 
 /**
- * La pantalla del alumno: buscar horarios libres para reservar. A la derecha
- * el calendario del mes y a la izquierda las clases del día elegido, con los
+ * La pantalla del alumno: buscar clases para reservar. A la derecha el
+ * calendario del mes y a la izquierda las clases del día elegido, con los
  * filtros arriba.
  *
- * Una tarjeta es un docente, una materia y un día: todos los tramos libres de
- * ese día van juntos. Los horarios que el alumno ya reservó CON ESE DOCENTE ya
- * no están (los restó el backend); los que tiene con OTRO aparecen como aviso
- * gris, porque el horario del docente sigue existiendo aunque este alumno no
- * lo pueda tomar.
+ * Una tarjeta es un horario que ofrece un docente un día: rango, modalidad y
+ * cupo los fijó el docente; la materia (entre las que tarifó), la hora de
+ * inicio y la duración las elige el alumno en el modal (o se suma a una
+ * grupal ya armada). Lo reservado CON ESE DOCENTE ya no está (lo restó el
+ * backend); lo que el alumno tiene con OTRO aparece como aviso gris, porque
+ * el rato del docente sigue existiendo aunque este alumno no lo pueda tomar.
+ *
+ * Con ?reprogramar=<id> la misma pantalla sirve para reprogramar una clase
+ * confirmada: se ven solo los horarios del mismo docente y la misma materia, y
+ * el modal pide el cambio en vez de una reserva nueva.
  *
  * El `router` llega por props desde AvailabilityPage en vez de envolver esto
  * en otro withRouter: alcanza con un puente por ruta y así sigue siendo obvio
@@ -46,9 +51,13 @@ class BookingBoard extends Component {
     // La tarjeta que se está reservando, o null si el modal está cerrado.
     booking: null,
     booked: null,
+    // La clase que se está reprogramando (?reprogramar=<id>), o null.
+    rescheduling: null,
     // --- filtros ---
     dayKeys: [],
     subjectIds: [],
+    modalities: [],
+    kinds: [],
     fromTime: '',
     toTime: '',
     teacherQuery: '',
@@ -61,6 +70,8 @@ class BookingBoard extends Component {
 
   subjectsToken = 0
 
+  rescheduleToken = 0
+
   // Cache de un solo valor, igual que shortRunsCache en AvailabilityPage: la
   // clave es la IDENTIDAD de los dos arrays, que sirve porque solo cambian
   // cuando vuelve una respuesta. Sin esto, tocar un chip recalcularía las
@@ -70,20 +81,55 @@ class BookingBoard extends Component {
   componentDidMount() {
     this.loadSubjects()
     this.applyQuery()
+    this.loadReschedule()
   }
 
   componentDidUpdate(prevProps) {
     if (prevProps.router.location.search !== this.props.router.location.search) {
       this.applyQuery()
-    }
-    if (prevProps.subjectId !== this.props.subjectId) {
-      this.applySubjectFromRoute()
+      if (prevProps.router.searchParams.get('reprogramar') !== this.getRescheduleId()) {
+        this.loadReschedule()
+      }
     }
   }
 
   componentWillUnmount() {
     this.rangeToken += 1
     this.subjectsToken += 1
+    this.rescheduleToken += 1
+  }
+
+  getRescheduleId() {
+    return this.props.router.searchParams.get('reprogramar')
+  }
+
+  loadReschedule() {
+    const token = ++this.rescheduleToken
+    const id = this.getRescheduleId()
+    if (!id) {
+      this.setState({ rescheduling: null })
+      return
+    }
+    fetchClass(id)
+      .then((cls) => {
+        if (token !== this.rescheduleToken) return
+        this.setState({ rescheduling: cls })
+      })
+      .catch((error) => {
+        if (token !== this.rescheduleToken) return
+        this.setState({
+          rescheduling: null,
+          error: error.message || 'No se encontró la clase a reprogramar.',
+        })
+      })
+  }
+
+  /** Saca un parámetro de la URL sin tocar los demás, y sin sumar al historial. */
+  dropParam(name) {
+    const params = new URLSearchParams(this.props.router.searchParams)
+    if (!params.has(name)) return
+    params.delete(name)
+    this.props.router.setSearchParams(params, { replace: true })
   }
 
   getQuery() {
@@ -97,10 +143,7 @@ class BookingBoard extends Component {
    */
   applyQuery() {
     const q = this.getQuery()
-    if (!q) {
-      this.applySubjectFromRoute()
-      return
-    }
+    if (!q) return
 
     const { subjectId, teacherQuery } = resolveQuery(q, this.state.subjects)
     this.setState({
@@ -109,20 +152,15 @@ class BookingBoard extends Component {
     })
   }
 
-  /** /disponibilidad/:materiaId deja esa materia ya elegida. */
-  applySubjectFromRoute() {
-    const { subjectId } = this.props
-    if (subjectId) this.setState({ subjectIds: [subjectId] })
-  }
-
   /**
    * El `q` es una forma de ENTRAR con algo filtrado, no un filtro que se
    * queda: apenas el alumno toca cualquier chip a mano, se va de la URL. Con
    * replace, así el botón de atrás sigue sirviendo para volver de pantalla.
    */
   dropQuery() {
-    if (!this.getQuery()) return
-    this.props.router.setSearchParams({}, { replace: true })
+    // Solo el q: si se está reprogramando, tocar un filtro no puede cortar
+    // la reprogramación.
+    this.dropParam('q')
   }
 
   loadSubjects = () => {
@@ -172,25 +210,55 @@ class BookingBoard extends Component {
       })
   }
 
-  /** Todas las tarjetas del rango, con las superposiciones ya anotadas. */
+  /**
+   * Todas las tarjetas del rango, con las superposiciones ya anotadas.
+   *
+   * Al reprogramar, la clase vieja no cuenta como choque: se cancela en el
+   * mismo momento en que se toma la nueva (así se la puede correr media hora).
+   */
   getCards() {
-    const { slots, myLessons } = this.state
-    if (this.cardsCache.slots !== slots || this.cardsCache.myLessons !== myLessons) {
-      this.cardsCache = { slots, myLessons, cards: annotateClashes(slots, myLessons) }
+    const { slots, myLessons, rescheduling } = this.state
+    const excludeId = rescheduling ? String(rescheduling.id) : null
+    const cache = this.cardsCache
+    if (cache.slots !== slots || cache.myLessons !== myLessons || cache.excludeId !== excludeId) {
+      const propias = excludeId
+        ? myLessons.filter((lesson) => String(lesson.id) !== excludeId)
+        : myLessons
+      this.cardsCache = { slots, myLessons, excludeId, cards: annotateClashes(slots, propias) }
     }
-    return this.cardsCache.cards
+    const cards = this.cardsCache.cards
+    return rescheduling ? this.onlyForReschedule(cards, rescheduling) : cards
+  }
+
+  /**
+   * Reprogramar es con el mismo docente y la misma materia: las tarjetas de
+   * ese docente que la ofrecen, recortadas a esa materia (y a las grupales de
+   * esa materia) para que el modal no ofrezca otra.
+   */
+  onlyForReschedule(cards, cls) {
+    const materia = String(cls.subjectId)
+    return cards
+      .filter((card) => String(card.teacherId) === String(cls.teacherId))
+      .map((card) => ({
+        ...card,
+        subjects: card.subjects.filter((subject) => String(subject.id) === materia),
+        groups: card.groups.filter((group) => String(group.subjectId) === materia),
+      }))
+      .filter((card) => card.subjects.length > 0)
   }
 
   getFilters() {
-    const { dayKeys, subjectIds, fromTime, toTime, teacherQuery } = this.state
-    return { dayKeys, subjectIds, fromTime, toTime, teacherQuery }
+    const { dayKeys, subjectIds, modalities, kinds, fromTime, toTime, teacherQuery } = this.state
+    return { dayKeys, subjectIds, modalities, kinds, fromTime, toTime, teacherQuery }
   }
 
   hasFilters() {
-    const { dayKeys, subjectIds, fromTime, toTime, teacherQuery } = this.state
+    const { dayKeys, subjectIds, modalities, kinds, fromTime, toTime, teacherQuery } = this.state
     return (
       dayKeys.length > 0 ||
       subjectIds.length > 0 ||
+      modalities.length > 0 ||
+      kinds.length > 0 ||
       Boolean(fromTime) ||
       Boolean(toTime) ||
       Boolean(teacherQuery)
@@ -227,11 +295,14 @@ class BookingBoard extends Component {
     return map
   }
 
-  /** Solo las materias que de verdad aparecen en el rango cargado. */
+  /** Solo las materias que se pueden reservar en algún horario del rango cargado. */
   getFilterSubjects() {
     // Todo se normaliza a string: el id elegido puede venir de la URL (siempre
     // string) y el de las tarjetas del backend, y un Set compara con ===.
-    const presentes = new Set(this.getCards().map((card) => String(card.subjectId)))
+    const presentes = new Set()
+    for (const card of this.getCards()) {
+      for (const subject of card.subjects) presentes.add(String(subject.id))
+    }
     // La elegida se agrega igual: si no, un chip seleccionado que se queda sin
     // resultados desaparecería y no habría forma de sacarlo.
     for (const id of this.state.subjectIds) presentes.add(String(id))
@@ -267,9 +338,31 @@ class BookingBoard extends Component {
     }))
   }
 
-  handleChangeTime = (field) => (event) => {
+  /** Mismo patrón para modalidad y tipo: prender o apagar una clave de la lista. */
+  toggleIn(key, value) {
     this.dropQuery()
-    this.setState({ [field]: event.target.value })
+    this.setState((prev) => ({
+      [key]: prev[key].includes(value)
+        ? prev[key].filter((item) => item !== value)
+        : [...prev[key], value],
+    }))
+  }
+
+  handleToggleModality = (modality) => () => {
+    this.toggleIn('modalities', modality)
+  }
+
+  handleToggleKind = (kind) => () => {
+    this.toggleIn('kinds', kind)
+  }
+
+  /**
+   * El slider manda las dos puntas juntas: no se puede mover una sin saber
+   * dónde quedó la otra (se empujan entre sí).
+   */
+  handleChangeRange = (fromTime, toTime) => {
+    this.dropQuery()
+    this.setState({ fromTime, toTime })
   }
 
   handleClearTeacher = () => {
@@ -279,7 +372,15 @@ class BookingBoard extends Component {
 
   handleClear = () => {
     this.dropQuery()
-    this.setState({ dayKeys: [], subjectIds: [], fromTime: '', toTime: '', teacherQuery: '' })
+    this.setState({
+      dayKeys: [],
+      subjectIds: [],
+      modalities: [],
+      kinds: [],
+      fromTime: '',
+      toTime: '',
+      teacherQuery: '',
+    })
   }
 
   handleReservar = (card) => () => {
@@ -293,27 +394,60 @@ class BookingBoard extends Component {
   /**
    * Reservada: se vuelve a pedir el mes entero en vez de tocar el estado a
    * mano. No es solo la tarjeta que se reservó la que cambia — ese horario
-   * desaparece de todas las materias de ese docente y puede pasar a chocar con
-   * tarjetas de otros. Recalcular eso acá sería repetir lo que ya hace el
-   * backend, y es una sola llamada.
+   * puede pasar a chocar con tarjetas de otros docentes. Recalcular eso acá
+   * sería repetir lo que ya hace el backend, y es una sola llamada.
+   *
+   * `booked` lo arma el modal con lo que hace falta para el cartel.
    */
-  handleBooked = () => {
+  handleBooked = (booked) => {
     const { booking, from, to } = this.state
-    this.setState({ booking: null, booked: booking, selectedIso: booking.date })
+    this.setState({ booking: null, booked, selectedIso: booking.date, rescheduling: null })
+    // La reprogramación terminó: la pantalla vuelve a ser la de reservar.
+    if (booked.rescheduled) this.dropParam('reprogramar')
     if (from && to) this.loadRange(from, to)
+  }
+
+  handleStopReschedule = () => {
+    this.dropParam('reprogramar')
   }
 
   renderBanner() {
     const { error, booked } = this.state
     if (error) return <Banner type="danger">{error}</Banner>
-    if (booked) {
+    if (booked?.rescheduled) {
       return (
         <Banner type="success">
-          Reservaste {booked.subjectName} con {booked.teacherName}. Ya la ves en tu calendario.
+          Pediste el nuevo horario de {booked.subjectName} con {booked.teacherName}. Queda
+          pendiente hasta que el docente la acepte, y después la tenés que volver a pagar.
         </Banner>
       )
     }
-    return null
+    if (booked) {
+      return (
+        <Banner type="success">
+          Reservaste {booked.subjectName} con {booked.teacherName}. Queda pendiente hasta que el
+          docente la acepte; ya la ves en tu calendario.
+        </Banner>
+      )
+    }
+    return this.renderRescheduling()
+  }
+
+  renderRescheduling() {
+    const cls = this.state.rescheduling
+    if (!cls) return null
+    return (
+      <div className="booking-reschedule" role="status">
+        <p>
+          Reprogramando tu clase de <strong>{cls.subjectName}</strong> con {cls.teacherName} del{' '}
+          {formatDayLong(fromISODate(cls.date)).toLowerCase()} a las {cls.startTime}. Elegí un
+          horario nuevo: el docente lo tiene que aceptar y la clase se vuelve a pagar.
+        </p>
+        <button type="button" className="booking-reschedule-stop" onClick={this.handleStopReschedule}>
+          Dejar de reprogramar
+        </button>
+      </div>
+    )
   }
 
   render() {
@@ -322,21 +456,6 @@ class BookingBoard extends Component {
 
     return (
       <div className="booking-board">
-        <BookingFilters
-          subjects={this.getFilterSubjects()}
-          dayKeys={this.state.dayKeys}
-          subjectIds={this.state.subjectIds}
-          fromTime={this.state.fromTime}
-          toTime={this.state.toTime}
-          teacherQuery={this.state.teacherQuery}
-          hasFilters={this.hasFilters()}
-          onToggleDay={this.handleToggleDay}
-          onToggleSubject={this.handleToggleSubject}
-          onChangeTime={this.handleChangeTime}
-          onClearTeacher={this.handleClearTeacher}
-          onClear={this.handleClear}
-        />
-
         <div className="booking-panes">
           <MonthPane
             eventsByDate={this.getLessonsByDate()}
@@ -350,8 +469,28 @@ class BookingBoard extends Component {
           </MonthPane>
 
           {/* Igual que en el calendario: va después en el DOM y el CSS lo manda
-              a la izquierda, porque el calendario es el contenido principal. */}
+              a la izquierda, porque el calendario es el contenido principal.
+              Adentro, los filtros arriba y los horarios del día abajo. */}
           <aside className="booking-aside">
+            <BookingFilters
+              subjects={this.getFilterSubjects()}
+              dayKeys={this.state.dayKeys}
+              subjectIds={this.state.subjectIds}
+              modalities={this.state.modalities}
+              kinds={this.state.kinds}
+              fromTime={this.state.fromTime}
+              toTime={this.state.toTime}
+              teacherQuery={this.state.teacherQuery}
+              hasFilters={this.hasFilters()}
+              onToggleDay={this.handleToggleDay}
+              onToggleSubject={this.handleToggleSubject}
+              onToggleModality={this.handleToggleModality}
+              onToggleKind={this.handleToggleKind}
+              onChangeRange={this.handleChangeRange}
+              onClearTeacher={this.handleClearTeacher}
+              onClear={this.handleClear}
+            />
+
             <BookingResults
               date={fromISODate(selectedIso)}
               cards={porFecha[selectedIso] || []}
@@ -365,7 +504,7 @@ class BookingBoard extends Component {
         {booking ? (
           <BookingDialog
             card={booking}
-            myLessons={this.state.myLessons}
+            rescheduleOf={this.state.rescheduling}
             onClose={this.handleCloseDialog}
             onBooked={this.handleBooked}
           />

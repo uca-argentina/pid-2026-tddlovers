@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App.jsx'
 import { formatMonthTitle } from './utils/calendar.js'
+import { apiUser, updatedUser } from './testing/fixtures.js'
 
 // Mockeamos el cliente entero para no esperar la latencia simulada de los
 // datos de mentira y para controlar qué devuelve cada llamada.
@@ -13,8 +14,7 @@ const {
   fetchSubjects,
   registerAccount,
   updateProfile,
-  fetchAvailabilityByTeacher,
-  saveAvailability,
+  fetchMyWindows,
   fetchAvailability,
   fetchMyLessons,
   fetchCurrentUser,
@@ -25,8 +25,7 @@ const {
   fetchSubjects: vi.fn(),
   registerAccount: vi.fn(),
   updateProfile: vi.fn(),
-  fetchAvailabilityByTeacher: vi.fn(),
-  saveAvailability: vi.fn(),
+  fetchMyWindows: vi.fn(),
   fetchAvailability: vi.fn(),
   fetchMyLessons: vi.fn(),
   fetchCurrentUser: vi.fn(),
@@ -39,22 +38,14 @@ vi.mock('./api/client.js', () => ({
   fetchSubjects,
   registerAccount,
   updateProfile,
-  fetchAvailabilityByTeacher,
-  saveAvailability,
+  fetchMyWindows,
   fetchAvailability,
   fetchMyLessons,
   fetchCurrentUser,
   logoutAccount,
 }))
 
-const user = {
-  id: 1,
-  nombre: 'Agustín',
-  apellido: 'Klos',
-  email: 'agustin@example.com',
-  role: 'teacher',
-  subjectIds: [],
-}
+const user = apiUser()
 
 function go(path) {
   window.history.pushState({}, '', path)
@@ -65,10 +56,9 @@ describe('App', () => {
     loginAccount.mockReset().mockResolvedValue(user)
     fetchClasses.mockReset().mockResolvedValue([])
     fetchSubjects.mockReset().mockResolvedValue([])
-    registerAccount.mockReset().mockResolvedValue({ user })
-    updateProfile.mockReset().mockImplementation((payload) => Promise.resolve(payload))
-    fetchAvailabilityByTeacher.mockReset().mockResolvedValue({})
-    saveAvailability.mockReset().mockResolvedValue({})
+    registerAccount.mockReset().mockResolvedValue(user)
+    updateProfile.mockReset().mockImplementation((payload) => Promise.resolve(updatedUser(user, payload)))
+    fetchMyWindows.mockReset().mockResolvedValue([])
     fetchAvailability.mockReset().mockResolvedValue([])
     fetchMyLessons.mockReset().mockResolvedValue([])
     // App pregunta por la sesión al montar. Por defecto no hay nadie
@@ -115,7 +105,9 @@ describe('App', () => {
     await screen.findByText(formatMonthTitle(new Date()))
 
     await userEvent.click(screen.getByLabelText('Mi perfil'))
-    expect(await screen.findByText('Agustín Klos')).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: 'Agustín Klos' }),
+    ).toBeInTheDocument()
   })
 
   it('sin sesión el perfil pide iniciar sesión', async () => {
@@ -129,7 +121,9 @@ describe('App', () => {
     fetchCurrentUser.mockResolvedValue(user)
     go('/perfil')
     render(<App />)
-    expect(await screen.findByText('Agustín Klos')).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: 'Agustín Klos' }),
+    ).toBeInTheDocument()
   })
 
   it('se puede entrar al login aunque ya haya un usuario cargado', async () => {
@@ -161,9 +155,7 @@ describe('App', () => {
     expect(await screen.findByLabelText('Teléfono (opcional)')).toHaveValue('+54 9 11 4321-8765')
   })
 
-  it('desde el perfil como docente se llega a la disponibilidad de la materia', async () => {
-    // El usuario tiene que DAR la materia para que aparezca la fila con el
-    // botón: si no la da, cae en el bloque de "Agregar materia".
+  it('desde el perfil como docente se llega a la disponibilidad', async () => {
     loginAccount.mockResolvedValue({ ...user, subjectIds: [1] })
     fetchSubjects.mockResolvedValue([{ id: 1, name: 'Matemática' }])
     go('/ingresar')
@@ -173,24 +165,28 @@ describe('App', () => {
     // El usuario de prueba es docente, así que al loguearse viewRole queda
     // en docente y las materias se pueden editar.
     await userEvent.click(screen.getByLabelText('Mi perfil'))
-    await userEvent.click(await screen.findByRole('link', { name: 'Disponibilidad de Matemática' }))
+    await userEvent.click(await screen.findByRole('link', { name: 'Cargar mi disponibilidad' }))
 
-    expect(await screen.findByText('Disponibilidad de Matemática')).toBeInTheDocument()
+    // Por el título: la barra también dice "Disponibilidad" (ver abajo).
+    expect(await screen.findByRole('heading', { name: 'Disponibilidad' })).toBeInTheDocument()
   })
 
-  it('el ícono de la barra lleva a la disponibilidad sin materia', async () => {
+  it('el ícono de la barra lleva a la disponibilidad', async () => {
     fetchCurrentUser.mockResolvedValue(user)
     go('/')
     render(<App />)
     await userEvent.click(screen.getByLabelText('Disponibilidad'))
-    expect(await screen.findByText('Disponibilidad')).toBeInTheDocument()
+    // Por el título de la pantalla y no por texto suelto: el usuario de
+    // prueba es docente y en ese rol la barra también dice "Disponibilidad",
+    // así que un getByText encontraría dos.
+    expect(await screen.findByRole('heading', { name: 'Disponibilidad' })).toBeInTheDocument()
   })
 
   it('cerrar sesión lleva al login y se olvida del usuario', async () => {
     fetchCurrentUser.mockResolvedValue(user)
     go('/perfil')
     render(<App />)
-    await screen.findByText('Agustín Klos')
+    await screen.findByRole('heading', { name: 'Agustín Klos' })
 
     await userEvent.click(screen.getByRole('link', { name: 'Cerrar sesión' }))
 

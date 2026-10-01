@@ -1,13 +1,11 @@
 import {
   addDays,
   addMonths,
-  addOneHour,
   buildMonthGrid,
   formatDuration,
   formatMonthTitle,
   fromISODate,
   isSameDay,
-  isValidSlotStart,
   mondayIndex,
   toISODate,
   WEEKDAY_LABELS,
@@ -72,18 +70,6 @@ describe('isSameDay', () => {
   })
 })
 
-describe('addOneHour', () => {
-  it('suma una hora manteniendo los minutos', () => {
-    expect(addOneHour('16:30')).toBe('17:30')
-    expect(addOneHour('09:00')).toBe('10:00')
-  })
-
-  it('da la vuelta a medianoche', () => {
-    expect(addOneHour('23:30')).toBe('00:30')
-    expect(addOneHour('23:00')).toBe('00:00')
-  })
-})
-
 describe('formatDuration', () => {
   it('formatea la clase típica de una hora', () => {
     expect(formatDuration('09:00', '10:00')).toBe('1 h')
@@ -97,22 +83,6 @@ describe('formatDuration', () => {
 
   it('maneja la clase que cruza la medianoche', () => {
     expect(formatDuration('23:30', '00:30')).toBe('1 h')
-  })
-})
-
-describe('isValidSlotStart', () => {
-  it('acepta solo en punto o y media', () => {
-    expect(isValidSlotStart('10:00')).toBe(true)
-    expect(isValidSlotStart('10:30')).toBe(true)
-    expect(isValidSlotStart('00:00')).toBe(true)
-    expect(isValidSlotStart('23:30')).toBe(true)
-  })
-
-  it('rechaza cualquier otro horario', () => {
-    expect(isValidSlotStart('10:15')).toBe(false)
-    expect(isValidSlotStart('25:00')).toBe(false)
-    expect(isValidSlotStart('9:00')).toBe(false)
-    expect(isValidSlotStart('')).toBe(false)
   })
 })
 

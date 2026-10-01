@@ -7,8 +7,8 @@ import { useLocation, useNavigate, useParams, useSearchParams } from 'react-rout
  * resto son class components (la única otra excepción son los SVG de
  * icons.jsx, que son pura presentación). Se pudo sostener hasta acá porque
  * todo lo que hacía falta de react-router venía en forma de componente:
- * <Link>, <NavLink>, <Navigate>, <Route>. Pero leer un parámetro de la URL
- * (/disponibilidad/:materiaId) o navegar a mano solo existe como hook: la v7
+ * <Link>, <NavLink>, <Navigate>, <Route>. Pero leer la URL (por ejemplo el
+ * ?q= del buscador) o navegar a mano solo existe como hook: la v7
  * de react-router no trae ni un <Route> con render prop ni el withRouter que
  * existía en la v5.
  *
@@ -19,10 +19,10 @@ import { useLocation, useNavigate, useParams, useSearchParams } from 'react-rout
  * con hooks.
  *
  * Uso:
- *   class AvailabilityPage extends Component {
- *     render() { return <h1>{this.props.router.params.materiaId}</h1> }
+ *   class Pantalla extends Component {
+ *     render() { return <h1>{this.props.router.searchParams.get('q')}</h1> }
  *   }
- *   export default withRouter(AvailabilityPage)
+ *   export default withRouter(Pantalla)
  */
 export default function withRouter(Wrapped) {
   function WithRouter(props) {

@@ -172,8 +172,18 @@ class RegisterPage extends Component {
   }
 
   renderStep() {
-    const { step, values, touched, role, subjects, subjectsLoading, selectedSubjectIds, submitting, submitError } =
-      this.state
+    const {
+      step,
+      values,
+      touched,
+      role,
+      subjects,
+      subjectsLoading,
+      subjectsError,
+      selectedSubjectIds,
+      submitting,
+      submitError,
+    } = this.state
 
     if (step === STEP_ACCOUNT) {
       return (
@@ -203,13 +213,14 @@ class RegisterPage extends Component {
 
     return (
       <StepSubjects
-        role={role}
         subjects={subjects}
         selectedIds={selectedSubjectIds}
         onToggle={this.handleSubjectToggle}
         onBack={this.handleBackToRole}
         onSubmit={this.handleFinalSubmit}
         loading={subjectsLoading}
+        loadError={subjectsError}
+        onRetry={this.loadSubjects}
         submitting={submitting}
         error={submitError}
       />
@@ -229,8 +240,8 @@ class RegisterPage extends Component {
 
     return (
       <div className="auth-page">
-        <div className="auth-shell">
-          <AuthHero showBack={canGoBack} onBack={this.handleBack} />
+        <AuthHero showBack={canGoBack} onBack={this.handleBack} />
+        <div className="auth-panel">
           <div className="auth-card">
             <h1 className="auth-title">Crear cuenta</h1>
             <ProgressSteps total={totalSteps} current={step} />

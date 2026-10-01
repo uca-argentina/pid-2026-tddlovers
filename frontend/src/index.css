@@ -1,17 +1,18 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 @import './styles/ui.css';
 
 :root {
   /* Paleta azul — modo claro. Mismo tono que el modo oscuro en distintos
      pasos de luminosidad/saturación, para que cambiar de tema no se sienta
      como una app distinta (ver CLAUDE.md). */
-  --color-bg: #eff6ff;
-  --color-surface: #dbeafe;
+  --color-bg: #f4f5f7;
+  --color-surface: #eef1f6;
   --color-surface-solid: #ffffff;
   --color-primary: #2563eb;
   --color-primary-hover: #1d4ed8;
   --color-text: #0f172a;
   --color-text-muted: #64748b;
-  --color-border: #cbd5e1;
+  --color-border: #e4e8ef;
 
   --color-success: #16a34a;
   --color-success-bg: rgba(22, 163, 74, 0.1);
@@ -20,10 +21,21 @@
   --color-warning: #d97706;
   --color-warning-bg: rgba(217, 119, 6, 0.1);
 
+  /* La barra lateral es oscura en los DOS temas (así está el diseño), así
+     que sus colores son tokens propios y no siguen a --color-bg. */
+  --color-sidebar-bg: #0a0f1f;
+  --color-sidebar-text: #94a3b8;
+  --color-sidebar-text-strong: #f8fafc;
+  --color-sidebar-border: rgba(148, 163, 184, 0.16);
+  --color-sidebar-active-bg: rgba(255, 255, 255, 0.07);
+
   --shadow-card: 0 20px 45px -15px rgba(37, 99, 235, 0.35);
   --shadow-soft: 0 10px 25px -8px rgba(15, 23, 42, 0.15);
+  /* Sombra baja y difusa de las superficies del contenido: apenas despega
+     la tarjeta del fondo, sin el halo azul de --shadow-card. */
+  --shadow-panel: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px -12px rgba(15, 23, 42, 0.12);
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --sans: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
 
   font: 16px/1.5 var(--sans);
   color-scheme: light dark;
@@ -59,8 +71,13 @@
     --color-warning: #fbbf24;
     --color-warning-bg: rgba(251, 191, 36, 0.15);
 
+    /* En oscuro la barra se separa del contenido por el borde, no por el
+       contraste: queda apenas más negra que el fondo. */
+    --color-sidebar-bg: #070b16;
+
     --shadow-card: 0 20px 45px -15px rgba(0, 0, 0, 0.6);
     --shadow-soft: 0 10px 25px -8px rgba(0, 0, 0, 0.4);
+    --shadow-panel: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.5);
   }
 }
 
@@ -81,8 +98,11 @@
   --color-warning: #fbbf24;
   --color-warning-bg: rgba(251, 191, 36, 0.15);
 
+  --color-sidebar-bg: #070b16;
+
   --shadow-card: 0 20px 45px -15px rgba(0, 0, 0, 0.6);
   --shadow-soft: 0 10px 25px -8px rgba(0, 0, 0, 0.4);
+  --shadow-panel: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.5);
 
   color-scheme: dark;
 }
@@ -113,6 +133,7 @@ h3 {
   font-weight: 600;
   color: var(--color-text);
   margin: 0;
+  letter-spacing: -0.015em;
 }
 
 p {

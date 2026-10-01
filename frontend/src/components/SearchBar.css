@@ -34,7 +34,7 @@
   cursor: pointer;
 }
 
-.search-bar svg {
+.search-bar > svg {
   position: absolute;
   left: 12px;
   top: 50%;
@@ -51,9 +51,116 @@
     padding: 8px 12px 8px 32px;
   }
 
-  .search-bar svg {
+  .search-bar > svg {
     left: 10px;
     width: 15px;
     height: 15px;
   }
+}
+
+/* ---- Sugerencias ---- */
+
+/* Flota por encima de todo. La posición y el ancho los pone SearchBar.jsx
+   (placePanel) a partir del input: con absolute la recortaría el overflow de
+   la barra lateral. */
+.search-suggest {
+  position: fixed;
+  z-index: 50;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-solid);
+  color: var(--color-text);
+  box-shadow: var(--shadow-soft);
+}
+
+.search-section + .search-section {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--color-border);
+}
+
+.search-section-title {
+  margin: 0;
+  padding: 6px 10px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+/* Alto fijo por fila para que "tres a la vista" sea exacto: el resto de la
+   sección queda a un scroll, y el scroll no se le pasa a la página. */
+.search-section-list {
+  --search-row: 48px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: calc(var(--search-row) * 3);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.search-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: var(--search-row);
+  padding: 0 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.search-option.is-active {
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+}
+
+.search-option-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.search-option-label,
+.search-option-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-option-label {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.search-option-detail {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.search-option-tag {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.search-option-tag.is-subject {
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+}
+
+.search-option-tag.is-teacher {
+  color: var(--color-success);
+  background: var(--color-success-bg);
+}
+
+.search-suggest-empty {
+  margin: 0;
+  padding: 12px 10px;
+  font-size: 13px;
+  color: var(--color-text-muted);
 }

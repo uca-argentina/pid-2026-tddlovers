@@ -22,12 +22,14 @@ import './AppLayout.css'
  */
 class AppLayout extends Component {
   render() {
-    const { viewRole, onToggleRole } = this.props
+    const { viewRole, user } = this.props
 
     return (
       <div className="app-shell">
-        <NavBar viewRole={viewRole} onToggleRole={onToggleRole} />
-        <main className="app-main">
+        <NavBar viewRole={viewRole} user={user} />
+        {/* Sin buscador (el docente no lo tiene) no hace falta dejarle lugar
+            arriba en el teléfono. */}
+        <main className={`app-main ${viewRole === 'teacher' ? '' : 'has-search'}`}>
           <Outlet />
         </main>
       </div>
