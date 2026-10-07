@@ -97,8 +97,8 @@ describe('auth routes', () => {
       expect(res.json().message).toMatch(/carácter especial/);
     });
 
-    // 'admin' existe en la base, pero nadie se registra como admin: se crea
-    // con `npm run create-admin`.
+    // 'admin' existe en la base, pero nadie se registra como admin: hay una
+    // sola cuenta, fija, que crea la migración 013.
     it('rejects an invalid role, admin included', async () => {
       const { token, cookieHeader } = await getCsrf(app);
       const res = await app.inject({

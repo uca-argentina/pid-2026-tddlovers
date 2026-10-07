@@ -1,7 +1,8 @@
 -- Rol administrador y aprobación de docentes.
 --
 --   - Hay un tercer rol, 'admin'. No se elige al registrarse (el registro
---     solo acepta teacher/student): se crea con `npm run create-admin`.
+--     solo acepta teacher/student). Hay una sola cuenta admin, fija: la crea
+--     la migración 013.
 --   - Todo docente nuevo nace PENDIENTE de aprobación. Mientras está
 --     pendiente o rechazado puede editar su perfil y cargar disponibilidad,
 --     pero no aparece en las búsquedas ni recibe reservas. Un admin lo

@@ -8,8 +8,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "start": "node src/index.js",
-    "dev": "node --watch src/index.js",
-    "create-admin": "node src/scripts/createAdmin.js"
+    "dev": "node --watch src/index.js"
   },
   "repository": {
     "type": "git",
