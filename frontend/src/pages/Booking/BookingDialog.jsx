@@ -22,6 +22,7 @@ import {
   needsAddress,
   needsMeetingUrl,
 } from '../../utils/windows.js'
+import { activePacksWith, classesLabel, formatPackDate, usablePackFor } from '../../utils/packs.js'
 import './BookingDialog.css'
 
 // La duración con la que arranca el selector al elegir un horario: una hora
@@ -41,6 +42,12 @@ const DEFAULT_MINUTES = 60
  * duración vienen fijas, así que elegir una grupal completa los tres pasos
  * de una.
  *
+ * Si el alumno tiene un paquete con este docente que sirve para ese día, se
+ * ofrece reservar con él (marcado de entrada): la clase no se paga aparte y
+ * su asistencia descuenta una clase del paquete. Materia, horario y duración
+ * se eligen igual. Al reprogramar no se elige: la nueva usa paquete si la
+ * vieja lo usaba (lo decide el backend).
+ *
  * Acá NO se vuelve a calcular qué está libre: la tarjeta ya trae los inicios
  * posibles con su duración máxima (del backend, recortados por las clases
  * propias en annotateClashes). Una segunda cuenta sería una segunda verdad.
@@ -59,9 +66,22 @@ class BookingDialog extends Component {
       groupStart: null,
       start: unico ? unico.start : null,
       minutes: unico ? Math.min(DEFAULT_MINUTES, unico.maxMinutes) : null,
+      usePack: !props.rescheduleOf && Boolean(usablePackFor(props.packs, props.card.teacherId, props.card.date)),
       saving: false,
       error: null,
     }
+  }
+
+  getUsablePack() {
+    const { packs, card } = this.props
+    return usablePackFor(packs, card.teacherId, card.date)
+  }
+
+  /** ¿Esta clase va con paquete? Reprogramando, si la vieja iba. */
+  isWithPack() {
+    const { rescheduleOf } = this.props
+    if (rescheduleOf) return Boolean(rescheduleOf.studentPackId)
+    return this.state.usePack && Boolean(this.getUsablePack())
   }
 
   getSubject(subjectId = this.state.subjectId) {
@@ -142,6 +162,10 @@ class BookingDialog extends Component {
     this.setState({ minutes, error: null })
   }
 
+  handleUsePack = (event) => {
+    this.setState({ usePack: event.target.checked, error: null })
+  }
+
   handleConfirm = () => {
     const { card, onBooked } = this.props
     const { saving } = this.state
@@ -161,7 +185,10 @@ class BookingDialog extends Component {
     }
     // Reprogramar manda lo mismo que reservar, salvo la materia: la pone el
     // backend, es la de la clase vieja (la tarjeta ya viene recortada a esa).
-    const guardar = rescheduleOf ? rescheduleLesson(rescheduleOf.id, pedido) : bookLesson(pedido)
+    const usedPack = this.isWithPack()
+    const guardar = rescheduleOf
+      ? rescheduleLesson(rescheduleOf.id, pedido)
+      : bookLesson({ ...pedido, usePack: usedPack })
 
     guardar
       .then(() =>
@@ -169,6 +196,7 @@ class BookingDialog extends Component {
           subjectName: subject.name,
           teacherName: card.teacherName,
           rescheduled: Boolean(rescheduleOf),
+          usedPack,
         }),
       )
       .catch((error) => {
@@ -356,13 +384,63 @@ class BookingDialog extends Component {
             {selection.joining ? ' · te sumás a una clase grupal' : ''}
           </span>
         </p>
-        <p className="booking-dialog-price">
-          {formatMoney(this.getPriceCents(selection))}
-          {this.props.card.maxStudents > 1 && subject.hourlyRateCents > 0 ? (
-            <span className="booking-dialog-duration"> por alumno</span>
-          ) : null}
-        </p>
+        {this.isWithPack() ? (
+          <p className="booking-dialog-price">Incluida en tu paquete</p>
+        ) : (
+          <p className="booking-dialog-price">
+            {formatMoney(this.getPriceCents(selection))}
+            {this.props.card.maxStudents > 1 && subject.hourlyRateCents > 0 ? (
+              <span className="booking-dialog-duration"> por alumno</span>
+            ) : null}
+          </p>
+        )}
       </div>
+    )
+  }
+
+  /**
+   * La opción de reservar con el paquete. Si tiene uno vigente con este
+   * docente pero no sirve para este día (vence antes, o ya reservó todas las
+   * que le quedan), se explica en vez de esconderlo.
+   */
+  renderPack() {
+    const { packs, card, rescheduleOf } = this.props
+    if (rescheduleOf) {
+      return rescheduleOf.studentPackId ? (
+        <p className="booking-dialog-pack-note">Se reprograma con tu paquete: no se paga aparte.</p>
+      ) : null
+    }
+
+    const usable = this.getUsablePack()
+    if (usable) {
+      return (
+        <label className="booking-dialog-pack">
+          <input
+            type="checkbox"
+            checked={this.state.usePack}
+            onChange={this.handleUsePack}
+            disabled={this.state.saving}
+          />
+          <span>
+            Usar una clase de mi paquete
+            <span className="booking-dialog-pack-detail">
+              Te {usable.available === 1 ? 'queda' : 'quedan'} {classesLabel(usable.available)} para
+              reservar · vence el {formatPackDate(usable.expiresOn)}
+            </span>
+          </span>
+        </label>
+      )
+    }
+
+    const activos = activePacksWith(packs, card.teacherId)
+    if (activos.length === 0) return null
+    const vencenAntes = activos.every((pack) => card.date > pack.expiresOn)
+    return (
+      <p className="booking-dialog-pack-note">
+        {vencenAntes
+          ? 'Tu paquete con este docente vence antes de este día: esta clase se paga aparte.'
+          : 'Ya reservaste todas las clases de tu paquete con este docente: esta se paga aparte.'}
+      </p>
     )
   }
 
@@ -413,6 +491,7 @@ class BookingDialog extends Component {
           {this.renderStarts()}
           {this.renderDuration()}
 
+          {this.renderPack()}
           {this.renderSummary()}
 
           {error ? <Banner type="danger">{error}</Banner> : null}
@@ -435,6 +514,11 @@ class BookingDialog extends Component {
       </Modal>
     )
   }
+}
+
+BookingDialog.defaultProps = {
+  packs: [],
+  rescheduleOf: null,
 }
 
 export default BookingDialog

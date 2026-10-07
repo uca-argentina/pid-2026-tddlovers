@@ -156,6 +156,18 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* El paquete del alumno con este docente: es lo primero que le importa si ya
+   pagó clases por adelantado. */
+.booking-card-pack {
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+}
+
 .booking-card-groups {
   margin-top: 8px;
   font-size: 12.5px;

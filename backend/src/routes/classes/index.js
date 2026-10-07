@@ -9,6 +9,8 @@ import {
 } from '../../db/classes.js';
 import { findWindowById } from '../../db/availability.js';
 import { findRate } from '../../db/rates.js';
+import { listStudentPacks } from '../../db/packs.js';
+import { StudentPack } from '../../lib/classPacks.js';
 import { occursOn, toMinutes, toTime } from '../../lib/availabilityExpansion.js';
 import { classPriceCents, isValidClassMinutes, MIN_CLASS_MINUTES } from '../../lib/teacherRates.js';
 import { CLASS_STATUSES, cancelReasonFor, checkAction } from '../../lib/classStates.js';
@@ -35,11 +37,17 @@ const fail = (status, message, fields) => ({ error: { status, body: fields ? { m
  * body), la ventana tiene que ser del mismo docente, y la clase vieja no
  * cuenta como choque (se cancela en la misma transacción).
  *
+ * `usePack: true` en el body reserva con un paquete del alumno con ese
+ * docente: la clase no se paga aparte y su asistencia descuenta una clase del
+ * paquete. Al reprogramar no se elige: la nueva usa paquete si la vieja lo
+ * usaba.
+ *
  * Devuelve { booking } listo para bookClass/rescheduleClass, o { error }.
  */
 async function validateBooking(body, user, fixed = null) {
   const { windowId, date, startTime, durationMinutes } = body ?? {};
   const subjectId = fixed ? fixed.subjectId : body?.subjectId;
+  const usePack = fixed ? Boolean(fixed.studentPackId) : body?.usePack === true;
 
   if (!ISO_DATE_RE.test(date ?? '')) return fail(400, 'Fecha inválida', { date: 'invalid' });
   if (!TIME_RE.test(startTime ?? '')) {
@@ -105,6 +113,21 @@ async function validateBooking(body, user, fixed = null) {
   });
   if (clashesWithMine) return fail(409, 'Ya tenés una clase reservada en ese horario.');
 
+  let studentPackId = null;
+  if (usePack) {
+    const rows = await listStudentPacks({
+      studentId: user.id,
+      teacherId: window.teacherId,
+      excludeClassId: fixed ? fixed.id : null,
+    });
+    const chosen = StudentPack.choose(
+      rows.map((row) => new StudentPack(row)),
+      { date, today: iso }
+    );
+    if (chosen.error) return fail(chosen.error.status, chosen.error.message);
+    studentPackId = chosen.pack.id;
+  }
+
   return {
     booking: {
       window,
@@ -113,7 +136,10 @@ async function validateBooking(body, user, fixed = null) {
       startTime,
       endTime,
       subjectId,
-      priceCents: classPriceCents(hourlyRateCents, durationMinutes),
+      // Con paquete la clase ya está paga (el paquete se pagó al comprarlo):
+      // no tiene precio propio.
+      priceCents: studentPackId ? 0 : classPriceCents(hourlyRateCents, durationMinutes),
+      studentPackId,
     },
   };
 }
@@ -196,7 +222,11 @@ export default async function classesRoutes(app) {
     );
   }
 
-  action('accept', () => ({ to: 'aceptada' }));
+  // Una clase con paquete ya está paga: aceptarla la confirma directo, sin
+  // pasar por "aceptada, falta pagar".
+  action('accept', ({ cls }) =>
+    cls.studentPackId ? { to: 'confirmada', paid: true } : { to: 'aceptada' }
+  );
 
   action('cancel', ({ cls, role }) => ({
     to: 'cancelada',

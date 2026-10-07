@@ -2,7 +2,7 @@ import { Component } from 'react'
 import { NavLink } from 'react-router-dom'
 import SearchBar from './SearchBar.jsx'
 import ThemeToggle from './ThemeToggle.jsx'
-import { CalendarIcon, ClockIcon, ListCheckIcon, UserIcon, UsersIcon } from './icons.jsx'
+import { BookIcon, CalendarIcon, ClockIcon, ListCheckIcon, UserIcon, UsersIcon } from './icons.jsx'
 import { getInitials } from '../utils/user.js'
 import './NavBar.css'
 
@@ -88,6 +88,10 @@ class NavBar extends Component {
             <NavLink to="/reservas" className={this.getLinkClass} aria-label="Mis reservas">
               <ListCheckIcon />
               <span className="navbar-item-label">Reservas</span>
+            </NavLink>
+            <NavLink to="/paquetes" className={this.getLinkClass} aria-label="Paquetes de clases">
+              <BookIcon />
+              <span className="navbar-item-label">Paquetes</span>
             </NavLink>
           </nav>
         )}

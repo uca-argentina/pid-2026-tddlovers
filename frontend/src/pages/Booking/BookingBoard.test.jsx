@@ -17,6 +17,10 @@ const { bookLesson, fetchAvailability, fetchClass, fetchMyLessons, fetchSubjects
     rescheduleLesson: vi.fn(),
   }))
 
+// Los paquetes del alumno: el tablero los pide para ofrecer reservar con
+// ellos. Acá nadie tiene paquete.
+const fetchMyPacks = vi.hoisted(() => vi.fn(() => Promise.resolve([])))
+
 // La fábrica reemplaza el módulo ENTERO: lo que no esté acá llega como
 // undefined. bookLesson lo usa BookingDialog, no el tablero.
 vi.mock('../../api/client.js', () => ({
@@ -24,6 +28,7 @@ vi.mock('../../api/client.js', () => ({
   fetchAvailability,
   fetchClass,
   fetchMyLessons,
+  fetchMyPacks,
   fetchSubjects,
   rescheduleLesson,
 }))
@@ -407,6 +412,8 @@ describe('BookingBoard', () => {
       startTime: '14:00',
       subjectId: 1,
       durationMinutes: 50,
+      // Sin paquete con ese docente, se paga aparte.
+      usePack: false,
     })
     // Se vuelve a pedir todo: ese horario puede pasar a chocar con las
     // tarjetas de otros docentes.
@@ -495,6 +502,7 @@ describe('BookingBoard', () => {
         startTime: '09:00',
         subjectId: 2,
         durationMinutes: 45,
+        usePack: false,
       }),
     )
   })

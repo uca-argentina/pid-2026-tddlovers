@@ -112,7 +112,7 @@ class ReservationsPage extends Component {
         <p className="reservation-meta">
           {otro}
           {` · ${modalityLabel(item.modality)}`}
-          {` · ${formatMoney(item.priceCents)}`}
+          {item.studentPackId ? ' · Con paquete' : ` · ${formatMoney(item.priceCents)}`}
         </p>
         <ClassActions cls={item} viewRole={viewRole} onChange={this.handleChange} />
       </li>

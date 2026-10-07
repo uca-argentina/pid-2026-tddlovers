@@ -26,6 +26,7 @@ const CLASS_COLUMNS = `
   c.cancelled_by AS "cancelledBy",
   c.cancel_reason AS "cancelReason",
   c.rescheduled_from AS "rescheduledFrom",
+  c.student_pack_id AS "studentPackId",
   (
     -- Cuántos hay anotados en ese turno (una grupal son varias filas con el
     -- mismo docente, fecha e inicio). Un número y no nombres: el alumno ve
@@ -175,8 +176,23 @@ function overlapConflict(err) {
  */
 async function insertClass(
   client,
-  { window, studentId, date, startTime, endTime, subjectId, priceCents, rescheduledFrom = null }
+  {
+    window,
+    studentId,
+    date,
+    startTime,
+    endTime,
+    subjectId,
+    priceCents,
+    rescheduledFrom = null,
+    studentPackId = null,
+  }
 ) {
+  if (studentPackId) {
+    const packConflict = await reservePackSlot(client, studentPackId, date);
+    if (packConflict) return { conflict: packConflict };
+  }
+
   await client.query(`SELECT pg_advisory_xact_lock(hashtext('classes:' || $1 || $2))`, [
     window.teacherId,
     date,
@@ -208,9 +224,10 @@ async function insertClass(
     `INSERT INTO classes (
        teacher_id, student_id, subject_id, class_date, start_time, end_time,
        availability_id, modality, max_students, meeting_url, address, locality, price_cents,
-       rescheduled_from
+       rescheduled_from, student_pack_id
      )
-     VALUES ($1, $2, $3, $4::date, $5::time, $6::time, $7, $8::class_modality, $9, $10, $11, $12, $13, $14)
+     VALUES ($1, $2, $3, $4::date, $5::time, $6::time, $7, $8::class_modality, $9, $10, $11, $12, $13, $14,
+             $15)
      RETURNING id`,
     [
       window.teacherId,
@@ -227,9 +244,36 @@ async function insertClass(
       window.locality,
       priceCents,
       rescheduledFrom,
+      studentPackId,
     ]
   );
   return { id: result.rows[0].id };
+}
+
+/**
+ * La ruta ya eligió el paquete y chequeó que le queden clases, pero entre ese
+ * chequeo y el INSERT el alumno puede estar reservando otra clase con el
+ * mismo paquete en otra pestaña (otro día, así que el lock por docente y
+ * fecha no los frena). Acá se vuelve a contar con el paquete bloqueado.
+ * null si hay lugar, o el mensaje.
+ */
+async function reservePackSlot(client, studentPackId, date) {
+  await client.query(`SELECT pg_advisory_xact_lock(hashtext('pack:' || $1))`, [studentPackId]);
+  const result = await client.query(
+    `SELECT sp.class_count > (
+              SELECT count(*) FROM classes c
+              WHERE c.student_pack_id = sp.id
+                AND c.status IN ('pendiente', 'aceptada', 'confirmada', 'realizada')
+            ) AS "hasRoom",
+            sp.expires_on >= $2::date AS "inTime"
+     FROM student_packs sp
+     WHERE sp.id = $1`,
+    [studentPackId, date]
+  );
+  const row = result.rows[0];
+  if (!row || !row.inTime) return 'Tu paquete ya no sirve para esa fecha.';
+  if (!row.hasRoom) return 'Ya no te quedan clases disponibles en el paquete.';
+  return null;
 }
 
 /**

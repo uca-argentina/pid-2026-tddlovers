@@ -2,6 +2,7 @@ import { Component } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import AppLayout from './routes/AppLayout.jsx'
 import AdminPage from './pages/Admin/AdminPage.jsx'
+import PacksPage from './pages/Packs/PacksPage.jsx'
 import AvailabilityPage from './pages/Availability/AvailabilityPage.jsx'
 import CalendarPage from './pages/Calendar/CalendarPage.jsx'
 import LoginPage from './pages/Login/LoginPage.jsx'
@@ -137,6 +138,7 @@ class App extends Component {
               }
             />
             <Route path="/reservas" element={<ReservationsPage viewRole={viewRole} />} />
+            <Route path="/paquetes" element={<PacksPage viewRole={viewRole} user={user} />} />
             <Route
               path="/disponibilidad"
               element={<AvailabilityPage viewRole={viewRole} user={user} />}

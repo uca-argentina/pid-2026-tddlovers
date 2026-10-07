@@ -213,11 +213,14 @@ export function rescheduleLesson(id, { windowId, date, startTime, durationMinute
  * backend con la tarifa del docente. Si a esa hora ya hay una grupal de la
  * misma materia y duración, es sumarse a ella. Devuelve la clase guardada,
  * sin envolver.
+ *
+ * `usePack: true` la reserva con un paquete del alumno con ese docente: no se
+ * paga aparte y, cuando el docente marca la asistencia, descuenta una clase.
  */
-export function bookLesson({ windowId, date, startTime, subjectId, durationMinutes }) {
+export function bookLesson({ windowId, date, startTime, subjectId, durationMinutes, usePack }) {
   return request('/api/classes', {
     method: 'POST',
-    body: JSON.stringify({ windowId, date, startTime, subjectId, durationMinutes }),
+    body: JSON.stringify({ windowId, date, startTime, subjectId, durationMinutes, usePack }),
   })
 }
 
@@ -258,4 +261,43 @@ export function approveTeacher(id) {
 
 export function rejectTeacher(id) {
   return request(`/api/admin/teachers/${id}/reject`, { method: 'POST' })
+}
+
+// --- Paquetes de clases ---------------------------------------------------------
+
+/** Los paquetes que ofrece el docente logueado. */
+export function fetchMyPackOffers() {
+  return request('/api/teachers/me/packs')
+}
+
+/** { classCount, priceCents, validityDays }. Devuelve el paquete creado. */
+export function createPackOffer(offer) {
+  return request('/api/teachers/me/packs', {
+    method: 'POST',
+    body: JSON.stringify(offer),
+  })
+}
+
+/** Dejar de ofrecerlo: quien ya lo compró lo sigue usando. */
+export function deletePackOffer(id) {
+  return request(`/api/teachers/me/packs/${id}`, { method: 'DELETE' })
+}
+
+/** Los paquetes que se pueden comprar, opcionalmente de un docente. */
+export function fetchPackOffers(teacherId) {
+  return request(`/api/packs${teacherId ? `?teacherId=${teacherId}` : ''}`)
+}
+
+/**
+ * Los paquetes que compró el alumno logueado, cada uno con `remaining` (las
+ * clases que le quedan: cada asistencia descuenta una), `available` (las que
+ * todavía puede reservar) y `expired`.
+ */
+export function fetchMyPacks() {
+  return request('/api/packs/mine')
+}
+
+/** Nada se cobra de verdad: queda registrado. Devuelve el paquete comprado. */
+export function buyPack(id) {
+  return request(`/api/packs/${id}/buy`, { method: 'POST' })
 }

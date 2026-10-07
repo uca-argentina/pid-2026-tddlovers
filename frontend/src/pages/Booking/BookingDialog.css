@@ -200,6 +200,42 @@
   font-variant-numeric: tabular-nums;
 }
 
+.booking-dialog-pack {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 35%, transparent);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.booking-dialog-pack input {
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  accent-color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.booking-dialog-pack-detail {
+  display: block;
+  margin-top: 2px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.booking-dialog-pack-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
 .booking-dialog-price {
   font-size: 17px;
   color: var(--color-text);

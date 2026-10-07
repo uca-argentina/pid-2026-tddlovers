@@ -5,6 +5,8 @@ import {
   updateWindow,
 } from '../../db/availability.js';
 import { teacherHasRateFor } from '../../db/rates.js';
+import { createOffer, deactivateOffer, listTeacherOffers } from '../../db/packs.js';
+import { validatePackOffer } from '../../lib/classPacks.js';
 import { listTeachers } from '../../db/users.js';
 import { validateWindow } from '../../lib/availabilityWindow.js';
 import { todayIso } from '../../lib/clock.js';
@@ -105,6 +107,32 @@ export default async function teachersRoutes(app) {
     const { id } = request.params;
     const deleted = UUID_RE.test(id) && (await deleteWindow(request.user.id, id));
     if (!deleted) return reply.code(404).send({ message: 'Esa clase no existe.' });
+    return reply.code(204).send();
+  });
+
+  /**
+   * Los paquetes que ofrece el docente logueado. Un docente sin aprobar
+   * también los puede armar (igual que su disponibilidad): no los ve nadie
+   * hasta que lo aprueban.
+   */
+  app.get('/me/packs', read, async (request, reply) => {
+    return reply.send(await listTeacherOffers(request.user.id));
+  });
+
+  app.post('/me/packs', write, async (request, reply) => {
+    const checked = validatePackOffer(request.body);
+    if (!checked.value) return reply.code(400).send(checked);
+    return reply.code(201).send(await createOffer(request.user.id, checked.value));
+  });
+
+  /**
+   * Deja de ofrecerlo. No borra nada: los alumnos que ya lo compraron lo
+   * siguen usando hasta que se les termine o se les venza.
+   */
+  app.delete('/me/packs/:id', write, async (request, reply) => {
+    const { id } = request.params;
+    const done = UUID_RE.test(id) && (await deactivateOffer(request.user.id, id));
+    if (!done) return reply.code(404).send({ message: 'Ese paquete no existe.' });
     return reply.code(204).send();
   });
 }

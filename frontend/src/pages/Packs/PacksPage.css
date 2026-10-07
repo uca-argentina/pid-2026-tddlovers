@@ -1,0 +1,233 @@
+/* Lista angosta, como el perfil y las reservas: .app-main es ancho por el
+   calendario. */
+.packs-page {
+  width: 100%;
+  max-width: 720px;
+  margin-inline: auto;
+}
+
+.packs-page > .banner {
+  margin-bottom: 16px;
+}
+
+.packs-title {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.packs-subtitle {
+  margin: 4px 0 20px;
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+.packs-empty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--color-text-muted);
+  padding: 8px 0 4px;
+  margin: 0;
+}
+
+.packs-empty p {
+  margin: 0;
+}
+
+.packs-empty svg {
+  width: 16px;
+  height: 16px;
+}
+
+.packs-section + .packs-section {
+  margin-top: 28px;
+}
+
+.packs-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  margin: 0 0 10px;
+}
+
+.packs-hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.packs-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pack-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  background: var(--color-surface-solid);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-panel);
+}
+
+.pack-card.is-expired {
+  opacity: 0.7;
+}
+
+.pack-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.pack-card-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.pack-card-price {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.pack-card-badge {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: 999px;
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  white-space: nowrap;
+}
+
+.pack-card-badge.is-muted {
+  color: var(--color-text-muted);
+  background: color-mix(in srgb, var(--color-text-muted) 12%, transparent);
+}
+
+.pack-card-meta {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.pack-card-remaining {
+  margin: 2px 0 0;
+  font-size: 14px;
+  color: var(--color-text);
+}
+
+/* La barra muestra lo usado: se llena a medida que el alumno asiste. */
+.pack-meter {
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-text-muted) 16%, transparent);
+  overflow: hidden;
+  margin: 4px 0 2px;
+}
+
+.pack-meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-primary);
+}
+
+.pack-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+/* Mismos botones chicos que las acciones de una reserva (ClassActions.css). */
+.pack-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.pack-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.pack-action svg {
+  width: 14px;
+  height: 14px;
+}
+
+.pack-action.is-primary {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.pack-action.is-primary:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+.pack-action.is-danger {
+  background: transparent;
+  color: var(--color-danger);
+  border-color: color-mix(in srgb, var(--color-danger) 35%, transparent);
+}
+
+.pack-action.is-danger:hover:not(:disabled) {
+  background: var(--color-danger-bg);
+}
+
+.pack-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: var(--color-surface-solid);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-panel);
+}
+
+/* Tres campos en fila en la compu; uno abajo del otro en el teléfono. */
+.pack-form-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0 12px;
+}
+
+.pack-form .btn {
+  align-self: flex-start;
+}
+
+.packs-confirm-text {
+  margin: 0 0 16px;
+  font-size: 14px;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}

@@ -17,6 +17,12 @@ vi.mock('../../db/users.js', () => ({
   listTeachers: vi.fn(),
 }));
 
+vi.mock('../../db/packs.js', () => ({
+  createOffer: vi.fn(),
+  deactivateOffer: vi.fn(),
+  listTeacherOffers: vi.fn(),
+}));
+
 vi.mock('../../db/sessions.js', () => ({
   createSession: vi.fn(),
   findValidSession: vi.fn(),
@@ -29,6 +35,7 @@ const { createWindow, deleteWindow, findTeacherWindows, updateWindow } = await i
 );
 const { teacherHasRateFor } = await import('../../db/rates.js');
 const { listTeachers } = await import('../../db/users.js');
+const { createOffer, deactivateOffer, listTeacherOffers } = await import('../../db/packs.js');
 const { findValidSession } = await import('../../db/sessions.js');
 const { buildApp } = await import('../../app.js');
 
@@ -295,5 +302,107 @@ describe('teacher list', () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual(docentes);
+  });
+});
+
+describe('teacher packs', () => {
+  let app;
+  const PAQUETE_ID = '7c6b5a49-3827-4615-8a9b-0c1d2e3f4a5b';
+  const paquete = { classCount: 4, priceCents: 1800000, validityDays: 30 };
+
+  beforeEach(() => {
+    app = buildApp({ logger: false });
+    createOffer.mockImplementation(async (teacherId, value) => ({
+      id: PAQUETE_ID,
+      teacherId,
+      ...value,
+      createdAt: '2099-09-01T12:00:00.000Z',
+    }));
+    deactivateOffer.mockResolvedValue(true);
+  });
+
+  afterEach(async () => {
+    vi.clearAllMocks();
+    await app.close();
+  });
+
+  it('GET lists the packs of the logged-in teacher', async () => {
+    listTeacherOffers.mockResolvedValueOnce([]);
+    const headers = await authedHeaders(app);
+
+    const res = await app.inject({ method: 'GET', url: '/api/teachers/me/packs', headers });
+
+    expect(res.statusCode).toBe(200);
+    expect(listTeacherOffers).toHaveBeenCalledWith('user-1');
+  });
+
+  it('POST creates a pack with quantity, total price and validity', async () => {
+    const headers = await authedHeaders(app);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/teachers/me/packs',
+      headers,
+      payload: paquete,
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(createOffer).toHaveBeenCalledWith('user-1', paquete);
+    expect(res.json().id).toBe(PAQUETE_ID);
+  });
+
+  it('POST validates the pack', async () => {
+    const headers = await authedHeaders(app);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/teachers/me/packs',
+      headers,
+      payload: { ...paquete, classCount: 1 },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().fields).toEqual({ classCount: 'invalid' });
+    expect(createOffer).not.toHaveBeenCalled();
+  });
+
+  it('DELETE stops offering it', async () => {
+    const headers = await authedHeaders(app);
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/teachers/me/packs/${PAQUETE_ID}`,
+      headers,
+    });
+
+    expect(res.statusCode).toBe(204);
+    expect(deactivateOffer).toHaveBeenCalledWith('user-1', PAQUETE_ID);
+  });
+
+  it('DELETE of a pack that is not theirs is a 404', async () => {
+    deactivateOffer.mockResolvedValueOnce(false);
+    const headers = await authedHeaders(app);
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/teachers/me/packs/${PAQUETE_ID}`,
+      headers,
+    });
+
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('students do not have packs to offer', async () => {
+    const headers = await authedHeaders(app, 'student');
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/teachers/me/packs',
+      headers,
+      payload: paquete,
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(createOffer).not.toHaveBeenCalled();
   });
 });
