@@ -1,7 +1,8 @@
 -- Una sola cuenta de administrador, fija, y ninguna otra.
 --
 --   email:      admin@admin.com
---   contraseña: ElAdmin123
+--   contraseña: ElAdmin123.   (con el punto final: cumple las mismas reglas
+--                              que el registro, ver lib/password.js)
 --
 -- Decisión del equipo: el admin decide qué docentes aparecen en la app, así
 -- que no se puede crear desde el registro (solo acepta teacher/student) ni de
@@ -29,12 +30,15 @@ END $$;
 INSERT INTO users (email, password_hash, role, nombre, apellido)
 VALUES (
   'admin@admin.com',
-  '$argon2id$v=19$m=65536,p=4,t=3$0UZSbdXSH7xf5yPL6ZWSWw$TfT/0NSjvcR5rFd8Nm/xD2cpVuQOdJpMD1zpiZVika0',
+  '$argon2id$v=19$m=65536,p=4,t=3$rikgRcA7Wgy1jXJVTP+XLQ$Jtfz3L/x1eCEF/Jxk1DwHJONTNggJ9vjvjvumMd0gWY',
   'admin',
   'Admin',
   'BookIt'
 )
-ON CONFLICT (email) DO NOTHING;
+-- DO UPDATE y no DO NOTHING: si la contraseña fija cambia, volver a correr
+-- esta migración la actualiza. El DO de arriba ya garantiza que, si el mail
+-- existe, es del admin.
+ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash;
 
 -- El rol admin solo puede tenerlo admin@admin.com...
 ALTER TABLE users DROP CONSTRAINT IF EXISTS users_admin_is_fixed;
