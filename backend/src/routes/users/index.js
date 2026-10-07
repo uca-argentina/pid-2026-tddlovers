@@ -2,6 +2,7 @@ import { findSubjectIdsByTeacher, updateUserProfile } from '../../db/users.js';
 import { countExistingSubjectIds } from '../../db/subjects.js';
 import { toPublicUser } from '../../lib/publicUser.js';
 import { validateRates } from '../../lib/teacherRates.js';
+import { TeacherApproval } from '../../lib/teacherApproval.js';
 
 // Mismo criterio que el registro: el teléfono es opcional, así que se acepta
 // vacío, pero si viene tiene que parecer un teléfono. La UI valida igual.
@@ -65,10 +66,18 @@ export default async function usersRoutes(app) {
       cleanRates = checked.value;
     }
 
+    // Un docente pendiente o rechazado puede editar su perfil igual; si
+    // estaba rechazado, guardar lo vuelve a mandar a revisión.
+    const approvalStatus =
+      request.user.role === 'teacher'
+        ? new TeacherApproval(request.user.approvalStatus).afterProfileEdit().status
+        : undefined;
+
     const user = await updateUserProfile(request.user.id, {
       telefono: cleanPhone || null,
       subjectIds: cleanSubjectIds,
       rates: cleanRates,
+      approvalStatus,
     });
 
     if (!user) {

@@ -77,6 +77,7 @@ const ventana = (over = {}) => ({
   locality: null,
   address: null,
   teacherName: 'Laura Gómez',
+  teacherApprovalStatus: 'approved',
   ...over,
 });
 
@@ -278,6 +279,27 @@ describe('POST /api/classes', () => {
 
   it('a deleted window is no longer offered', async () => {
     findWindowById.mockResolvedValueOnce(null);
+    const headers = await authedHeaders(app);
+
+    const res = await app.inject({ method: 'POST', url: '/api/classes', headers, payload: reserva() });
+
+    expect(res.statusCode).toBe(409);
+    expect(bookClass).not.toHaveBeenCalled();
+  });
+
+  it('a teacher pending approval cannot receive bookings', async () => {
+    findWindowById.mockResolvedValueOnce(ventana({ teacherApprovalStatus: 'pending' }));
+    const headers = await authedHeaders(app);
+
+    const res = await app.inject({ method: 'POST', url: '/api/classes', headers, payload: reserva() });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json().message).toMatch(/no puede recibir reservas/);
+    expect(bookClass).not.toHaveBeenCalled();
+  });
+
+  it('a rejected teacher cannot receive bookings either', async () => {
+    findWindowById.mockResolvedValueOnce(ventana({ teacherApprovalStatus: 'rejected' }));
     const headers = await authedHeaders(app);
 
     const res = await app.inject({ method: 'POST', url: '/api/classes', headers, payload: reserva() });

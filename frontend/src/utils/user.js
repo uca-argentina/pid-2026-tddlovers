@@ -12,3 +12,12 @@ export function getInitials(user) {
   const apellido = user?.apellido
   return `${nombre?.charAt(0) || ''}${apellido?.charAt(0) || ''}`.toUpperCase()
 }
+
+/**
+ * El rol desde el que se mira la app, a partir del usuario: 'teacher',
+ * 'admin' o, si no (alumno o sin sesión), 'student'.
+ */
+export function roleOf(user) {
+  if (user?.role === 'admin' || user?.role === 'teacher') return user.role
+  return 'student'
+}

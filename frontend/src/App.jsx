@@ -1,6 +1,7 @@
 import { Component } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import AppLayout from './routes/AppLayout.jsx'
+import AdminPage from './pages/Admin/AdminPage.jsx'
 import AvailabilityPage from './pages/Availability/AvailabilityPage.jsx'
 import CalendarPage from './pages/Calendar/CalendarPage.jsx'
 import LoginPage from './pages/Login/LoginPage.jsx'
@@ -8,6 +9,7 @@ import ProfilePage from './pages/Profile/ProfilePage.jsx'
 import RegisterPage from './pages/Register/RegisterPage.jsx'
 import ReservationsPage from './pages/Reservations/ReservationsPage.jsx'
 import { fetchCurrentUser, logoutAccount } from './api/client.js'
+import { roleOf } from './utils/user.js'
 
 /**
  * Punto de montaje de la app, con rutas de verdad (react-router-dom). La
@@ -41,7 +43,7 @@ class App extends Component {
   componentDidMount() {
     fetchCurrentUser()
       .then((user) => {
-        this.setState({ user, viewRole: user?.role === 'teacher' ? 'teacher' : 'student' })
+        this.setState({ user, viewRole: roleOf(user) })
       })
       .catch(() => {})
   }
@@ -50,7 +52,7 @@ class App extends Component {
     this.setState({
       user,
       justRegisteredName: null,
-      viewRole: user?.role === 'teacher' ? 'teacher' : 'student',
+      viewRole: roleOf(user),
     })
   }
 
@@ -110,7 +112,19 @@ class App extends Component {
           {/* Ruta sin path: solo aporta el layout (barra superior) a las de
               adentro, y así el NavBar no se remonta al cambiar de pantalla. */}
           <Route element={<AppLayout viewRole={viewRole} user={user} />}>
-            <Route path="/" element={<CalendarPage viewRole={viewRole} />} />
+            {/* El admin no tiene calendario ni reservas: su pantalla de
+                entrada es la revisión de docentes. */}
+            <Route
+              path="/"
+              element={
+                viewRole === 'admin' ? (
+                  <Navigate to="/admin" replace />
+                ) : (
+                  <CalendarPage viewRole={viewRole} />
+                )
+              }
+            />
+            <Route path="/admin" element={<AdminPage user={user} />} />
             <Route
               path="/perfil"
               element={

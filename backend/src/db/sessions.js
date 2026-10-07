@@ -13,11 +13,13 @@ export async function createSession(userId) {
   return result.rows[0];
 }
 
-// Hace join con users para que quien llame tenga el rol y el email del dueño
-// de la sesión en una sola consulta.
+// Hace join con users para que quien llame tenga el rol, el email y (si es
+// docente) el estado de aprobación del dueño de la sesión en una sola
+// consulta.
 export async function findValidSession(sessionId) {
   const result = await getPool().query(
-    `SELECT s.id AS session_id, s.expires_at, u.id AS user_id, u.email, u.role
+    `SELECT s.id AS session_id, s.expires_at, u.id AS user_id, u.email, u.role,
+            u.approval_status
      FROM sessions s
      JOIN users u ON u.id = s.user_id
      WHERE s.id = $1 AND s.expires_at > now()`,

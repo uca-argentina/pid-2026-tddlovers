@@ -13,6 +13,7 @@ import { occursOn, toMinutes, toTime } from '../../lib/availabilityExpansion.js'
 import { classPriceCents, isValidClassMinutes, MIN_CLASS_MINUTES } from '../../lib/teacherRates.js';
 import { CLASS_STATUSES, cancelReasonFor, checkAction } from '../../lib/classStates.js';
 import { now } from '../../lib/clock.js';
+import { TeacherApproval } from '../../lib/teacherApproval.js';
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^(?:[01]\d|2[0-3]):(?:00|30)$/;
@@ -61,6 +62,10 @@ async function validateBooking(body, user, fixed = null) {
   // Borrada o de otro día: para el alumno es lo mismo, ya no se ofrece.
   if (!window || !occursOn(window, date)) return fail(409, NO_LONGER_OFFERED);
   if (window.teacherId === user.id) return fail(400, 'No podés reservarte una clase a vos mismo.');
+  // El tablero ya no ofrece ventanas de docentes sin aprobar, pero el id de
+  // una ventana se puede mandar igual: el que decide es esto.
+  const notBookable = new TeacherApproval(window.teacherApprovalStatus).bookingProblem();
+  if (notBookable) return fail(notBookable.status, notBookable.message);
   if (fixed && String(window.teacherId) !== String(fixed.teacherId)) {
     return fail(409, 'Para reprogramar elegí un horario del mismo docente.');
   }

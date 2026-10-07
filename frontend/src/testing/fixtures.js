@@ -38,7 +38,8 @@ export function apiClass(overrides = {}) {
 
 // Un usuario tal como lo devuelven login, register, /me y el PATCH del perfil
 // (toPublicUser en backend/src/lib/publicUser.js). `subjectIds` y `rates`
-// vienen siempre, vacíos para un alumno. Por defecto, un docente sin materias.
+// vienen siempre, vacíos para un alumno; `approvalStatus` solo en docentes
+// (null en el resto). Por defecto, un docente aprobado sin materias.
 export function apiUser(overrides = {}) {
   return {
     id: 1,
@@ -47,6 +48,7 @@ export function apiUser(overrides = {}) {
     nombre: 'Agustín',
     apellido: 'Klos',
     telefono: null,
+    approvalStatus: 'approved',
     subjectIds: [],
     rates: [],
     ...overrides,

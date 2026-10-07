@@ -5,6 +5,7 @@ import FormField from '../../components/FormField.jsx'
 import { PlusIcon, SpinnerIcon } from '../../components/icons.jsx'
 import { isValidPhone } from '../../utils/validation.js'
 import { getInitials } from '../../utils/user.js'
+import { approvalNotice } from '../../utils/approval.js'
 import { centsToInput, MAX_HOURLY_RATE_CENTS, parseMoney } from '../../utils/rates.js'
 import { MODALITIES } from '../../utils/windows.js'
 import { fetchSubjects, updateProfile } from '../../api/client.js'
@@ -431,6 +432,10 @@ class ProfilePage extends Component {
     }
 
     const esDocente = this.esDocente()
+    const rolLabel = { teacher: 'Docente', student: 'Alumno', admin: 'Administrador' }
+    // Mientras no lo aprueban, el docente puede editar todo igual: el aviso
+    // solo le explica por qué todavía no recibe reservas.
+    const aviso = approvalNotice(user)
 
     return (
       <div className="profile-page">
@@ -443,18 +448,21 @@ class ProfilePage extends Component {
               <h1 className="profile-name">
                 {user.nombre} {user.apellido}
               </h1>
-              <span className="profile-role">{esDocente ? 'Docente' : 'Alumno'}</span>
+              <span className="profile-role">
+                {rolLabel[this.props.viewRole] || rolLabel.student}
+              </span>
               {/* El interruptor de rol es de prueba: si no coincide con la
                   cuenta, avisamos para que no parezca un error de datos. */}
               {this.rolDesalineado() ? (
                 <p className="profile-role-hint">
                   Estás mirando el perfil como {esDocente ? 'docente' : 'alumno'}, pero tu cuenta
-                  es de {user.role === 'teacher' ? 'docente' : 'alumno'}.
+                  es de {(rolLabel[user.role] || rolLabel.student).toLowerCase()}.
                 </p>
               ) : null}
             </div>
           </div>
 
+          {aviso ? <Banner type="warning">{aviso}</Banner> : null}
           {saveError ? <Banner type="danger">{saveError}</Banner> : null}
           {saved ? <Banner type="success">Listo, guardamos tus cambios.</Banner> : null}
 

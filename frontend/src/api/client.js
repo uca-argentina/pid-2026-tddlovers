@@ -239,3 +239,23 @@ export function updateProfile(payload) {
     }),
   })
 }
+
+// --- Administración -----------------------------------------------------------
+
+/**
+ * Los docentes para revisar, opcionalmente de un solo estado ('pending' |
+ * 'approved' | 'rejected'). Solo para admins: a cualquier otro el backend le
+ * contesta 403.
+ */
+export function fetchTeachersForReview(status) {
+  return request(`/api/admin/teachers${status ? `?status=${status}` : ''}`)
+}
+
+/** Devuelve el docente ya actualizado. */
+export function approveTeacher(id) {
+  return request(`/api/admin/teachers/${id}/approve`, { method: 'POST' })
+}
+
+export function rejectTeacher(id) {
+  return request(`/api/admin/teachers/${id}/reject`, { method: 'POST' })
+}

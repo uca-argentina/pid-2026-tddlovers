@@ -66,7 +66,9 @@ export async function findTeacherWindows({ teacherId, from, to }) {
  * Lo que se ofrece a los alumnos en el rango, cada ventana con `subjects`: las
  * materias que se pueden reservar en ella y su tarifa por hora. Si el docente
  * se quedó sin tarifas en la modalidad de una ventana, la ventana queda
- * guardada pero no se ofrece (la pantalla del docente se lo avisa).
+ * guardada pero no se ofrece (la pantalla del docente se lo avisa). Lo mismo
+ * con las de un docente que no está aprobado: puede cargarlas mientras espera,
+ * pero no se ofrecen hasta que un admin lo apruebe.
  */
 export async function findPublishedWindows({ from, to }) {
   const result = await getPool().query(
@@ -76,6 +78,7 @@ export async function findPublishedWindows({ from, to }) {
      FROM availability av
      JOIN users u ON u.id = av.teacher_id
      WHERE ${OCCURS_IN_RANGE('$1', '$2')}
+       AND u.approval_status = 'approved'
        AND EXISTS (
          SELECT 1 FROM teacher_rates r
          WHERE r.teacher_id = av.teacher_id AND r.modality = av.modality
@@ -89,11 +92,15 @@ export async function findPublishedWindows({ from, to }) {
 /**
  * Una ventana con el nombre del docente, o null. Para reservar: la tarifa de
  * la materia elegida se busca aparte (findRate), no hace falta la lista.
+ *
+ * Trae el estado de aprobación del docente: quien tenga el id de una ventana
+ * de un docente no aprobado no tiene que poder reservarla igual.
  */
 export async function findWindowById(id) {
   const result = await getPool().query(
     `SELECT ${WINDOW_COLUMNS},
-            u.nombre || ' ' || u.apellido AS "teacherName"
+            u.nombre || ' ' || u.apellido AS "teacherName",
+            u.approval_status AS "teacherApprovalStatus"
      FROM availability av
      JOIN users u ON u.id = av.teacher_id
      WHERE av.id = $1`,

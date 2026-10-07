@@ -11,6 +11,10 @@ import { findRatesByTeacher } from '../db/rates.js';
  * mismo `rates`: la tarifa por hora de cada materia en cada modalidad
  * ([{ subjectId, modality, hourlyRateCents }]), que usan el perfil y la
  * pantalla de disponibilidad.
+ *
+ * `approvalStatus` ('pending' | 'approved' | 'rejected') va solo en los
+ * docentes, null en el resto: el perfil le avisa al docente si todavía no lo
+ * aprobaron y por eso no recibe reservas.
  */
 export async function toPublicUser(user) {
   const esDocente = user.role === 'teacher';
@@ -24,6 +28,7 @@ export async function toPublicUser(user) {
     nombre: user.nombre,
     apellido: user.apellido,
     telefono: user.telefono,
+    approvalStatus: esDocente ? user.approval_status : null,
     subjectIds,
     rates,
   };

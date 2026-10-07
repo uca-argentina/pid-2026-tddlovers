@@ -2,7 +2,7 @@ import { Component } from 'react'
 import { NavLink } from 'react-router-dom'
 import SearchBar from './SearchBar.jsx'
 import ThemeToggle from './ThemeToggle.jsx'
-import { CalendarIcon, ClockIcon, ListCheckIcon, UserIcon } from './icons.jsx'
+import { CalendarIcon, ClockIcon, ListCheckIcon, UserIcon, UsersIcon } from './icons.jsx'
 import { getInitials } from '../utils/user.js'
 import './NavBar.css'
 
@@ -31,6 +31,7 @@ class NavBar extends Component {
     // ahí no: el docente carga los horarios que da y el alumno busca uno para
     // reservar. El aria-label sí queda igual para los dos.
     const esDocente = this.props.viewRole === 'teacher'
+    const esAdmin = this.props.viewRole === 'admin'
     const etiquetaDisponibilidad = esDocente ? 'Disponibilidad' : 'Reservar'
     // Sin sesión no hay nombre que mostrar (y el link lleva al cartel de
     // "iniciá sesión"), así que ahí se cae a la etiqueta genérica en vez de
@@ -56,29 +57,40 @@ class NavBar extends Component {
           <ThemeToggle />
         </div>
 
-        {/* Buscar docentes o materias es para reservar: el docente no tiene
-            nada que hacer con eso. */}
-        {esDocente ? null : (
+        {/* Buscar docentes o materias es para reservar: el docente y el admin
+            no tienen nada que hacer con eso. */}
+        {esDocente || esAdmin ? null : (
           <div className="navbar-search">
             <SearchBar />
           </div>
         )}
 
-        <nav className="navbar-nav">
-          {/* `end` para que "/" no quede activo en todas las rutas. */}
-          <NavLink to="/" end className={this.getLinkClass} aria-label="Mi calendario">
-            <CalendarIcon />
-            <span className="navbar-item-label">Calendario</span>
-          </NavLink>
-          <NavLink to="/disponibilidad" className={this.getLinkClass} aria-label="Disponibilidad">
-            <ClockIcon />
-            <span className="navbar-item-label">{etiquetaDisponibilidad}</span>
-          </NavLink>
-          <NavLink to="/reservas" className={this.getLinkClass} aria-label="Mis reservas">
-            <ListCheckIcon />
-            <span className="navbar-item-label">Reservas</span>
-          </NavLink>
-        </nav>
+        {/* El admin no da ni toma clases: su único destino es revisar
+            docentes. */}
+        {esAdmin ? (
+          <nav className="navbar-nav">
+            <NavLink to="/admin" className={this.getLinkClass} aria-label="Revisar docentes">
+              <UsersIcon />
+              <span className="navbar-item-label">Docentes</span>
+            </NavLink>
+          </nav>
+        ) : (
+          <nav className="navbar-nav">
+            {/* `end` para que "/" no quede activo en todas las rutas. */}
+            <NavLink to="/" end className={this.getLinkClass} aria-label="Mi calendario">
+              <CalendarIcon />
+              <span className="navbar-item-label">Calendario</span>
+            </NavLink>
+            <NavLink to="/disponibilidad" className={this.getLinkClass} aria-label="Disponibilidad">
+              <ClockIcon />
+              <span className="navbar-item-label">{etiquetaDisponibilidad}</span>
+            </NavLink>
+            <NavLink to="/reservas" className={this.getLinkClass} aria-label="Mis reservas">
+              <ListCheckIcon />
+              <span className="navbar-item-label">Reservas</span>
+            </NavLink>
+          </nav>
+        )}
 
         <div className="navbar-foot">
           <NavLink to="/perfil" className={this.getLinkClass} aria-label="Mi perfil">

@@ -8,6 +8,7 @@ import usersRoutes from './routes/users/index.js';
 import teachersRoutes from './routes/teachers/index.js';
 import classesRoutes from './routes/classes/index.js';
 import availabilityRoutes from './routes/availability/index.js';
+import adminRoutes from './routes/admin/index.js';
 
 /**
  * Arma la app de Fastify, pero no la levanta. Está separado de `index.js`
@@ -80,6 +81,7 @@ export function buildApp(opts = {}) {
   app.register(teachersRoutes, { prefix: '/api/teachers' });
   app.register(classesRoutes, { prefix: '/api/classes' });
   app.register(availabilityRoutes, { prefix: '/api/availability' });
+  app.register(adminRoutes, { prefix: '/api/admin' });
 
   return app;
 }
