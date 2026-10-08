@@ -16,9 +16,10 @@ import availabilityRoutes from './routes/availability/index.js';
  * ellos por el :4000.
  */
 export function buildApp(opts = {}) {
-  // trustProxy: Caddy termina el TLS y reenvía por HTTP plano, así que sin
-  // esto Fastify ve todos los pedidos como si vinieran de la IP del contenedor
-  // de Caddy — y los límites por IP no servirían para nada en producción.
+  // trustProxy: en producción los pedidos llegan a través de proxies (el
+  // rewrite de Vercel y el balanceador de Render), así que sin esto Fastify
+  // ve la IP del proxy en vez de la del usuario — y los límites por IP serían
+  // un único cupo compartido por todos.
   const app = Fastify({ logger: true, trustProxy: true, ...opts });
 
   // Tope global. 20/minuto era demasiado poco: abrir el calendario ya pide
