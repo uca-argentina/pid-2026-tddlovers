@@ -8,7 +8,7 @@ export default defineConfig({
   server: {
     // Redirige /api/* al backend de Fastify, así el browser solo habla con
     // :5173: no hace falta configurar CORS y la cookie de sesión queda
-    // same-origin en dev, igual que detrás de nginx en producción.
+    // same-origin en dev, igual que con el rewrite de Vercel en producción.
     proxy: {
       // VITE_BACKEND_URL permite que docker-compose apunte esto al servicio
       // `backend` en lugar de 127.0.0.1 cuando corre dentro de la red.
