@@ -190,6 +190,13 @@ class ClassActions extends Component {
           {viewRole === 'teacher' && cls.status === 'aceptada' ? (
             <span className="class-status is-muted">Sin pagar</span>
           ) : null}
+          {/* Lo que cubre el paquete no se paga; la asistencia descuenta las
+              clases del paquete que usó. */}
+          {cls.packTokens > 0 ? (
+            <span className="class-status is-info">
+              {cls.packTokens === 1 ? '1 clase' : `${cls.packTokens} clases`} del paquete
+            </span>
+          ) : null}
         </div>
 
         {motivo ? <p className="class-actions-note">{motivo}</p> : null}

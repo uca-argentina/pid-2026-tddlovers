@@ -9,6 +9,8 @@ import {
 } from '../../db/classes.js';
 import { findWindowById } from '../../db/availability.js';
 import { findRate } from '../../db/rates.js';
+import { listStudentPacks } from '../../db/packs.js';
+import { StudentPack } from '../../lib/classPacks.js';
 import { occursOn, toMinutes, toTime } from '../../lib/availabilityExpansion.js';
 import { classPriceCents, isValidClassMinutes, MIN_CLASS_MINUTES } from '../../lib/teacherRates.js';
 import { CLASS_STATUSES, cancelReasonFor, checkAction } from '../../lib/classStates.js';
@@ -35,11 +37,18 @@ const fail = (status, message, fields) => ({ error: { status, body: fields ? { m
  * body), la ventana tiene que ser del mismo docente, y la clase vieja no
  * cuenta como choque (se cancela en la misma transacción).
  *
+ * `packId` + `packTokens` en el body usan `packTokens` clases de un paquete
+ * del alumno con ese docente (cada una cubre la duración fija del paquete).
+ * Lo cubierto no se paga; lo que se pasa se paga aparte con la tarifa de la
+ * materia. Su asistencia descuenta esas clases del paquete. Al reprogramar
+ * vale lo mismo: la vieja libera las suyas en la misma transacción.
+ *
  * Devuelve { booking } listo para bookClass/rescheduleClass, o { error }.
  */
 async function validateBooking(body, user, fixed = null) {
   const { windowId, date, startTime, durationMinutes } = body ?? {};
   const subjectId = fixed ? fixed.subjectId : body?.subjectId;
+  const { packId = null, packTokens = 0 } = body ?? {};
 
   if (!ISO_DATE_RE.test(date ?? '')) return fail(400, 'Fecha inválida', { date: 'invalid' });
   if (!TIME_RE.test(startTime ?? '')) {
@@ -49,6 +58,12 @@ async function validateBooking(body, user, fixed = null) {
   if (!UUID_RE.test(String(windowId))) return fail(400, 'Clase inválida', { windowId: 'invalid' });
   if (!subjectId) return fail(400, 'Elegí la materia de la clase.', { subjectId: 'required' });
   if (!UUID_RE.test(String(subjectId))) return fail(400, 'Materia inválida', { subjectId: 'invalid' });
+  if (packId !== null && !UUID_RE.test(String(packId))) {
+    return fail(400, 'Paquete inválido', { packId: 'invalid' });
+  }
+  if (packTokens !== 0 && packId === null) {
+    return fail(400, 'Elegí de qué paquete usás las clases.', { packId: 'required' });
+  }
   if (!isValidClassMinutes(durationMinutes)) {
     return fail(400, `La clase dura como mínimo ${MIN_CLASS_MINUTES} minutos, de a 5.`, {
       durationMinutes: 'invalid',
@@ -105,6 +120,26 @@ async function validateBooking(body, user, fixed = null) {
   });
   if (clashesWithMine) return fail(409, 'Ya tenés una clase reservada en ese horario.');
 
+  // Sin paquete se paga la clase entera; con paquete, solo lo que se pasa de
+  // lo que cubren las clases del paquete.
+  let extraMinutes = durationMinutes;
+  if (packId) {
+    const rows = await listStudentPacks({
+      studentId: user.id,
+      teacherId: window.teacherId,
+      excludeClassId: fixed ? fixed.id : null,
+    });
+    // Solo un paquete propio y con este docente: un id ajeno da lo mismo que
+    // uno que no existe.
+    const row = rows.find((item) => String(item.id) === String(packId));
+    if (!row) return fail(409, 'No tenés ese paquete con este docente.');
+    const pack = new StudentPack(row);
+    const tokens = packTokens;
+    const problem = pack.bookingProblem({ date, today: iso, tokens, minutes: durationMinutes });
+    if (problem) return fail(problem.status, problem.message, { packTokens: 'invalid' });
+    extraMinutes = pack.extraMinutes({ tokens, minutes: durationMinutes });
+  }
+
   return {
     booking: {
       window,
@@ -113,7 +148,11 @@ async function validateBooking(body, user, fixed = null) {
       startTime,
       endTime,
       subjectId,
-      priceCents: classPriceCents(hourlyRateCents, durationMinutes),
+      // Lo cubierto por el paquete ya se pagó al comprarlo: el precio de la
+      // clase es solo lo que se pasa (0 si el paquete la cubre entera).
+      priceCents: classPriceCents(hourlyRateCents, extraMinutes),
+      studentPackId: packId || null,
+      packTokens: packId ? packTokens : 0,
     },
   };
 }
@@ -196,7 +235,14 @@ export default async function classesRoutes(app) {
     );
   }
 
-  action('accept', () => ({ to: 'aceptada' }));
+  // Una clase que el paquete cubre entera ya está paga: aceptarla la confirma
+  // directo, sin pasar por "aceptada, falta pagar". Si se pasa del paquete,
+  // ese resto se paga como cualquier clase.
+  action('accept', ({ cls }) =>
+    cls.studentPackId && cls.priceCents === 0
+      ? { to: 'confirmada', paid: true }
+      : { to: 'aceptada' }
+  );
 
   action('cancel', ({ cls, role }) => ({
     to: 'cancelada',

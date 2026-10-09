@@ -17,6 +17,10 @@ const { bookLesson, fetchAvailability, fetchClass, fetchMyLessons, fetchSubjects
     rescheduleLesson: vi.fn(),
   }))
 
+// Los paquetes del alumno: el tablero los pide para ofrecer reservar con
+// ellos. Acá nadie tiene paquete.
+const fetchMyPacks = vi.hoisted(() => vi.fn(() => Promise.resolve([])))
+
 // La fábrica reemplaza el módulo ENTERO: lo que no esté acá llega como
 // undefined. bookLesson lo usa BookingDialog, no el tablero.
 vi.mock('../../api/client.js', () => ({
@@ -24,6 +28,7 @@ vi.mock('../../api/client.js', () => ({
   fetchAvailability,
   fetchClass,
   fetchMyLessons,
+  fetchMyPacks,
   fetchSubjects,
   rescheduleLesson,
 }))

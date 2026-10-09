@@ -3,6 +3,7 @@ import { ClockIcon, PinIcon, UsersIcon, VideoIcon } from '../../components/icons
 import { formatRangeLabel } from '../../utils/availability.js'
 import { formatClashes, formatEnrolled, lowestRate } from '../../utils/booking.js'
 import { formatHourlyRate } from '../../utils/rates.js'
+import { classesLabel, formatPackDate, packClassesLabel } from '../../utils/packs.js'
 import { capacityLabel, modalityLabel, needsAddress } from '../../utils/windows.js'
 
 /**
@@ -57,6 +58,27 @@ class BookingCard extends Component {
     )
   }
 
+  /**
+   * Si el alumno tiene un paquete vigente con este docente: cuántas clases le
+   * quedan (cada asistencia descuenta una) y hasta cuándo.
+   */
+  renderPack() {
+    const { pack } = this.props
+    if (!pack) return null
+    const quedan = pack.remaining === 1 ? 'Te queda' : 'Te quedan'
+    return (
+      <p className="booking-card-pack">
+        {quedan} {packClassesLabel(pack.remaining, pack.classMinutes)} del paquete · vence el{' '}
+        {formatPackDate(pack.expiresOn)}
+        {pack.available < pack.remaining
+          ? ` · ${classesLabel(pack.remaining - pack.available)} ya reservada${
+              pack.remaining - pack.available === 1 ? '' : 's'
+            }`
+          : ''}
+      </p>
+    )
+  }
+
   renderGroups() {
     const { card } = this.props
     const grupos = this.getGroupsWithRoom()
@@ -98,6 +120,7 @@ class BookingCard extends Component {
           {this.renderLocation()}
         </ul>
 
+        {this.renderPack()}
         {this.renderGroups()}
 
         {card.joined.length > 0 ? (

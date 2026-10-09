@@ -113,6 +113,9 @@ class ReservationsPage extends Component {
           {otro}
           {` · ${modalityLabel(item.modality)}`}
           {` · ${formatMoney(item.priceCents)}`}
+          {item.packTokens > 0
+            ? ` · ${item.packTokens === 1 ? '1 clase' : `${item.packTokens} clases`} del paquete`
+            : ''}
         </p>
         <ClassActions cls={item} viewRole={viewRole} onChange={this.handleChange} />
       </li>

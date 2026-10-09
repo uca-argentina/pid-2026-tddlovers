@@ -198,12 +198,13 @@ export function markAttendance(id, attended) {
 
 /**
  * Reprogramar: mismo body que reservar, sin materia (es la de la clase
- * vieja). Devuelve la reserva nueva, que nace pendiente.
+ * vieja). Devuelve la reserva nueva, que nace pendiente. Puede usar clases
+ * de un paquete igual que una reserva (las de la vieja se liberan).
  */
-export function rescheduleLesson(id, { windowId, date, startTime, durationMinutes }) {
+export function rescheduleLesson(id, { windowId, date, startTime, durationMinutes, packId, packTokens }) {
   return request(`/api/classes/${id}/reschedule`, {
     method: 'POST',
-    body: JSON.stringify({ windowId, date, startTime, durationMinutes }),
+    body: JSON.stringify({ windowId, date, startTime, durationMinutes, packId, packTokens }),
   })
 }
 
@@ -213,11 +214,31 @@ export function rescheduleLesson(id, { windowId, date, startTime, durationMinute
  * backend con la tarifa del docente. Si a esa hora ya hay una grupal de la
  * misma materia y duración, es sumarse a ella. Devuelve la clase guardada,
  * sin envolver.
+ *
+ * `packId` + `packTokens` usan esa cantidad de clases de un paquete del
+ * alumno con ese docente: lo que cubren no se paga, lo que se pasa sí. Cuando
+ * el docente marca la asistencia, se descuentan del paquete.
  */
-export function bookLesson({ windowId, date, startTime, subjectId, durationMinutes }) {
+export function bookLesson({
+  windowId,
+  date,
+  startTime,
+  subjectId,
+  durationMinutes,
+  packId,
+  packTokens,
+}) {
   return request('/api/classes', {
     method: 'POST',
-    body: JSON.stringify({ windowId, date, startTime, subjectId, durationMinutes }),
+    body: JSON.stringify({
+      windowId,
+      date,
+      startTime,
+      subjectId,
+      durationMinutes,
+      packId,
+      packTokens,
+    }),
   })
 }
 
@@ -258,4 +279,44 @@ export function approveTeacher(id) {
 
 export function rejectTeacher(id) {
   return request(`/api/admin/teachers/${id}/reject`, { method: 'POST' })
+}
+
+// --- Paquetes de clases ---------------------------------------------------------
+
+/** Los paquetes que ofrece el docente logueado. */
+export function fetchMyPackOffers() {
+  return request('/api/teachers/me/packs')
+}
+
+/** { classCount, classMinutes, priceCents, validityDays }. Devuelve el paquete creado. */
+export function createPackOffer(offer) {
+  return request('/api/teachers/me/packs', {
+    method: 'POST',
+    body: JSON.stringify(offer),
+  })
+}
+
+/** Dejar de ofrecerlo: quien ya lo compró lo sigue usando. */
+export function deletePackOffer(id) {
+  return request(`/api/teachers/me/packs/${id}`, { method: 'DELETE' })
+}
+
+/** Los paquetes que se pueden comprar, opcionalmente de un docente. */
+export function fetchPackOffers(teacherId) {
+  return request(`/api/packs${teacherId ? `?teacherId=${teacherId}` : ''}`)
+}
+
+/**
+ * Los paquetes que compró el alumno logueado, cada uno con su duración por
+ * clase (`classMinutes`), `remaining` (las clases que le quedan: cada
+ * asistencia descuenta las que usó), `available` (las que todavía puede
+ * reservar) y `expired`.
+ */
+export function fetchMyPacks() {
+  return request('/api/packs/mine')
+}
+
+/** Nada se cobra de verdad: queda registrado. Devuelve el paquete comprado. */
+export function buyPack(id) {
+  return request(`/api/packs/${id}/buy`, { method: 'POST' })
 }

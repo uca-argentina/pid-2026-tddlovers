@@ -2,6 +2,7 @@ import { Component } from 'react'
 import BookingCard from './BookingCard.jsx'
 import { SpinnerIcon } from '../../components/icons.jsx'
 import { formatDayLong } from '../../utils/calendar.js'
+import { packSummaryWith } from '../../utils/packs.js'
 import './BookingResults.css'
 
 /**
@@ -45,7 +46,12 @@ class BookingResults extends Component {
         {!loading && cards.length > 0 ? (
           <ul className="booking-results-list">
             {cards.map((card) => (
-              <BookingCard key={card.id} card={card} onReservar={this.props.onReservar(card)} />
+              <BookingCard
+                key={card.id}
+                card={card}
+                pack={packSummaryWith(this.props.packs, card.teacherId)}
+                onReservar={this.props.onReservar(card)}
+              />
             ))}
           </ul>
         ) : null}
@@ -58,6 +64,7 @@ BookingResults.defaultProps = {
   cards: [],
   loading: false,
   filtered: false,
+  packs: [],
   // Curried como todos los handlers por ítem de la app: onReservar(card)
   // devuelve el handler del botón de esa tarjeta.
   onReservar: () => () => {},
