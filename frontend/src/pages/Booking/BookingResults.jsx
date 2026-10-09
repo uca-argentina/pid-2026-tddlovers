@@ -28,12 +28,14 @@ class BookingResults extends Component {
 
   render() {
     const { date, cards, loading } = this.props
+    // Las de vacaciones se muestran (en gris) pero no se pueden reservar.
+    const reservables = cards.filter((card) => !card.onVacation).length
 
     return (
       <section className="booking-results">
         <h2 className="booking-results-title">{formatDayLong(date)}</h2>
         <p className="booking-results-count">
-          {cards.length} {cards.length === 1 ? 'clase para reservar' : 'clases para reservar'}
+          {reservables} {reservables === 1 ? 'clase para reservar' : 'clases para reservar'}
         </p>
 
         {loading ? (

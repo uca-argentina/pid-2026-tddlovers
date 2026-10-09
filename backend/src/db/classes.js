@@ -200,6 +200,16 @@ async function insertClass(
     date,
   ]);
 
+  // La ruta ya lo chequeó, pero el docente puede haber cargado las
+  // vacaciones entre ese chequeo y esta reserva.
+  const vacation = await client.query(
+    `SELECT 1 FROM teacher_vacations
+     WHERE teacher_id = $1 AND $2::date BETWEEN start_date AND end_date
+     LIMIT 1`,
+    [window.teacherId, date]
+  );
+  if (vacation.rowCount > 0) return { conflict: 'El docente está de vacaciones ese día.' };
+
   const existing = await client.query(
     `SELECT to_char(end_time, 'HH24:MI') AS "end", subject_id AS "subjectId",
             count(*)::int AS enrolled

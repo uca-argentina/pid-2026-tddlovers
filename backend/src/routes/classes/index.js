@@ -11,6 +11,8 @@ import { findWindowById } from '../../db/availability.js';
 import { findRate } from '../../db/rates.js';
 import { listStudentPacks } from '../../db/packs.js';
 import { StudentPack } from '../../lib/classPacks.js';
+import { isTeacherOnVacation } from '../../db/vacations.js';
+import { VACATION_MESSAGE } from '../../lib/vacations.js';
 import { occursOn, toMinutes, toTime } from '../../lib/availabilityExpansion.js';
 import { classPriceCents, isValidClassMinutes, MIN_CLASS_MINUTES } from '../../lib/teacherRates.js';
 import { CLASS_STATUSES, cancelReasonFor, checkAction } from '../../lib/classStates.js';
@@ -81,6 +83,9 @@ async function validateBooking(body, user, fixed = null) {
   // una ventana se puede mandar igual: el que decide es esto.
   const notBookable = new TeacherApproval(window.teacherApprovalStatus).bookingProblem();
   if (notBookable) return fail(notBookable.status, notBookable.message);
+  // Lo mismo con las vacaciones: el tablero muestra la ventana en gris, pero
+  // el id se puede mandar igual.
+  if (await isTeacherOnVacation(window.teacherId, date)) return fail(409, VACATION_MESSAGE);
   if (fixed && String(window.teacherId) !== String(fixed.teacherId)) {
     return fail(409, 'Para reprogramar elegí un horario del mismo docente.');
   }

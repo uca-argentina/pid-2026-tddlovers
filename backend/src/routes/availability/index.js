@@ -1,5 +1,6 @@
 import { findPublishedWindows } from '../../db/availability.js';
 import { findTakenSlots } from '../../db/classes.js';
+import { listVacationsInRange } from '../../db/vacations.js';
 import { expandAvailability } from '../../lib/availabilityExpansion.js';
 import { now } from '../../lib/clock.js';
 
@@ -27,13 +28,22 @@ export default async function availabilityRoutes(app) {
       return reply.code(400).send({ message: 'El rango de fechas está al revés' });
     }
 
-    const [windows, taken] = await Promise.all([
+    const [windows, taken, vacations] = await Promise.all([
       findPublishedWindows({ from, to }),
       findTakenSlots({ from, to }),
+      listVacationsInRange({ from, to }),
     ]);
 
     const { iso, time } = now();
-    const rows = expandAvailability({ windows, taken, from, to, nowIso: iso, nowTime: time });
+    const rows = expandAvailability({
+      windows,
+      taken,
+      vacations,
+      from,
+      to,
+      nowIso: iso,
+      nowTime: time,
+    });
 
     // El docente logueado no se ofrece a sí mismo como opción reservable.
     return reply.send(rows.filter((row) => row.teacherId !== request.user.id));

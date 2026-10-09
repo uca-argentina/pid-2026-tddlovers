@@ -1,3 +1,5 @@
+import { VacationRange } from './vacations.js';
+
 // El puente entre las ventanas que carga el docente y las fechas que reserva
 // el alumno (ver CLAUDE.md, "weekly template → dated availability"). Una
 // ventana tiene una fecha y puede repetirse todas las semanas; acá se
@@ -157,7 +159,13 @@ export function openingsForWindow(window, taken, cutoff = null) {
  * salen: se los lleva el alumno recién al reservar. Para decidir alcanza con
  * la localidad.
  */
-export function expandAvailability({ windows, taken, from, to, nowIso, nowTime }) {
+/**
+ * `vacations` son las del rango ([{ teacherId, startDate, endDate }]). Una
+ * ventana que cae en vacaciones de su docente NO desaparece: sale con
+ * `onVacation: true` y sin nada reservable, para que el alumno la vea en gris
+ * y sepa por qué (y no crea que el docente dejó de dar esa clase).
+ */
+export function expandAvailability({ windows, taken, vacations = [], from, to, nowIso, nowTime }) {
   const takenByTeacherDate = new Map();
   for (const group of taken) {
     const key = `${group.teacherId}|${group.date}`;
@@ -176,9 +184,12 @@ export function expandAvailability({ windows, taken, from, to, nowIso, nowTime }
       if (!occursOn(window, iso)) continue;
       if (!window.subjects || window.subjects.length === 0) continue;
 
+      const onVacation = VacationRange.covers(vacations, iso, window.teacherId);
       const busy = takenByTeacherDate.get(`${window.teacherId}|${iso}`) ?? [];
-      const { free, groups } = openingsForWindow(window, busy, cutoff);
-      if (free.length === 0 && groups.length === 0) continue;
+      const { free, groups } = onVacation
+        ? { free: [], groups: [] }
+        : openingsForWindow(window, busy, cutoff);
+      if (!onVacation && free.length === 0 && groups.length === 0) continue;
 
       rows.push({
         id: `${window.id}|${iso}`,
@@ -195,6 +206,7 @@ export function expandAvailability({ windows, taken, from, to, nowIso, nowTime }
         subjects: window.subjects,
         free,
         groups,
+        onVacation,
       });
     }
   }

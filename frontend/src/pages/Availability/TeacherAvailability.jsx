@@ -2,12 +2,14 @@ import { Component } from 'react'
 import { Link } from 'react-router-dom'
 import WeekCalendar from './WeekCalendar.jsx'
 import DayWindowsDialog from './DayWindowsDialog.jsx'
+import VacationsDialog from './VacationsDialog.jsx'
 import Banner from '../../components/Banner.jsx'
-import { PlusIcon } from '../../components/icons.jsx'
-import { fetchMyWindows, fetchSubjects } from '../../api/client.js'
+import { PlusIcon, SunIcon } from '../../components/icons.jsx'
+import { fetchMyVacations, fetchMyWindows, fetchSubjects } from '../../api/client.js'
 import { addDays, fromISODate, toISODate } from '../../utils/calendar.js'
 import { resolveRates } from '../../utils/rates.js'
 import { startOfWeek } from '../../utils/windows.js'
+import { isOnVacation } from '../../utils/vacations.js'
 
 /**
  * La disponibilidad del docente: la semana como calendario de solo lectura y,
@@ -23,6 +25,10 @@ import { startOfWeek } from '../../utils/windows.js'
  * cada cambio, pide que se recargue la semana. Si con las flechas del modal
  * se pasa a otra semana, la de atrás la sigue — el calendario y el modal
  * siempre hablan de la misma.
+ *
+ * Las vacaciones van aparte (botón "Vacaciones", al lado de "Agregar
+ * horario"): son pocas, así que se piden todas juntas y no por semana. La
+ * semana marca esos días en gris, igual que los ve el alumno.
  */
 class TeacherAvailability extends Component {
   state = {
@@ -33,7 +39,12 @@ class TeacherAvailability extends Component {
     catalog: [],
     // null con el modal cerrado; si no, { iso, focusId, key }.
     dialog: null,
+    vacations: [],
+    vacationsLoading: true,
+    vacationsOpen: false,
   }
+
+  vacationsToken = 0
 
   // Mismo patrón que CalendarPage: descarta respuestas que llegaron tarde.
   fetchToken = 0
@@ -43,6 +54,7 @@ class TeacherAvailability extends Component {
 
   componentDidMount() {
     this.loadWeek(this.state.weekStart)
+    this.loadVacations()
     fetchSubjects()
       .then((catalog) => this.setState({ catalog: Array.isArray(catalog) ? catalog : [] }))
       .catch(() => {
@@ -53,6 +65,41 @@ class TeacherAvailability extends Component {
 
   componentWillUnmount() {
     this.fetchToken += 1
+    this.vacationsToken += 1
+  }
+
+  loadVacations = () => {
+    const token = ++this.vacationsToken
+    this.setState({ vacationsLoading: true })
+    return fetchMyVacations()
+      .then((vacations) => {
+        if (token !== this.vacationsToken) return
+        this.setState({
+          vacations: Array.isArray(vacations) ? vacations : [],
+          vacationsLoading: false,
+        })
+      })
+      .catch((error) => {
+        if (token !== this.vacationsToken) return
+        this.setState({
+          vacationsLoading: false,
+          error: error.message || 'No se pudieron cargar tus vacaciones.',
+        })
+      })
+  }
+
+  handleOpenVacations = () => {
+    this.setState({ vacationsOpen: true })
+  }
+
+  handleCloseVacations = () => {
+    this.setState({ vacationsOpen: false })
+  }
+
+  /** Cargar o borrar vacaciones cambia la lista y lo que se ve en la semana. */
+  handleVacationsChanged = () => {
+    this.loadVacations()
+    this.loadWeek(this.state.weekStart)
   }
 
   getToday() {
@@ -149,7 +196,7 @@ class TeacherAvailability extends Component {
   handleChanged = () => this.loadWeek(this.state.weekStart)
 
   render() {
-    const { weekStart, windows, loading, error, dialog } = this.state
+    const { weekStart, windows, loading, error, dialog, vacations, vacationsOpen } = this.state
     const rates = this.getRates()
     const sinTarifas = rates.length === 0
 
@@ -175,15 +222,25 @@ class TeacherAvailability extends Component {
               </p>
             ) : null}
           </div>
-          <button
-            type="button"
-            className="btn btn-primary availability-add"
-            onClick={this.handleAdd}
-            disabled={sinTarifas}
-          >
-            <PlusIcon />
-            Agregar horario
-          </button>
+          <div className="availability-actions">
+            <button
+              type="button"
+              className="btn btn-primary availability-add"
+              onClick={this.handleAdd}
+              disabled={sinTarifas}
+            >
+              <PlusIcon />
+              Agregar horario
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary availability-add"
+              onClick={this.handleOpenVacations}
+            >
+              <SunIcon />
+              Vacaciones
+            </button>
+          </div>
         </div>
 
         {error ? <Banner type="danger">{error}</Banner> : null}
@@ -191,6 +248,7 @@ class TeacherAvailability extends Component {
         <WeekCalendar
           weekStart={weekStart}
           windows={windows}
+          vacations={vacations}
           loading={loading}
           today={this.getToday()}
           showingThisWeek={this.isThisWeek()}
@@ -211,11 +269,22 @@ class TeacherAvailability extends Component {
             focusId={dialog.focusId}
             windows={windows}
             loading={loading}
+            onVacation={isOnVacation(vacations, dialog.iso)}
             rates={rates}
             today={this.getToday()}
             onChangeDay={this.handleChangeDay}
             onChanged={this.handleChanged}
             onClose={this.handleCloseDialog}
+          />
+        ) : null}
+
+        {vacationsOpen ? (
+          <VacationsDialog
+            vacations={vacations}
+            loading={this.state.vacationsLoading}
+            today={this.getToday()}
+            onChanged={this.handleVacationsChanged}
+            onClose={this.handleCloseVacations}
           />
         ) : null}
       </div>

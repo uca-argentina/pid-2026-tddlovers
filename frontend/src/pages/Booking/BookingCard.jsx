@@ -95,11 +95,15 @@ class BookingCard extends Component {
 
   render() {
     const { card } = this.props
-    const aviso = formatClashes(card.clashes, card.bookable)
+    // De vacaciones no hay nada que reservar: lo que importa es el motivo, no
+    // las superposiciones con clases propias.
+    const aviso = card.onVacation ? null : formatClashes(card.clashes, card.bookable)
     const materias = card.subjects.map((subject) => subject.name).join(' · ')
 
     return (
-      <li className={`booking-card ${card.bookable ? '' : 'is-blocked'}`}>
+      <li
+        className={`booking-card ${card.bookable ? '' : 'is-blocked'} ${card.onVacation ? 'is-vacation' : ''}`}
+      >
         <div className="booking-card-head">
           <span className="booking-card-subject">{materias}</span>
           <span className={`booking-card-kind ${card.maxStudents > 1 ? 'is-group' : ''}`}>
@@ -120,6 +124,9 @@ class BookingCard extends Component {
           {this.renderLocation()}
         </ul>
 
+        {card.onVacation ? (
+          <p className="booking-card-vacation">El docente está de vacaciones este día.</p>
+        ) : null}
         {this.renderPack()}
         {this.renderGroups()}
 
@@ -139,9 +146,9 @@ class BookingCard extends Component {
             onClick={this.props.onReservar}
             // Los botones de todas las tarjetas dicen lo mismo: sin esto, leído
             // con un lector de pantalla no se sabe cuál es cuál.
-            aria-label={`Reservar con ${card.teacherName}, ${formatRangeLabel(card.start, card.end)}`}
+            aria-label={`Reservar con ${card.teacherName}, ${formatRangeLabel(card.start, card.end)}${card.onVacation ? ', de vacaciones' : ''}`}
           >
-            Reservar
+            {card.onVacation ? 'De vacaciones' : 'Reservar'}
           </button>
         </div>
       </li>

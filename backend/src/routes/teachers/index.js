@@ -7,9 +7,16 @@ import {
 import { teacherHasRateFor } from '../../db/rates.js';
 import { createOffer, deactivateOffer, listTeacherOffers } from '../../db/packs.js';
 import { validatePackOffer } from '../../lib/classPacks.js';
+import {
+  countClassesToCancel,
+  createVacation,
+  deleteVacation,
+  listTeacherVacations,
+} from '../../db/vacations.js';
+import { VacationRange } from '../../lib/vacations.js';
 import { listTeachers } from '../../db/users.js';
 import { validateWindow } from '../../lib/availabilityWindow.js';
-import { todayIso } from '../../lib/clock.js';
+import { now, todayIso } from '../../lib/clock.js';
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -133,6 +140,50 @@ export default async function teachersRoutes(app) {
     const { id } = request.params;
     const done = UUID_RE.test(id) && (await deactivateOffer(request.user.id, id));
     if (!done) return reply.code(404).send({ message: 'Ese paquete no existe.' });
+    return reply.code(204).send();
+  });
+
+  // --- Vacaciones ----------------------------------------------------------
+
+  /** Las vacaciones del docente que todavía no terminaron. */
+  app.get('/me/vacations', read, async (request, reply) => {
+    return reply.send(await listTeacherVacations(request.user.id, { today: todayIso() }));
+  });
+
+  /**
+   * Cuántas reservas se cancelarían si se va de vacaciones esos días, para
+   * avisarle ANTES de guardar. Mismo `?startDate&endDate` que el POST.
+   */
+  app.get('/me/vacations/impact', read, async (request, reply) => {
+    const checked = VacationRange.validate(request.query, { today: todayIso() });
+    if (!checked.value) return reply.code(400).send(checked);
+    const cancelledClasses = await countClassesToCancel(request.user.id, checked.value, now());
+    return reply.send({ cancelledClasses });
+  });
+
+  /**
+   * Cargar vacaciones. Las reservas de esos días que todavía no empezaron se
+   * cancelan en la misma transacción; la respuesta dice cuántas.
+   */
+  app.post('/me/vacations', write, async (request, reply) => {
+    const checked = VacationRange.validate(request.body, { today: todayIso() });
+    if (!checked.value) return reply.code(400).send(checked);
+
+    const saved = await createVacation(request.user.id, checked.value, now());
+    if (saved.conflict) {
+      return reply.code(409).send({
+        message: `Se pisa con tus vacaciones ${new VacationRange(saved.conflict).describe()}.`,
+        fields: { startDate: 'invalid' },
+      });
+    }
+    return reply.code(201).send({ ...saved.vacation, cancelledClasses: saved.cancelled });
+  });
+
+  /** Borrar un rango cargado por error. Las reservas canceladas no vuelven. */
+  app.delete('/me/vacations/:id', write, async (request, reply) => {
+    const { id } = request.params;
+    const deleted = UUID_RE.test(id) && (await deleteVacation(request.user.id, id));
+    if (!deleted) return reply.code(404).send({ message: 'Esas vacaciones no existen.' });
     return reply.code(204).send();
   });
 }
