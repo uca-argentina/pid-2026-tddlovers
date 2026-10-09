@@ -89,6 +89,13 @@
 }
 
 /* .btn es width:100% en ui.css; acá es un botón al lado del título. */
+.availability-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .availability-add {
   width: auto;
   flex-shrink: 0;
@@ -105,7 +112,11 @@
     flex-direction: column;
   }
 
-  .availability-add {
+  .availability-actions {
     width: 100%;
+  }
+
+  .availability-add {
+    flex: 1;
   }
 }

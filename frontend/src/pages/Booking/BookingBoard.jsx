@@ -312,7 +312,8 @@ class BookingBoard extends Component {
   getFreeByDate(porFecha) {
     const counts = {}
     for (const [iso, cards] of Object.entries(porFecha)) {
-      counts[iso] = cards.length
+      // Las de vacaciones se muestran en gris pero no son "libres".
+      counts[iso] = cards.filter((card) => !card.onVacation).length
     }
     return counts
   }

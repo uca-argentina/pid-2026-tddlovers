@@ -1,0 +1,151 @@
+.vacations-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.vacations-hint {
+  margin: -4px 0 0;
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+.vacations-subtitle {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.vacations-empty,
+.vacations-impact {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+.vacations-empty svg,
+.vacations-impact svg {
+  width: 16px;
+  height: 16px;
+}
+
+.vacations-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vacation-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-warning) 8%, transparent);
+}
+
+.vacation-item-range {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.vacation-item-days {
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+}
+
+.vacation-item-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-danger) 35%, transparent);
+  background: transparent;
+  color: var(--color-danger);
+  cursor: pointer;
+}
+
+.vacation-item-remove:hover:not(:disabled) {
+  background: var(--color-danger-bg);
+}
+
+.vacation-item-remove:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.vacation-item-remove svg {
+  width: 16px;
+  height: 16px;
+}
+
+.vacations-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+}
+
+.vacations-form .banner {
+  margin: 0;
+}
+
+.vacations-dates {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.vacations-date {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.vacations-date input {
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1.5px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface-solid);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 15px;
+}
+
+.vacations-error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-danger);
+}
+
+.vacations-form .btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+@media (max-width: 420px) {
+  .vacations-dates {
+    grid-template-columns: 1fr;
+  }
+}

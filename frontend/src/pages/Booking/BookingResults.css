@@ -156,6 +156,21 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* El docente está de vacaciones ese día: la tarjeta se ve, pero en gris. */
+.booking-card.is-vacation {
+  filter: grayscale(1);
+}
+
+.booking-card-vacation {
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background: color-mix(in srgb, var(--color-text-muted) 12%, transparent);
+}
+
 /* El paquete del alumno con este docente: es lo primero que le importa si ya
    pagó clases por adelantado. */
 .booking-card-pack {

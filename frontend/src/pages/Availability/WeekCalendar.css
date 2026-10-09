@@ -353,3 +353,40 @@
     font-size: 15px;
   }
 }
+
+/* --- Vacaciones -------------------------------------------------------------- */
+
+/* El día se ve rayado y los horarios en gris: siguen ahí, pero ese día nadie
+   los puede reservar. Mismo gris que ve el alumno en el tablero. */
+.week-cal-col.is-vacation,
+.week-cal-agenda-day.is-vacation {
+  background:
+    repeating-linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--color-text-muted) 10%, transparent) 0,
+      color-mix(in srgb, var(--color-text-muted) 10%, transparent) 6px,
+      transparent 6px,
+      transparent 12px
+    );
+}
+
+.week-cal-block.is-vacation,
+.week-cal-agenda-item.is-vacation {
+  background: color-mix(in srgb, var(--color-text-muted) 18%, var(--color-surface-solid));
+  border-color: var(--color-border);
+  color: var(--color-text-muted);
+  filter: grayscale(1);
+}
+
+.week-cal-vacation-tag {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: var(--color-warning);
+  background: var(--color-warning-bg);
+  white-space: nowrap;
+}

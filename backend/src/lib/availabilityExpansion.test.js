@@ -165,6 +165,25 @@ describe('expandAvailability', () => {
     expect(rows[0].subjects.map((subject) => subject.name)).toEqual(['Matemática', 'Física']);
   });
 
+  it('a window during the teacher\'s vacation stays, greyed: nothing bookable', () => {
+    const vacations = [{ teacherId: 't1', startDate: LUNES, endDate: LUNES }];
+    const rows = expandir({
+      windows: [ventana({ repeatsWeekly: true })],
+      vacations,
+      to: LUNES_SIGUIENTE,
+    });
+    const delLunes = rows.find((row) => row.date === LUNES);
+    expect(delLunes).toMatchObject({ onVacation: true, free: [], groups: [] });
+    // La semana siguiente ya volvió.
+    expect(rows.find((row) => row.date === LUNES_SIGUIENTE)).toMatchObject({ onVacation: false });
+  });
+
+  it('another teacher\'s vacation does not touch the window', () => {
+    const rows = expandir({ vacations: [{ teacherId: 't2', startDate: LUNES, endDate: MARTES }] });
+    expect(rows[0].onVacation).toBe(false);
+    expect(rows[0].free).toHaveLength(1);
+  });
+
   it('a window with no rated subject is not offered', () => {
     expect(expandir({ windows: [ventana({ subjects: [] })] })).toEqual([]);
   });

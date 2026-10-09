@@ -320,3 +320,32 @@ export function fetchMyPacks() {
 export function buyPack(id) {
   return request(`/api/packs/${id}/buy`, { method: 'POST' })
 }
+
+// --- Vacaciones del docente -----------------------------------------------------
+
+/** Las vacaciones del docente logueado que todavía no terminaron. */
+export function fetchMyVacations() {
+  return request('/api/teachers/me/vacations')
+}
+
+/** Cuántas reservas se cancelarían con esas vacaciones: { cancelledClasses }. */
+export function fetchVacationImpact({ startDate, endDate }) {
+  return request(`/api/teachers/me/vacations/impact?startDate=${startDate}&endDate=${endDate}`)
+}
+
+/**
+ * { startDate, endDate } (los dos incluidos). Devuelve las vacaciones
+ * guardadas con `cancelledClasses`: cuántas reservas de esos días se
+ * cancelaron.
+ */
+export function createVacation({ startDate, endDate }) {
+  return request('/api/teachers/me/vacations', {
+    method: 'POST',
+    body: JSON.stringify({ startDate, endDate }),
+  })
+}
+
+/** Borrar un rango cargado por error. Las reservas canceladas no vuelven. */
+export function deleteVacation(id) {
+  return request(`/api/teachers/me/vacations/${id}`, { method: 'DELETE' })
+}

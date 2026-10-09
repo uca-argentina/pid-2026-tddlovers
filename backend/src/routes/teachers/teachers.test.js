@@ -17,6 +17,13 @@ vi.mock('../../db/users.js', () => ({
   listTeachers: vi.fn(),
 }));
 
+vi.mock('../../db/vacations.js', () => ({
+  countClassesToCancel: vi.fn(),
+  createVacation: vi.fn(),
+  deleteVacation: vi.fn(),
+  listTeacherVacations: vi.fn(),
+}));
+
 vi.mock('../../db/packs.js', () => ({
   createOffer: vi.fn(),
   deactivateOffer: vi.fn(),
@@ -36,6 +43,9 @@ const { createWindow, deleteWindow, findTeacherWindows, updateWindow } = await i
 const { teacherHasRateFor } = await import('../../db/rates.js');
 const { listTeachers } = await import('../../db/users.js');
 const { createOffer, deactivateOffer, listTeacherOffers } = await import('../../db/packs.js');
+const { countClassesToCancel, createVacation, deleteVacation, listTeacherVacations } = await import(
+  '../../db/vacations.js'
+);
 const { findValidSession } = await import('../../db/sessions.js');
 const { buildApp } = await import('../../app.js');
 
@@ -404,5 +414,148 @@ describe('teacher packs', () => {
 
     expect(res.statusCode).toBe(403);
     expect(createOffer).not.toHaveBeenCalled();
+  });
+});
+
+describe('teacher vacations', () => {
+  let app;
+  const VACACIONES_ID = '1b2c3d4e-5f60-4718-8a9b-0c1d2e3f4a5b';
+  // Lejos en el futuro, para no depender del reloj.
+  const rango = { startDate: '2099-12-20', endDate: '2100-01-05' };
+  const guardadas = { id: VACACIONES_ID, teacherId: 'user-1', ...rango };
+
+  beforeEach(() => {
+    app = buildApp({ logger: false });
+    createVacation.mockResolvedValue({ vacation: guardadas, cancelled: 2 });
+    deleteVacation.mockResolvedValue(true);
+  });
+
+  afterEach(async () => {
+    vi.clearAllMocks();
+    await app.close();
+  });
+
+  it('GET lists the vacations of the logged-in teacher', async () => {
+    listTeacherVacations.mockResolvedValueOnce([guardadas]);
+    const headers = await authedHeaders(app);
+
+    const res = await app.inject({ method: 'GET', url: '/api/teachers/me/vacations', headers });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([guardadas]);
+    expect(listTeacherVacations).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining({ today: expect.any(String) })
+    );
+  });
+
+  it('impact says how many bookings would be cancelled', async () => {
+    countClassesToCancel.mockResolvedValueOnce(3);
+    const headers = await authedHeaders(app);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/teachers/me/vacations/impact?startDate=2099-12-20&endDate=2100-01-05',
+      headers,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ cancelledClasses: 3 });
+    expect(countClassesToCancel).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining(rango),
+      expect.objectContaining({ iso: expect.any(String), time: expect.any(String) })
+    );
+  });
+
+  it('POST saves the range and says how many bookings were cancelled', async () => {
+    const headers = await authedHeaders(app);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/teachers/me/vacations',
+      headers,
+      payload: rango,
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(res.json()).toEqual({ ...guardadas, cancelledClasses: 2 });
+    expect(createVacation).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining(rango),
+      expect.objectContaining({ iso: expect.any(String) })
+    );
+  });
+
+  it('POST validates the range', async () => {
+    const headers = await authedHeaders(app);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/teachers/me/vacations',
+      headers,
+      payload: { startDate: '2100-01-05', endDate: '2099-12-20' },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().fields).toEqual({ endDate: 'invalid' });
+    expect(createVacation).not.toHaveBeenCalled();
+  });
+
+  it('POST says which vacation it overlaps with', async () => {
+    createVacation.mockResolvedValueOnce({
+      conflict: { id: 'otra', startDate: '2099-12-24', endDate: '2099-12-31' },
+    });
+    const headers = await authedHeaders(app);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/teachers/me/vacations',
+      headers,
+      payload: rango,
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json().message).toBe('Se pisa con tus vacaciones del 24/12/2099 al 31/12/2099.');
+  });
+
+  it('DELETE removes a range loaded by mistake', async () => {
+    const headers = await authedHeaders(app);
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/teachers/me/vacations/${VACACIONES_ID}`,
+      headers,
+    });
+
+    expect(res.statusCode).toBe(204);
+    expect(deleteVacation).toHaveBeenCalledWith('user-1', VACACIONES_ID);
+  });
+
+  it('DELETE of someone else\'s vacation is a 404', async () => {
+    deleteVacation.mockResolvedValueOnce(false);
+    const headers = await authedHeaders(app);
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/teachers/me/vacations/${VACACIONES_ID}`,
+      headers,
+    });
+
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('students have no vacations', async () => {
+    const headers = await authedHeaders(app, 'student');
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/teachers/me/vacations',
+      headers,
+      payload: rango,
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(createVacation).not.toHaveBeenCalled();
   });
 });

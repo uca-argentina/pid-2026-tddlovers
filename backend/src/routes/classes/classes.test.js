@@ -22,6 +22,10 @@ vi.mock('../../db/packs.js', () => ({
   listStudentPacks: vi.fn(),
 }));
 
+vi.mock('../../db/vacations.js', () => ({
+  isTeacherOnVacation: vi.fn().mockResolvedValue(false),
+}));
+
 vi.mock('../../db/sessions.js', () => ({
   createSession: vi.fn(),
   findValidSession: vi.fn(),
@@ -41,6 +45,7 @@ const {
 const { findWindowById } = await import('../../db/availability.js');
 const { findRate } = await import('../../db/rates.js');
 const { listStudentPacks } = await import('../../db/packs.js');
+const { isTeacherOnVacation } = await import('../../db/vacations.js');
 const { findValidSession } = await import('../../db/sessions.js');
 const { buildApp } = await import('../../app.js');
 
@@ -315,6 +320,27 @@ describe('POST /api/classes', () => {
 
     expect(res.statusCode).toBe(409);
     expect(bookClass).not.toHaveBeenCalled();
+  });
+
+  it('a teacher on vacation that day cannot be booked', async () => {
+    isTeacherOnVacation.mockResolvedValueOnce(true);
+    const headers = await authedHeaders(app);
+
+    const res = await app.inject({ method: 'POST', url: '/api/classes', headers, payload: reserva() });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json().message).toMatch(/vacaciones/);
+    expect(isTeacherOnVacation).toHaveBeenCalledWith(DOCENTE, '2099-09-14');
+    expect(bookClass).not.toHaveBeenCalled();
+  });
+
+  it('passes on the conflict when the vacation was loaded meanwhile', async () => {
+    bookClass.mockResolvedValueOnce({ conflict: 'El docente está de vacaciones ese día.' });
+    const headers = await authedHeaders(app);
+
+    const res = await app.inject({ method: 'POST', url: '/api/classes', headers, payload: reserva() });
+
+    expect(res.statusCode).toBe(409);
   });
 
   it('rejects a date the window does not fall on', async () => {
