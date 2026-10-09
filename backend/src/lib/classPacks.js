@@ -3,30 +3,49 @@
 // Como lib/teacherApproval.js, no toca la base ni el reloj: recibe "hoy" y
 // las cuentas ya hechas, así cada regla se prueba sola.
 //
-// Lo que le queda a un paquete NO es un contador guardado: sale de contar
-// sus clases. Así, corregir una asistencia o cancelar una reserva devuelve la
-// clase sin que nadie tenga que acordarse de sumarla de nuevo.
+// Cada clase del paquete dura lo mismo (lo decide el docente: "8 clases de
+// 1 h"). Al reservar, el alumno elige cuántas usa (una o más) y la duración de
+// su clase como siempre: lo que cubren las del paquete no se paga, y lo que se
+// pasa se paga aparte con la tarifa ("1 clase de 1 h + 30 min").
+//
+// Lo que le queda a un paquete NO es un contador guardado: sale de sumar las
+// clases del paquete que usó cada reserva. Así, corregir una asistencia o
+// cancelar una reserva las devuelve sin que nadie tenga que acordarse.
 
 const MIN_CLASSES = 2;
 const MAX_CLASSES = 100;
 const MAX_VALIDITY_DAYS = 365;
+// La clase más corta que se puede reservar, y de a 5 como la duración que
+// elige el alumno. El techo es de sentido común.
+const MIN_CLASS_MINUTES = 30;
+const MAX_CLASS_MINUTES = 240;
+const CLASS_MINUTES_STEP = 5;
 // El mismo techo que el CHECK de class_packs.
 const MAX_PRICE_CENTS = 1000000000;
 
 const isIntBetween = (value, min, max) => Number.isInteger(value) && value >= min && value <= max;
 
 /**
- * Valida un paquete tal como lo manda el docente: { classCount, priceCents,
- * validityDays }. Devuelve { value } o { message, fields }, igual que
- * validateWindow y validateRates.
+ * Valida un paquete tal como lo manda el docente: { classCount, classMinutes,
+ * priceCents, validityDays }. Devuelve { value } o { message, fields }, igual
+ * que validateWindow y validateRates.
  */
 export function validatePackOffer(body) {
-  const { classCount, priceCents, validityDays } = body ?? {};
+  const { classCount, classMinutes, priceCents, validityDays } = body ?? {};
 
   if (!isIntBetween(classCount, MIN_CLASSES, MAX_CLASSES)) {
     return {
       message: `Un paquete tiene entre ${MIN_CLASSES} y ${MAX_CLASSES} clases.`,
       fields: { classCount: 'invalid' },
+    };
+  }
+  if (
+    !isIntBetween(classMinutes, MIN_CLASS_MINUTES, MAX_CLASS_MINUTES) ||
+    classMinutes % CLASS_MINUTES_STEP !== 0
+  ) {
+    return {
+      message: `Cada clase dura entre ${MIN_CLASS_MINUTES} minutos y ${MAX_CLASS_MINUTES / 60} horas, de a ${CLASS_MINUTES_STEP} minutos.`,
+      fields: { classMinutes: 'invalid' },
     };
   }
   if (!isIntBetween(priceCents, 0, MAX_PRICE_CENTS)) {
@@ -41,7 +60,7 @@ export function validatePackOffer(body) {
       fields: { validityDays: 'invalid' },
     };
   }
-  return { value: { classCount, priceCents, validityDays } };
+  return { value: { classCount, classMinutes, priceCents, validityDays } };
 }
 
 /**
@@ -55,29 +74,41 @@ export function expiryFor(today, validityDays) {
   return date.toISOString().slice(0, 10);
 }
 
-const deny = (message) => ({ status: 409, message });
+const deny = (message, status = 409) => ({ status, message });
 
 function formatDay(iso) {
   const [y, m, d] = iso.split('-');
   return `${d}/${m}/${y}`;
 }
 
+/** 60 -> '1 h', 90 -> '1 h 30 min', 45 -> '45 min'. */
+function formatMinutes(total) {
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  if (h === 0) return `${m} min`;
+  return m === 0 ? `${h} h` : `${h} h ${m} min`;
+}
+
+const clases = (n) => (n === 1 ? '1 clase' : `${n} clases`);
+
 export class StudentPack {
   /**
-   * `attended`: clases del paquete que quedaron realizadas (las que ya lo
-   * descontaron). `reserved`: las que están en curso (pendiente, aceptada o
-   * confirmada), que todavía no descontaron pero ya tienen su lugar
-   * apartado. Una ausente o una cancelada no cuenta para ninguna de las dos.
+   * `attended`: clases del paquete que usaron las reservas realizadas (las que
+   * ya lo descontaron). `reserved`: las que usan las reservas en curso
+   * (pendiente, aceptada o confirmada), que todavía no descontaron pero ya
+   * tienen su lugar apartado. Una ausente o una cancelada no cuenta para
+   * ninguna de las dos.
    */
-  constructor({ id, classCount, expiresOn, attended = 0, reserved = 0 }) {
+  constructor({ id, classCount, classMinutes, expiresOn, attended = 0, reserved = 0 }) {
     this.id = id;
     this.classCount = classCount;
+    this.classMinutes = classMinutes;
     this.expiresOn = expiresOn;
     this.attended = attended;
     this.reserved = reserved;
   }
 
-  /** Las clases que le quedan: cada asistencia descuenta una. */
+  /** Las clases que le quedan: cada asistencia descuenta las que usó. */
   remaining() {
     return Math.max(this.classCount - this.attended, 0);
   }
@@ -91,21 +122,44 @@ export class StudentPack {
     return today > this.expiresOn;
   }
 
+  /** Cuántos minutos de la clase cubren `tokens` clases del paquete. */
+  coveredMinutes(tokens) {
+    return tokens * this.classMinutes;
+  }
+
+  /** Lo que se paga aparte en una clase de `minutes` usando `tokens`. */
+  extraMinutes({ tokens, minutes }) {
+    return Math.max(minutes - this.coveredMinutes(tokens), 0);
+  }
+
   /**
-   * null si con este paquete se puede reservar una clase el día `date`, o
-   * { status, message } para el alumno.
+   * null si con este paquete se puede reservar una clase de `minutes` el día
+   * `date` usando `tokens` clases del paquete, o { status, message } para el
+   * alumno.
    */
-  bookingProblem({ date, today }) {
+  bookingProblem({ date, today, tokens, minutes }) {
+    if (!Number.isInteger(tokens) || tokens < 1) {
+      return deny('Elegí cuántas clases del paquete usás.', 400);
+    }
     if (this.isExpired(today)) return deny(`Tu paquete venció el ${formatDay(this.expiresOn)}.`);
     if (date > this.expiresOn) {
       return deny(`Tu paquete vence el ${formatDay(this.expiresOn)}: elegí una clase hasta ese día.`);
     }
-    if (this.available() === 0) {
+    // Las del paquete no pueden cubrir más de lo que dura la clase: sería
+    // gastar clases de más.
+    if (this.coveredMinutes(tokens) > minutes) {
       return deny(
-        this.remaining() === 0
-          ? 'Ya usaste todas las clases de tu paquete.'
-          : 'Ya tenés reservadas todas las clases que te quedan en el paquete.'
+        `${clases(tokens)} de ${formatMinutes(this.classMinutes)} cubren más que una clase de ${formatMinutes(minutes)}. Usá menos o alargá la clase.`,
+        400
       );
+    }
+    if (this.available() < tokens) {
+      if (this.remaining() === 0) return deny('Ya usaste todas las clases de tu paquete.');
+      if (this.available() === 0) {
+        return deny('Ya tenés reservadas todas las clases que te quedan en el paquete.');
+      }
+      const queda = this.available() === 1 ? 'queda' : 'quedan';
+      return deny(`Solo te ${queda} ${clases(this.available())} del paquete para reservar.`);
     }
     return null;
   }
@@ -117,22 +171,5 @@ export class StudentPack {
       available: this.available(),
       expired: this.isExpired(today),
     };
-  }
-
-  /**
-   * De los paquetes del alumno con un docente, con cuál reservar una clase
-   * ese día: el que vence primero entre los que sirven, para que no se le
-   * venza uno con clases sin usar. Devuelve { pack } o { error }.
-   */
-  static choose(packs, { date, today }) {
-    if (packs.length === 0) {
-      return { error: deny('No tenés un paquete con este docente.') };
-    }
-    const ordered = [...packs].sort((a, b) => a.expiresOn.localeCompare(b.expiresOn));
-    const usable = ordered.find((pack) => pack.bookingProblem({ date, today }) === null);
-    if (usable) return { pack: usable };
-    // Ninguno sirve: se explica con el que más cerca estuvo (el último en
-    // vencer, que es el que más probablemente sigue vigente).
-    return { error: ordered[ordered.length - 1].bookingProblem({ date, today }) };
   }
 }

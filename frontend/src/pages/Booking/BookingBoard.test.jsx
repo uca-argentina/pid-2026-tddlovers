@@ -412,8 +412,6 @@ describe('BookingBoard', () => {
       startTime: '14:00',
       subjectId: 1,
       durationMinutes: 50,
-      // Sin paquete con ese docente, se paga aparte.
-      usePack: false,
     })
     // Se vuelve a pedir todo: ese horario puede pasar a chocar con las
     // tarjetas de otros docentes.
@@ -502,7 +500,6 @@ describe('BookingBoard', () => {
         startTime: '09:00',
         subjectId: 2,
         durationMinutes: 45,
-        usePack: false,
       }),
     )
   })

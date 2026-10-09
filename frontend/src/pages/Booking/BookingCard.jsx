@@ -3,7 +3,7 @@ import { ClockIcon, PinIcon, UsersIcon, VideoIcon } from '../../components/icons
 import { formatRangeLabel } from '../../utils/availability.js'
 import { formatClashes, formatEnrolled, lowestRate } from '../../utils/booking.js'
 import { formatHourlyRate } from '../../utils/rates.js'
-import { classesLabel, formatPackDate } from '../../utils/packs.js'
+import { classesLabel, formatPackDate, packClassesLabel } from '../../utils/packs.js'
 import { capacityLabel, modalityLabel, needsAddress } from '../../utils/windows.js'
 
 /**
@@ -68,7 +68,8 @@ class BookingCard extends Component {
     const quedan = pack.remaining === 1 ? 'Te queda' : 'Te quedan'
     return (
       <p className="booking-card-pack">
-        {quedan} {classesLabel(pack.remaining)} del paquete · vence el {formatPackDate(pack.expiresOn)}
+        {quedan} {packClassesLabel(pack.remaining, pack.classMinutes)} del paquete · vence el{' '}
+        {formatPackDate(pack.expiresOn)}
         {pack.available < pack.remaining
           ? ` · ${classesLabel(pack.remaining - pack.available)} ya reservada${
               pack.remaining - pack.available === 1 ? '' : 's'

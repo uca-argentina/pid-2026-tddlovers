@@ -3,38 +3,51 @@ import { StudentPack, expiryFor, validatePackOffer } from './classPacks.js';
 
 const HOY = '2099-09-10';
 
+// 4 clases de 1 h que vencen el 9/10.
 const pack = (over = {}) =>
-  new StudentPack({ id: 'p1', classCount: 4, expiresOn: '2099-10-09', ...over });
+  new StudentPack({ id: 'p1', classCount: 4, classMinutes: 60, expiresOn: '2099-10-09', ...over });
+
+const oferta = (over = {}) => ({
+  classCount: 4,
+  classMinutes: 60,
+  priceCents: 1800000,
+  validityDays: 30,
+  ...over,
+});
 
 describe('validatePackOffer', () => {
   it('acepta un paquete válido', () => {
-    expect(validatePackOffer({ classCount: 4, priceCents: 1800000, validityDays: 30 })).toEqual({
-      value: { classCount: 4, priceCents: 1800000, validityDays: 30 },
-    });
+    expect(validatePackOffer(oferta())).toEqual({ value: oferta() });
   });
 
   it('un paquete sin cargo vale', () => {
-    expect(validatePackOffer({ classCount: 2, priceCents: 0, validityDays: 1 }).value).toBeTruthy();
+    expect(validatePackOffer(oferta({ priceCents: 0, classCount: 2, validityDays: 1 })).value).toBeTruthy();
   });
 
   it('rechaza una cantidad fuera de rango o con decimales', () => {
     for (const classCount of [1, 101, 2.5, '4', undefined]) {
-      const res = validatePackOffer({ classCount, priceCents: 100, validityDays: 30 });
-      expect(res.fields).toEqual({ classCount: 'invalid' });
+      expect(validatePackOffer(oferta({ classCount })).fields).toEqual({ classCount: 'invalid' });
+    }
+  });
+
+  it('la duración de cada clase va de 30 min a 4 h, de a 5', () => {
+    expect(validatePackOffer(oferta({ classMinutes: 30 })).value).toBeTruthy();
+    expect(validatePackOffer(oferta({ classMinutes: 240 })).value).toBeTruthy();
+    expect(validatePackOffer(oferta({ classMinutes: 45 })).value).toBeTruthy();
+    for (const classMinutes of [25, 245, 62, undefined, '60']) {
+      expect(validatePackOffer(oferta({ classMinutes })).fields).toEqual({ classMinutes: 'invalid' });
     }
   });
 
   it('rechaza un precio negativo o con fracciones de centavo', () => {
     for (const priceCents of [-1, 10.5, null]) {
-      const res = validatePackOffer({ classCount: 4, priceCents, validityDays: 30 });
-      expect(res.fields).toEqual({ priceCents: 'invalid' });
+      expect(validatePackOffer(oferta({ priceCents })).fields).toEqual({ priceCents: 'invalid' });
     }
   });
 
   it('rechaza una vigencia fuera de rango', () => {
     for (const validityDays of [0, 366]) {
-      const res = validatePackOffer({ classCount: 4, priceCents: 100, validityDays });
-      expect(res.fields).toEqual({ validityDays: 'invalid' });
+      expect(validatePackOffer(oferta({ validityDays })).fields).toEqual({ validityDays: 'invalid' });
     }
   });
 });
@@ -51,9 +64,9 @@ describe('expiryFor', () => {
 });
 
 describe('StudentPack', () => {
-  it('cada asistencia descuenta una clase', () => {
+  it('cada asistencia descuenta las clases del paquete que usó', () => {
     expect(pack().remaining()).toBe(4);
-    expect(pack({ attended: 1 }).remaining()).toBe(3);
+    expect(pack({ attended: 2 }).remaining()).toBe(2);
     expect(pack({ attended: 4 }).remaining()).toBe(0);
   });
 
@@ -68,28 +81,61 @@ describe('StudentPack', () => {
     expect(pack().isExpired('2099-10-10')).toBe(true);
   });
 
+  describe('cuánto cubre y cuánto se paga aparte', () => {
+    it('una clase de 1 h con 1 clase de 1 h no paga nada', () => {
+      expect(pack().extraMinutes({ tokens: 1, minutes: 60 })).toBe(0);
+    });
+
+    it('una de 1 h 30 con 1 clase de 1 h paga 30 min', () => {
+      expect(pack().extraMinutes({ tokens: 1, minutes: 90 })).toBe(30);
+    });
+
+    it('una de 2 h puede usar 2 clases', () => {
+      expect(pack().coveredMinutes(2)).toBe(120);
+      expect(pack().extraMinutes({ tokens: 2, minutes: 120 })).toBe(0);
+    });
+  });
+
   describe('bookingProblem', () => {
+    const reserva = (over = {}) => ({ date: '2099-10-09', today: HOY, tokens: 1, minutes: 60, ...over });
+
     it('sirve con clases disponibles, antes del vencimiento', () => {
-      expect(pack().bookingProblem({ date: '2099-10-09', today: HOY })).toBeNull();
+      expect(pack().bookingProblem(reserva())).toBeNull();
+      expect(pack().bookingProblem(reserva({ tokens: 2, minutes: 150 }))).toBeNull();
+    });
+
+    it('hay que usar al menos una clase, entera', () => {
+      expect(pack().bookingProblem(reserva({ tokens: 0 })).status).toBe(400);
+      expect(pack().bookingProblem(reserva({ tokens: 1.5 })).status).toBe(400);
+    });
+
+    it('las clases del paquete no pueden cubrir más de lo que dura la clase', () => {
+      const res = pack().bookingProblem(reserva({ tokens: 2, minutes: 90 }));
+      expect(res.status).toBe(400);
+      expect(res.message).toMatch(/2 clases de 1 h cubren más que una clase de 1 h 30 min/);
+      // Una clase de 45 min con una de 1 h tampoco: se gastaría de más.
+      expect(pack().bookingProblem(reserva({ minutes: 45 })).status).toBe(400);
     });
 
     it('no sirve vencido', () => {
-      const res = pack().bookingProblem({ date: '2099-10-11', today: '2099-10-10' });
+      const res = pack().bookingProblem(reserva({ date: '2099-10-11', today: '2099-10-10' }));
       expect(res.status).toBe(409);
       expect(res.message).toMatch(/venció/);
     });
 
     it('no sirve para una clase después del vencimiento', () => {
-      const res = pack().bookingProblem({ date: '2099-10-10', today: HOY });
-      expect(res.message).toMatch(/vence el 09\/10\/2099/);
+      expect(pack().bookingProblem(reserva({ date: '2099-10-10' })).message).toMatch(
+        /vence el 09\/10\/2099/
+      );
     });
 
-    it('no sirve sin clases', () => {
-      expect(pack({ attended: 4 }).bookingProblem({ date: HOY, today: HOY }).message).toMatch(
-        /todas las clases/
-      );
-      expect(pack({ attended: 2, reserved: 2 }).bookingProblem({ date: HOY, today: HOY }).message).toMatch(
+    it('no alcanza si pide más clases de las que quedan', () => {
+      expect(pack({ attended: 4 }).bookingProblem(reserva()).message).toMatch(/todas las clases/);
+      expect(pack({ attended: 2, reserved: 2 }).bookingProblem(reserva()).message).toMatch(
         /reservadas/
+      );
+      expect(pack({ attended: 3 }).bookingProblem(reserva({ tokens: 2, minutes: 120 })).message).toMatch(
+        /Solo te queda 1 clase/
       );
     });
   });
@@ -99,31 +145,6 @@ describe('StudentPack', () => {
       remaining: 3,
       available: 2,
       expired: false,
-    });
-  });
-
-  describe('choose', () => {
-    it('elige el que vence primero entre los que sirven', () => {
-      const tarde = pack({ id: 'tarde', expiresOn: '2099-12-31' });
-      const pronto = pack({ id: 'pronto', expiresOn: '2099-09-30' });
-      expect(StudentPack.choose([tarde, pronto], { date: HOY, today: HOY }).pack.id).toBe('pronto');
-    });
-
-    it('saltea los que no sirven', () => {
-      const lleno = pack({ id: 'lleno', expiresOn: '2099-09-30', attended: 4 });
-      const otro = pack({ id: 'otro', expiresOn: '2099-12-31' });
-      expect(StudentPack.choose([lleno, otro], { date: HOY, today: HOY }).pack.id).toBe('otro');
-    });
-
-    it('sin paquetes, explica', () => {
-      expect(StudentPack.choose([], { date: HOY, today: HOY }).error.message).toMatch(
-        /No tenés un paquete/
-      );
-    });
-
-    it('si ninguno sirve, devuelve el motivo', () => {
-      const res = StudentPack.choose([pack({ attended: 4 })], { date: HOY, today: HOY });
-      expect(res.error.status).toBe(409);
     });
   });
 });

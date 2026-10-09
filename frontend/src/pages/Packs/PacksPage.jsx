@@ -13,15 +13,22 @@ import {
   fetchPackOffers,
 } from '../../api/client.js'
 import { formatMoney, MAX_HOURLY_RATE_CENTS, parseMoney } from '../../utils/rates.js'
-import { classesLabel, formatPackDate, validityLabel } from '../../utils/packs.js'
+import {
+  classesLabel,
+  formatPackDate,
+  packClassesLabel,
+  validityLabel,
+} from '../../utils/packs.js'
 import './PacksPage.css'
 
 // Los mismos límites que valida el backend (lib/classPacks.js).
 const MIN_CLASSES = 2
 const MAX_CLASSES = 100
 const MAX_VALIDITY_DAYS = 365
+const MIN_CLASS_MINUTES = 30
+const MAX_CLASS_MINUTES = 240
 
-const EMPTY_FORM = { classCount: '', price: '', validityDays: '30' }
+const EMPTY_FORM = { classCount: '', classMinutes: '60', price: '', validityDays: '30' }
 
 function parseIntField(text) {
   return /^\d+$/.test(String(text).trim()) ? Number(text) : NaN
@@ -29,14 +36,16 @@ function parseIntField(text) {
 
 /**
  * Paquetes de clases. Según el rol es una de dos pantallas:
- *   - Docente: arma los paquetes que ofrece (cuántas clases, precio total y
- *     cuántos días dura desde la compra) y puede dejar de ofrecerlos.
+ *   - Docente: arma los paquetes que ofrece (cuántas clases, cuánto dura cada
+ *     una, precio total y cuántos días vale desde la compra) y puede dejar de
+ *     ofrecerlos.
  *   - Alumno: ve los paquetes que compró (cuántas clases le quedan y cuándo
  *     vence) y los que puede comprar.
  *
  * Un paquete sirve para cualquier clase de ese docente: al reservar, el
- * alumno sigue eligiendo materia, modalidad y duración, y marca que la usa
- * con el paquete. Cada asistencia descuenta una clase. Nada se cobra de
+ * alumno sigue eligiendo materia, modalidad y duración, y elige cuántas
+ * clases del paquete usa; lo que se pase de lo que cubren lo paga aparte.
+ * Cada asistencia descuenta las clases del paquete que usó. Nada se cobra de
  * verdad: comprar solo lo registra, como pagar una clase.
  */
 class PacksPage extends Component {
@@ -111,11 +120,20 @@ class PacksPage extends Component {
   // --- Docente --------------------------------------------------------------
 
   getFormErrors() {
-    const { classCount, price, validityDays } = this.state.form
+    const { classCount, classMinutes, price, validityDays } = this.state.form
     const errors = {}
     const cantidad = parseIntField(classCount)
     if (Number.isNaN(cantidad) || cantidad < MIN_CLASSES || cantidad > MAX_CLASSES) {
       errors.classCount = `Entre ${MIN_CLASSES} y ${MAX_CLASSES} clases.`
+    }
+    const minutos = parseIntField(classMinutes)
+    if (
+      Number.isNaN(minutos) ||
+      minutos < MIN_CLASS_MINUTES ||
+      minutos > MAX_CLASS_MINUTES ||
+      minutos % 5 !== 0
+    ) {
+      errors.classMinutes = `Entre ${MIN_CLASS_MINUTES} y ${MAX_CLASS_MINUTES} minutos, de a 5.`
     }
     const centavos = parseMoney(price.trim())
     if (!price.trim() || Number.isNaN(centavos) || centavos > MAX_HOURLY_RATE_CENTS) {
@@ -142,14 +160,17 @@ class PacksPage extends Component {
     if (this.state.saving) return
     const errors = this.getFormErrors()
     if (Object.keys(errors).length > 0) {
-      this.setState({ touched: { classCount: true, price: true, validityDays: true } })
+      this.setState({
+        touched: { classCount: true, classMinutes: true, price: true, validityDays: true },
+      })
       return
     }
 
-    const { classCount, price, validityDays } = this.state.form
+    const { classCount, classMinutes, price, validityDays } = this.state.form
     this.setState({ saving: true, saveError: null })
     createPackOffer({
       classCount: Number(classCount),
+      classMinutes: Number(classMinutes),
       priceCents: parseMoney(price.trim()),
       validityDays: Number(validityDays),
     })
@@ -204,7 +225,9 @@ class PacksPage extends Component {
               {offers.map((offer) => (
                 <li key={offer.id} className="pack-card">
                   <div className="pack-card-head">
-                    <span className="pack-card-title">{classesLabel(offer.classCount)}</span>
+                    <span className="pack-card-title">
+                      {packClassesLabel(offer.classCount, offer.classMinutes)}
+                    </span>
                     <span className="pack-card-price">{formatMoney(offer.priceCents)}</span>
                   </div>
                   <p className="pack-card-meta">{validityLabel(offer.validityDays)} desde la compra</p>
@@ -232,8 +255,10 @@ class PacksPage extends Component {
           </h2>
           <form className="pack-form" onSubmit={this.handleCreate} noValidate>
             <p className="packs-hint">
-              Sirve para cualquier clase tuya: el alumno elige materia, modalidad y duración al
-              reservar. Cada asistencia que marcás descuenta una clase del paquete.
+              Sirve para cualquier clase tuya. Al reservar, el alumno elige materia, modalidad y
+              duración, y cuántas clases del paquete usa: si la clase dura más de lo que cubren,
+              paga la diferencia con tu tarifa. Cada asistencia que marcás descuenta las clases
+              del paquete que usó.
             </p>
             <div className="pack-form-fields">
               <FormField
@@ -244,6 +269,15 @@ class PacksPage extends Component {
                 onBlur={this.handleFormBlur('classCount')}
                 touched={touched.classCount}
                 error={errors.classCount}
+              />
+              <FormField
+                label="Duración de cada clase (min)"
+                inputMode="numeric"
+                value={form.classMinutes}
+                onChange={this.handleFormChange('classMinutes')}
+                onBlur={this.handleFormBlur('classMinutes')}
+                touched={touched.classMinutes}
+                error={errors.classMinutes}
               />
               <FormField
                 label="Precio total ($)"
@@ -315,7 +349,9 @@ class PacksPage extends Component {
     return (
       <li key={pack.id} className={`pack-card ${pack.expired ? 'is-expired' : ''}`}>
         <div className="pack-card-head">
-          <span className="pack-card-title">con {pack.teacherName}</span>
+          <span className="pack-card-title">
+            {packClassesLabel(pack.classCount, pack.classMinutes)} con {pack.teacherName}
+          </span>
           <span className={`pack-card-badge ${pack.expired ? 'is-muted' : ''}`}>{estado}</span>
         </div>
         <p className="pack-card-remaining">
@@ -346,8 +382,8 @@ class PacksPage extends Component {
       <>
         {bought ? (
           <Banner type="success">
-            Listo, compraste {classesLabel(bought.classCount)} con {bought.teacherName}. Al reservar,
-            elegí usar tu paquete.{' '}
+            Listo, compraste {packClassesLabel(bought.classCount, bought.classMinutes)} con{' '}
+            {bought.teacherName}. Al reservar, elegí cuántas clases del paquete usás.{' '}
             <Link className="auth-link" to="/disponibilidad">
               Ir a reservar
             </Link>
@@ -377,13 +413,14 @@ class PacksPage extends Component {
                 <li key={offer.id} className="pack-card">
                   <div className="pack-card-head">
                     <span className="pack-card-title">
-                      {classesLabel(offer.classCount)} con {offer.teacherName}
+                      {packClassesLabel(offer.classCount, offer.classMinutes)} con{' '}
+                      {offer.teacherName}
                     </span>
                     <span className="pack-card-price">{formatMoney(offer.priceCents)}</span>
                   </div>
                   <p className="pack-card-meta">
                     {validityLabel(offer.validityDays)} desde la compra · cualquier materia y
-                    modalidad
+                    modalidad · si la clase dura más, pagás la diferencia
                   </p>
                   <div className="pack-card-actions">
                     <button
@@ -413,10 +450,11 @@ class PacksPage extends Component {
     return (
       <Modal title="Comprar paquete" onClose={this.handleCloseBuy}>
         <p className="packs-confirm-text">
-          {classesLabel(buying.classCount)} con {buying.teacherName} por{' '}
+          {packClassesLabel(buying.classCount, buying.classMinutes)} con {buying.teacherName} por{' '}
           <strong>{formatMoney(buying.priceCents)}</strong>. Vale {buying.validityDays}{' '}
           {buying.validityDays === 1 ? 'día' : 'días'} desde hoy, para cualquier materia y modalidad
-          de este docente. Cada clase a la que asistas descuenta una.
+          de este docente. En cada reserva elegís cuántas clases usás; si la clase dura más, pagás
+          la diferencia. Se descuentan cuando asistís.
         </p>
         {buyError ? <Banner type="danger">{buyError}</Banner> : null}
         <div className="btn-row">

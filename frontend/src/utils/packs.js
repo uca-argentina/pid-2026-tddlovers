@@ -1,9 +1,14 @@
 // Los paquetes de clases, del lado del front.
 //
+// Cada clase del paquete dura lo mismo (classMinutes, lo decide el docente).
+// Al reservar, el alumno usa una o más y paga aparte lo que se pase.
+//
 // Las cuentas (cuántas quedan, cuántas se pueden reservar, si venció) las
 // hace el backend (backend/src/lib/classPacks.js) y vienen en cada paquete.
 // Acá solo se decide qué mostrar y si ofrecer usar el paquete al reservar; el
 // backend vuelve a chequear todo cuando se reserva.
+
+import { formatMinutes } from './windows.js'
 
 const DATE_FORMAT = new Intl.DateTimeFormat('es-AR', {
   day: 'numeric',
@@ -25,23 +30,16 @@ export function activePacksWith(packs, teacherId) {
 }
 
 /**
- * Lo que se le muestra al alumno de sus paquetes con un docente, o null si no
- * tiene ninguno vigente: { remaining, available, expiresOn } sumando todos.
+ * Lo que se le muestra al alumno de su paquete con un docente (el que vence
+ * primero), o null si no tiene ninguno vigente.
  */
 export function packSummaryWith(packs, teacherId) {
-  const activos = activePacksWith(packs, teacherId)
-  if (activos.length === 0) return null
-  return {
-    remaining: activos.reduce((total, pack) => total + pack.remaining, 0),
-    available: activos.reduce((total, pack) => total + pack.available, 0),
-    expiresOn: activos[0].expiresOn,
-  }
+  return activePacksWith(packs, teacherId)[0] || null
 }
 
 /**
- * El paquete con el que se podría reservar una clase de ese docente ese día
- * (el mismo criterio que StudentPack.choose del backend: el que vence
- * primero), o null.
+ * El paquete con el que se podría reservar una clase de ese docente ese día:
+ * el que vence primero entre los que tienen clases para reservar, o null.
  */
 export function usablePackFor(packs, teacherId, date) {
   return (
@@ -49,6 +47,20 @@ export function usablePackFor(packs, teacherId, date) {
       (pack) => pack.available > 0 && date <= pack.expiresOn,
     ) || null
   )
+}
+
+/**
+ * Cuántas clases del paquete se pueden usar en una clase de `minutes`: las
+ * que quedan, sin cubrir más de lo que dura (el backend rechaza eso).
+ */
+export function maxTokensFor(pack, minutes) {
+  if (!pack || !minutes) return 0
+  return Math.min(pack.available, Math.floor(minutes / pack.classMinutes))
+}
+
+/** '4 clases de 1 h' / '1 clase de 1 h 30 min'. */
+export function packClassesLabel(count, classMinutes) {
+  return `${classesLabel(count)} de ${formatMinutes(classMinutes)}`
 }
 
 /** '1 clase' / '3 clases'. */

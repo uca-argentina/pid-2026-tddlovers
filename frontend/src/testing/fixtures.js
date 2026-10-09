@@ -32,6 +32,7 @@ export function apiClass(overrides = {}) {
     cancelReason: null,
     rescheduledFrom: null,
     studentPackId: null,
+    packTokens: 0,
     enrolled: 1,
     ...overrides,
   }

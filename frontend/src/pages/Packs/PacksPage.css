@@ -214,10 +214,10 @@
   box-shadow: var(--shadow-panel);
 }
 
-/* Tres campos en fila en la compu; uno abajo del otro en el teléfono. */
+/* Dos campos por fila en la compu; uno abajo del otro en el teléfono. */
 .pack-form-fields {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 0 12px;
 }
 

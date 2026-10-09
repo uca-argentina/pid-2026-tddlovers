@@ -27,6 +27,7 @@ const CLASS_COLUMNS = `
   c.cancel_reason AS "cancelReason",
   c.rescheduled_from AS "rescheduledFrom",
   c.student_pack_id AS "studentPackId",
+  c.pack_tokens AS "packTokens",
   (
     -- Cuántos hay anotados en ese turno (una grupal son varias filas con el
     -- mismo docente, fecha e inicio). Un número y no nombres: el alumno ve
@@ -186,10 +187,11 @@ async function insertClass(
     priceCents,
     rescheduledFrom = null,
     studentPackId = null,
+    packTokens = 0,
   }
 ) {
   if (studentPackId) {
-    const packConflict = await reservePackSlot(client, studentPackId, date);
+    const packConflict = await reservePackSlot(client, studentPackId, date, packTokens);
     if (packConflict) return { conflict: packConflict };
   }
 
@@ -224,10 +226,10 @@ async function insertClass(
     `INSERT INTO classes (
        teacher_id, student_id, subject_id, class_date, start_time, end_time,
        availability_id, modality, max_students, meeting_url, address, locality, price_cents,
-       rescheduled_from, student_pack_id
+       rescheduled_from, student_pack_id, pack_tokens
      )
      VALUES ($1, $2, $3, $4::date, $5::time, $6::time, $7, $8::class_modality, $9, $10, $11, $12, $13, $14,
-             $15)
+             $15, $16)
      RETURNING id`,
     [
       window.teacherId,
@@ -245,6 +247,7 @@ async function insertClass(
       priceCents,
       rescheduledFrom,
       studentPackId,
+      packTokens,
     ]
   );
   return { id: result.rows[0].id };
@@ -257,18 +260,18 @@ async function insertClass(
  * fecha no los frena). Acá se vuelve a contar con el paquete bloqueado.
  * null si hay lugar, o el mensaje.
  */
-async function reservePackSlot(client, studentPackId, date) {
+async function reservePackSlot(client, studentPackId, date, packTokens) {
   await client.query(`SELECT pg_advisory_xact_lock(hashtext('pack:' || $1))`, [studentPackId]);
   const result = await client.query(
-    `SELECT sp.class_count > (
-              SELECT count(*) FROM classes c
+    `SELECT sp.class_count >= $3 + (
+              SELECT COALESCE(sum(c.pack_tokens), 0) FROM classes c
               WHERE c.student_pack_id = sp.id
                 AND c.status IN ('pendiente', 'aceptada', 'confirmada', 'realizada')
             ) AS "hasRoom",
             sp.expires_on >= $2::date AS "inTime"
      FROM student_packs sp
      WHERE sp.id = $1`,
-    [studentPackId, date]
+    [studentPackId, date, packTokens]
   );
   const row = result.rows[0];
   if (!row || !row.inTime) return 'Tu paquete ya no sirve para esa fecha.';

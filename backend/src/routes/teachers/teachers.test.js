@@ -308,7 +308,7 @@ describe('teacher list', () => {
 describe('teacher packs', () => {
   let app;
   const PAQUETE_ID = '7c6b5a49-3827-4615-8a9b-0c1d2e3f4a5b';
-  const paquete = { classCount: 4, priceCents: 1800000, validityDays: 30 };
+  const paquete = { classCount: 4, classMinutes: 60, priceCents: 1800000, validityDays: 30 };
 
   beforeEach(() => {
     app = buildApp({ logger: false });
@@ -336,7 +336,7 @@ describe('teacher packs', () => {
     expect(listTeacherOffers).toHaveBeenCalledWith('user-1');
   });
 
-  it('POST creates a pack with quantity, total price and validity', async () => {
+  it('POST creates a pack with quantity, class length, total price and validity', async () => {
     const headers = await authedHeaders(app);
 
     const res = await app.inject({
