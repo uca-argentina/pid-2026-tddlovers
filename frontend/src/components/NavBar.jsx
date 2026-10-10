@@ -2,7 +2,15 @@ import { Component } from 'react'
 import { NavLink } from 'react-router-dom'
 import SearchBar from './SearchBar.jsx'
 import ThemeToggle from './ThemeToggle.jsx'
-import { BookIcon, CalendarIcon, ClockIcon, ListCheckIcon, UserIcon, UsersIcon } from './icons.jsx'
+import {
+  BookIcon,
+  CalendarIcon,
+  ClockIcon,
+  HeartIcon,
+  ListCheckIcon,
+  UserIcon,
+  UsersIcon,
+} from './icons.jsx'
 import { getInitials } from '../utils/user.js'
 import './NavBar.css'
 
@@ -93,6 +101,13 @@ class NavBar extends Component {
               <BookIcon />
               <span className="navbar-item-label">Paquetes</span>
             </NavLink>
+            {/* Los favoritos son del alumno: el docente no tiene a quién marcar. */}
+            {esDocente ? null : (
+              <NavLink to="/favoritos" className={this.getLinkClass} aria-label="Mis favoritos">
+                <HeartIcon />
+                <span className="navbar-item-label">Favoritos</span>
+              </NavLink>
+            )}
           </nav>
         )}
 

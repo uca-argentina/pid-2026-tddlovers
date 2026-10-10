@@ -4,7 +4,8 @@ import Banner from '../../components/Banner.jsx'
 import MonthPane from './MonthPane.jsx'
 import DayAgenda from './DayAgenda.jsx'
 import { addDays, fromISODate, toISODate } from '../../utils/calendar.js'
-import { fetchClasses } from '../../api/client.js'
+import { fetchClasses, fetchFavoriteTeachers } from '../../api/client.js'
+import { favoriteIdsOf, withFavorite } from '../../utils/favorites.js'
 import './CalendarPage.css'
 
 // Esta pantalla es "mis clases": todo lo que sigue en pie, en cualquier
@@ -38,6 +39,10 @@ class CalendarPage extends Component {
     // Solo para el docente: cuántas reservas esperan que responda, en
     // cualquier mes (no solo el que se está mirando).
     pendingCount: 0,
+    // Solo para el alumno: ids de sus docentes favoritos, para el corazón al
+    // lado de "Docente:". null = no se muestran corazones.
+    favoriteIds: null,
+    favoriteError: null,
   }
 
   // Contador para descartar respuestas viejas: si se cambia de mes mientras
@@ -48,13 +53,51 @@ class CalendarPage extends Component {
 
   pendingToken = 0
 
+  favoritesToken = 0
+
   componentDidMount() {
     if (this.props.viewRole === 'teacher') this.loadPending()
+    this.loadFavorites()
+  }
+
+  componentDidUpdate(prevProps) {
+    if (prevProps.viewRole !== this.props.viewRole) this.loadFavorites()
   }
 
   componentWillUnmount() {
     this.fetchToken += 1
     this.pendingToken += 1
+    this.favoritesToken += 1
+  }
+
+  /**
+   * Solo el alumno tiene favoritos. Si el pedido falla no se muestran los
+   * corazones: uno vacío para un docente que ya es favorito mentiría.
+   */
+  loadFavorites() {
+    const token = ++this.favoritesToken
+    if (this.props.viewRole !== 'student') {
+      this.setState({ favoriteIds: null })
+      return
+    }
+    fetchFavoriteTeachers()
+      .then((teachers) => {
+        if (token === this.favoritesToken) this.setState({ favoriteIds: favoriteIdsOf(teachers) })
+      })
+      .catch(() => {
+        if (token === this.favoritesToken) this.setState({ favoriteIds: null })
+      })
+  }
+
+  handleFavoriteChange = (teacherId, favorite) => {
+    this.setState((prev) => ({
+      favoriteIds: withFavorite(prev.favoriteIds, teacherId, favorite),
+      favoriteError: null,
+    }))
+  }
+
+  handleFavoriteError = (message) => {
+    this.setState({ favoriteError: message })
   }
 
   loadPending = () => {
@@ -196,12 +239,18 @@ class CalendarPage extends Component {
             complementario. En pantallas chicas se apilan en el orden del
             DOM, que es el que conviene ahí. */}
         <aside className="calendar-aside">
+          {this.state.favoriteError ? (
+            <Banner type="danger">{this.state.favoriteError}</Banner>
+          ) : null}
           <DayAgenda
             date={fromISODate(selectedIso)}
             classes={classesByDate[selectedIso] || []}
             loading={classesLoading}
             viewRole={this.props.viewRole}
+            favoriteIds={this.state.favoriteIds}
             onClassChange={this.handleClassChange}
+            onFavoriteChange={this.handleFavoriteChange}
+            onFavoriteError={this.handleFavoriteError}
           />
         </aside>
       </div>

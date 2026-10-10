@@ -18,6 +18,7 @@ const {
   fetchMyVacations,
   fetchAvailability,
   fetchMyLessons,
+  fetchFavoriteTeachers,
   fetchCurrentUser,
   logoutAccount,
 } = vi.hoisted(() => ({
@@ -31,6 +32,8 @@ const {
   fetchMyVacations: vi.fn(() => Promise.resolve([])),
   fetchAvailability: vi.fn(),
   fetchMyLessons: vi.fn(),
+  // El calendario del alumno pide sus favoritos; acá no tiene ninguno.
+  fetchFavoriteTeachers: vi.fn(() => Promise.resolve([])),
   fetchCurrentUser: vi.fn(),
   logoutAccount: vi.fn(),
 }))
@@ -45,6 +48,7 @@ vi.mock('./api/client.js', () => ({
   fetchMyVacations,
   fetchAvailability,
   fetchMyLessons,
+  fetchFavoriteTeachers,
   fetchCurrentUser,
   logoutAccount,
 }))

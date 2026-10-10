@@ -5,6 +5,10 @@
   margin-inline: auto;
 }
 
+.reservations-page > .banner {
+  margin-bottom: 16px;
+}
+
 .reservations-title {
   font-size: 22px;
   font-weight: 700;
@@ -96,6 +100,13 @@
   font-size: 15px;
   font-weight: 600;
   color: var(--color-text);
+}
+
+.reservation-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .reservation-meta {

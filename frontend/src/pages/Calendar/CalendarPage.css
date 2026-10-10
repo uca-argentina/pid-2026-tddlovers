@@ -12,8 +12,18 @@
 
 .calendar-aside {
   order: -1;
-  width: 290px;
+  /* El mismo ancho que la columna de Reservar: las tarjetas son las mismas. */
+  width: 360px;
   flex-shrink: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* El detalle del día ocupa lo que queda; si arriba hay un aviso, se achica
+   en vez de pasarse del alto del calendario. */
+.calendar-aside > .day-agenda {
+  flex: 1;
   min-height: 0;
 }
 
@@ -46,4 +56,10 @@
 .calendar-pending a {
   color: inherit;
   font-weight: 600;
+}
+
+/* Si falla marcar un favorito, el aviso va arriba del detalle del día, al
+   lado del corazón que se tocó. */
+.calendar-aside > .banner {
+  margin-bottom: 12px;
 }

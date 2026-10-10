@@ -98,6 +98,15 @@
   transform: none;
 }
 
+/* Los íconos de icons.jsx no traen tamaño: sin esto, el spinner de "guardando"
+   se estiraba a todo el ancho del botón. Las pantallas que quieren otro
+   tamaño lo pisan con su propia regla (p. ej. .vacations-form .btn svg). */
+.btn svg {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+}
+
 .btn-primary {
   background: var(--color-primary);
   color: #fff;

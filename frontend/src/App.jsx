@@ -5,6 +5,7 @@ import AdminPage from './pages/Admin/AdminPage.jsx'
 import PacksPage from './pages/Packs/PacksPage.jsx'
 import AvailabilityPage from './pages/Availability/AvailabilityPage.jsx'
 import CalendarPage from './pages/Calendar/CalendarPage.jsx'
+import FavoritesPage from './pages/Favorites/FavoritesPage.jsx'
 import LoginPage from './pages/Login/LoginPage.jsx'
 import ProfilePage from './pages/Profile/ProfilePage.jsx'
 import RegisterPage from './pages/Register/RegisterPage.jsx'
@@ -139,6 +140,7 @@ class App extends Component {
             />
             <Route path="/reservas" element={<ReservationsPage viewRole={viewRole} />} />
             <Route path="/paquetes" element={<PacksPage viewRole={viewRole} user={user} />} />
+            <Route path="/favoritos" element={<FavoritesPage viewRole={viewRole} />} />
             <Route
               path="/disponibilidad"
               element={<AvailabilityPage viewRole={viewRole} user={user} />}
