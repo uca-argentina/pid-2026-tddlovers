@@ -32,17 +32,21 @@ const KINDS = [
  * incómodas de recorrer para algo que en la práctica es "de tarde". Hacia
  * afuera el filtro no cambió — sigue siendo fromTime/toTime en "HH:MM", vacío
  * cuando no hay límite.
+ *
+ * Con `inSheet` vive adentro de la hoja "Filtros" del teléfono: sin título
+ * (lo pone la hoja), sin "Limpiar filtros" (va al pie de la hoja) y con todas
+ * las secciones abiertas, porque ahí sí hay lugar y plegar es un toque más.
  */
 class BookingFilters extends Component {
   // Qué secciones están abiertas. Se decide una sola vez, al montar, a partir
   // de lo que venga elegido; después manda el usuario.
   state = {
     abiertas: {
-      dias: this.props.dayKeys.length > 0,
-      materias: this.props.subjectIds.length > 0,
-      modalidad: this.props.modalities.length > 0,
-      tipo: this.props.kinds.length > 0,
-      horario: Boolean(this.props.fromTime || this.props.toTime),
+      dias: this.props.inSheet || this.props.dayKeys.length > 0,
+      materias: this.props.inSheet || this.props.subjectIds.length > 0,
+      modalidad: this.props.inSheet || this.props.modalities.length > 0,
+      tipo: this.props.inSheet || this.props.kinds.length > 0,
+      horario: this.props.inSheet || Boolean(this.props.fromTime || this.props.toTime),
     },
   }
 
@@ -218,11 +222,11 @@ class BookingFilters extends Component {
   }
 
   render() {
-    const { teacherQuery, onClearTeacher, onClear, hasFilters } = this.props
+    const { teacherQuery, onClearTeacher, onClear, hasFilters, inSheet } = this.props
 
     return (
-      <div className="booking-filters">
-        <h2 className="booking-filters-title">Filtros</h2>
+      <div className={`booking-filters ${inSheet ? 'is-sheet' : ''}`}>
+        {inSheet ? null : <h2 className="booking-filters-title">Filtros</h2>}
 
         {this.renderFavorites()}
 
@@ -254,7 +258,7 @@ class BookingFilters extends Component {
           </div>
         ) : null}
 
-        {hasFilters ? (
+        {hasFilters && !inSheet ? (
           <button type="button" className="btn btn-ghost booking-filters-clear" onClick={onClear}>
             Limpiar filtros
           </button>
@@ -273,6 +277,7 @@ BookingFilters.defaultProps = {
   fromTime: '',
   toTime: '',
   teacherQuery: '',
+  inSheet: false,
   showFavorites: false,
   onlyFavorites: false,
   onToggleFavorites: () => {},

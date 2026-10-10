@@ -47,3 +47,32 @@
     flex: none;
   }
 }
+
+/* --- Teléfono: la tira de semana ------------------------------------------ */
+
+/* Sin tarjeta: la tira es el encabezado de la pantalla y va directo sobre el
+   fondo, como en el Calendario de iOS. */
+.month-pane.is-mobile {
+  flex: none;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  gap: 10px;
+}
+
+.month-pane.is-mobile > .banner,
+.month-pane.is-mobile > .booking-reschedule,
+.month-pane.is-mobile > .calendar-pending {
+  margin: 0;
+}
+
+/* La grilla desplegada es compacta: solo puntitos, filas bajas. */
+.month-pane.is-mobile .month-pane-viewport {
+  flex: none;
+}
+
+.month-pane.is-mobile .month-grid-weeks {
+  grid-template-rows: repeat(6, 52px);
+}

@@ -100,3 +100,69 @@
   padding: 0;
   cursor: pointer;
 }
+
+/* --- Teléfono --------------------------------------------------------------- */
+
+.booking-board.is-mobile {
+  height: auto;
+  gap: 18px;
+}
+
+.booking-mobile-head {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* La fila de chips rápidos se desliza de costado y llega hasta el borde de
+   la pantalla (el margen negativo deshace el padding de .app-main), como las
+   filas de filtros de iOS. */
+.booking-quick {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  margin-inline: -16px;
+  padding: 2px 16px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.booking-quick::-webkit-scrollbar {
+  display: none;
+}
+
+.booking-quick .subject-chip {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.booking-quick .subject-chip svg {
+  width: 14px;
+  height: 14px;
+}
+
+.booking-quick-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--color-primary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* El pie de la hoja de filtros: queda pegado abajo aunque la hoja scrollee. */
+.booking-sheet-foot {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  gap: 10px;
+  margin: 12px -18px calc(-20px - env(safe-area-inset-bottom));
+  padding: 12px 18px calc(12px + env(safe-area-inset-bottom));
+  background: var(--color-surface-solid);
+  border-top: 1px solid var(--color-border);
+}

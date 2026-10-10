@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import Banner from '../../components/Banner.jsx'
 import MonthPane from './MonthPane.jsx'
 import DayAgenda from './DayAgenda.jsx'
-import { addDays, fromISODate, toISODate } from '../../utils/calendar.js'
+import { addDays, toISODate } from '../../utils/calendar.js'
 import { fetchClasses, fetchFavoriteTeachers } from '../../api/client.js'
 import { favoriteIdsOf, withFavorite } from '../../utils/favorites.js'
 import './CalendarPage.css'
@@ -243,8 +243,8 @@ class CalendarPage extends Component {
             <Banner type="danger">{this.state.favoriteError}</Banner>
           ) : null}
           <DayAgenda
-            date={fromISODate(selectedIso)}
-            classes={classesByDate[selectedIso] || []}
+            classesByDate={classesByDate}
+            selectedIso={selectedIso}
             loading={classesLoading}
             viewRole={this.props.viewRole}
             favoriteIds={this.state.favoriteIds}

@@ -40,3 +40,9 @@ export function watchQuery(query, handler) {
 
   return null
 }
+
+// El corte de la interfaz de teléfono (tira de semana, hojas desde abajo,
+// barra de 5 pestañas...). Mismo número que los @media (max-width: 700px) de
+// los .css: si cambia uno, cambia el otro. Las tablets quedan del otro lado y
+// ven la versión de escritorio.
+export const MOBILE_QUERY = '(max-width: 700px)'

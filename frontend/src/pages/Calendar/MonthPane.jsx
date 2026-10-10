@@ -2,13 +2,19 @@ import { Component, createRef } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import MonthHeader from './MonthHeader.jsx'
 import MonthGrid from './MonthGrid.jsx'
+import WeekStrip from '../../components/WeekStrip.jsx'
+import withViewport from '../../routes/withViewport.jsx'
 import {
+  addDays,
   addMonths,
   buildMonthGrid,
+  formatMonthName,
   formatMonthTitle,
+  fromISODate,
   startOfMonth,
   toISODate,
 } from '../../utils/calendar.js'
+import { startOfWeek, weekDates } from '../../utils/windows.js'
 import './MonthPane.css'
 
 // Mismo patrón que RegisterPage pero con menos desplazamiento: acá se mueve
@@ -38,12 +44,19 @@ const FALLBACK_LINE_HEIGHT = 19
  * así el guard de respuestas viejas (fetchToken) se queda al lado del pedido
  * que protege. `selectedIso` también queda afuera porque lo comparten los dos
  * paneles de cada pantalla.
+ *
+ * En el teléfono (`mobile`, de withViewport) no se ve el mes sino la tira de
+ * semana del día elegido, como el Calendario de iOS; el botón "Mes" despliega
+ * la grilla. El mes cargado sigue al día elegido (showMonthOf), así la semana
+ * de la tira siempre cae dentro del rango que se le pidió al backend.
  */
 class MonthPane extends Component {
   state = {
     viewDate: startOfMonth(new Date().getFullYear(), new Date().getMonth()),
     direction: 1,
     maxVisibleEvents: DEFAULT_VISIBLE_EVENTS,
+    // Solo en el teléfono: si la grilla del mes está desplegada.
+    expanded: false,
   }
 
   gridRef = createRef()
@@ -126,11 +139,138 @@ class MonthPane extends Component {
 
   handleSelectDay = (iso) => () => {
     this.props.onSelectDay(iso)
+    // En el teléfono, elegir un día en la grilla vuelve a la tira, como en
+    // iOS: lo que se quiere ver es ese día.
+    if (this.props.mobile && this.state.expanded) {
+      this.showMonthOf(iso)
+      this.setState({ expanded: false })
+    }
+  }
+
+  /** Lleva la grilla (y el rango pedido) al mes de ese día, si no está ahí. */
+  showMonthOf(iso) {
+    const date = fromISODate(iso)
+    const target = startOfMonth(date.getFullYear(), date.getMonth())
+    this.setState((prev) =>
+      target.getTime() === prev.viewDate.getTime()
+        ? null
+        : { viewDate: target, direction: target < prev.viewDate ? -1 : 1 },
+    )
+  }
+
+  selectFromStrip = (iso) => {
+    this.props.onSelectDay(iso)
+    this.showMonthOf(iso)
+  }
+
+  /** Las flechas de la tira: de a una semana, o de a un mes si está desplegada. */
+  handleStripPrev = () => {
+    if (this.state.expanded) this.handlePrevMonth()
+    else this.selectFromStrip(toISODate(addDays(fromISODate(this.props.selectedIso), -7)))
+  }
+
+  handleStripNext = () => {
+    if (this.state.expanded) this.handleNextMonth()
+    else this.selectFromStrip(toISODate(addDays(fromISODate(this.props.selectedIso), 7)))
+  }
+
+  handleToggleExpanded = () => {
+    // Al desplegar, el mes que se ve es el del día elegido.
+    if (!this.state.expanded) this.showMonthOf(this.props.selectedIso)
+    this.setState((prev) => ({ expanded: !prev.expanded }))
+  }
+
+  /** Los siete días de la semana del día elegido, para la tira. */
+  getStripDays() {
+    const { eventsByDate, freeByDate, selectedIso } = this.props
+    const hoy = toISODate(new Date())
+    return weekDates(startOfWeek(fromISODate(selectedIso))).map((date) => {
+      const iso = toISODate(date)
+      const libres = freeByDate[iso] || 0
+      const propias = (eventsByDate[iso] || []).length
+      return {
+        iso,
+        date,
+        isToday: iso === hoy,
+        marked: libres > 0 || propias > 0,
+        // Verde si hay algo para reservar, azul si solo hay clases propias:
+        // los mismos colores que la grilla.
+        tone: libres > 0 ? 'free' : 'event',
+      }
+    })
+  }
+
+  renderGrid() {
+    const { eventsByDate, freeByDate, selectedIso } = this.props
+    const { viewDate, direction, maxVisibleEvents } = this.state
+
+    return (
+      <div className="month-pane-viewport">
+        <AnimatePresence mode="wait" custom={direction} initial={false}>
+          <motion.div
+            key={viewDate.getTime()}
+            className="month-pane-slide"
+            custom={direction}
+            variants={slideVariants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={{ duration: 0.2, ease: 'easeInOut' }}
+          >
+            <MonthGrid
+              weeks={this.getWeeks()}
+              classesByDate={eventsByDate}
+              freeByDate={freeByDate}
+              selectedIso={selectedIso}
+              onSelectDay={this.handleSelectDay}
+              maxVisibleEvents={maxVisibleEvents}
+              gridRef={this.gridRef}
+            />
+          </motion.div>
+        </AnimatePresence>
+      </div>
+    )
+  }
+
+  renderMobile() {
+    const { selectedIso, loading, children } = this.props
+    const { expanded, viewDate } = this.state
+    const titulo = expanded ? viewDate : fromISODate(selectedIso)
+
+    return (
+      <section className="month-pane is-mobile">
+        <WeekStrip
+          heading="h1"
+          title={formatMonthName(titulo)}
+          year={titulo.getFullYear()}
+          compact={this.props.compactTitle}
+          loading={loading}
+          days={this.getStripDays()}
+          selectedIso={selectedIso}
+          markedLabel={this.props.markedLabel}
+          expandable
+          expanded={expanded}
+          prevLabel={expanded ? 'Mes anterior' : 'Semana anterior'}
+          nextLabel={expanded ? 'Mes siguiente' : 'Semana siguiente'}
+          todayDisabled={!expanded && selectedIso === toISODate(new Date())}
+          onSelect={this.selectFromStrip}
+          onPrev={this.handleStripPrev}
+          onNext={this.handleStripNext}
+          onToday={this.handleToday}
+          onToggleExpanded={this.handleToggleExpanded}
+        >
+          {this.renderGrid()}
+        </WeekStrip>
+        {children}
+      </section>
+    )
   }
 
   render() {
-    const { eventsByDate, freeByDate, selectedIso, loading, children } = this.props
-    const { viewDate, direction, maxVisibleEvents } = this.state
+    if (this.props.mobile) return this.renderMobile()
+
+    const { loading, children } = this.props
+    const { viewDate } = this.state
 
     return (
       <section className="month-pane">
@@ -142,30 +282,7 @@ class MonthPane extends Component {
           onToday={this.handleToday}
         />
         {children}
-        <div className="month-pane-viewport">
-          <AnimatePresence mode="wait" custom={direction} initial={false}>
-            <motion.div
-              key={viewDate.getTime()}
-              className="month-pane-slide"
-              custom={direction}
-              variants={slideVariants}
-              initial="enter"
-              animate="center"
-              exit="exit"
-              transition={{ duration: 0.2, ease: 'easeInOut' }}
-            >
-              <MonthGrid
-                weeks={this.getWeeks()}
-                classesByDate={eventsByDate}
-                freeByDate={freeByDate}
-                selectedIso={selectedIso}
-                onSelectDay={this.handleSelectDay}
-                maxVisibleEvents={maxVisibleEvents}
-                gridRef={this.gridRef}
-              />
-            </motion.div>
-          </AnimatePresence>
-        </div>
+        {this.renderGrid()}
       </section>
     )
   }
@@ -175,6 +292,12 @@ MonthPane.defaultProps = {
   eventsByDate: {},
   freeByDate: {},
   loading: false,
+  mobile: false,
+  // Cómo se lee un puntito de la tira en un lector de pantalla.
+  markedLabel: 'hay clases',
+  // En el teléfono, el mes más chico: para cuando la pantalla ya tiene su
+  // propio título grande (Reservar).
+  compactTitle: false,
 }
 
-export default MonthPane
+export default withViewport(MonthPane)

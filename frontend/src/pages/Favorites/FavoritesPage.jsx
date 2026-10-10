@@ -2,7 +2,8 @@ import { Component } from 'react'
 import { Link } from 'react-router-dom'
 import Banner from '../../components/Banner.jsx'
 import FavoriteButton from '../../components/FavoriteButton.jsx'
-import { ClockIcon, SpinnerIcon } from '../../components/icons.jsx'
+import { ChevronLeftIcon, ClockIcon, SpinnerIcon } from '../../components/icons.jsx'
+import withViewport from '../../routes/withViewport.jsx'
 import { fetchFavoriteTeachers } from '../../api/client.js'
 import './FavoritesPage.css'
 
@@ -16,6 +17,9 @@ import './FavoritesPage.css'
  *
  * "Ver horarios" reusa el buscador: lleva al tablero con ?q=<nombre>, que lo
  * filtra por ese docente igual que si se lo hubiera buscado arriba.
+ *
+ * En el teléfono no es una pestaña: se llega desde el Perfil, así que arriba
+ * va el "‹ Perfil" de iOS para volver.
  */
 class FavoritesPage extends Component {
   state = {
@@ -135,6 +139,12 @@ class FavoritesPage extends Component {
   render() {
     return (
       <div className="favorites-page">
+        {this.props.mobile ? (
+          <Link to="/perfil" className="favorites-back">
+            <ChevronLeftIcon />
+            Perfil
+          </Link>
+        ) : null}
         <h1 className="favorites-title">Mis favoritos</h1>
         <p className="favorites-subtitle">
           Los docentes que marcaste con el corazón. Entrá a sus horarios para reservar.
@@ -148,6 +158,7 @@ class FavoritesPage extends Component {
 
 FavoritesPage.defaultProps = {
   viewRole: 'student',
+  mobile: false,
 }
 
-export default FavoritesPage
+export default withViewport(FavoritesPage)

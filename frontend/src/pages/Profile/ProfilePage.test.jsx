@@ -361,4 +361,30 @@ describe('ProfilePage', () => {
     // Sin usuario no hay nada que editar: no gastamos la llamada.
     expect(fetchSubjects).not.toHaveBeenCalled()
   })
+
+  describe('en el teléfono', () => {
+    it('el grupo General lleva a favoritos, cambia el tema y cierra sesión', async () => {
+      const onLogout = vi.fn()
+      renderProfile({ mobile: true, onLogout })
+      await esperarMaterias()
+
+      expect(screen.getByRole('link', { name: /Docentes favoritos/ })).toHaveAttribute(
+        'href',
+        '/favoritos',
+      )
+      expect(screen.getByRole('switch', { name: /Modo oscuro/ })).toBeInTheDocument()
+
+      await userEvent.click(screen.getByRole('link', { name: 'Cerrar sesión' }))
+      expect(onLogout).toHaveBeenCalled()
+    })
+
+    it('el docente no tiene la fila de favoritos', async () => {
+      fetchSubjects.mockResolvedValue(MATERIAS)
+      renderProfile({ mobile: true, viewRole: 'teacher' })
+      await esperarMaterias()
+
+      expect(screen.queryByRole('link', { name: /Docentes favoritos/ })).not.toBeInTheDocument()
+      expect(screen.getByRole('link', { name: 'Cerrar sesión' })).toBeInTheDocument()
+    })
+  })
 })

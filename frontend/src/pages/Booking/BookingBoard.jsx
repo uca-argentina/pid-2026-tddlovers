@@ -4,6 +4,10 @@ import BookingFilters from './BookingFilters.jsx'
 import BookingResults from './BookingResults.jsx'
 import BookingDialog from './BookingDialog.jsx'
 import Banner from '../../components/Banner.jsx'
+import Modal from '../../components/Modal.jsx'
+import SearchBar from '../../components/SearchBar.jsx'
+import { FilterIcon, HeartIcon } from '../../components/icons.jsx'
+import withViewport from '../../routes/withViewport.jsx'
 import {
   fetchAvailability,
   fetchClass,
@@ -20,7 +24,14 @@ import {
   groupCardsByDate,
   resolveQuery,
 } from '../../utils/booking.js'
+import { MODALITIES } from '../../utils/windows.js'
 import './BookingBoard.css'
+
+// Los chips rápidos del teléfono: lo que más se toca, sin abrir la hoja.
+const QUICK_KINDS = [
+  { key: 'individual', label: 'Individual' },
+  { key: 'group', label: 'Grupal' },
+]
 
 // Cuando no hay nada que anotar, SIEMPRE el mismo objeto: lo que sale de acá
 // baja hasta MonthPane y hasta las tarjetas.
@@ -45,6 +56,11 @@ const SIN_TARJETAS = { slots: null, myLessons: null, excludeId: null, cards: [] 
  * El `router` llega por props desde AvailabilityPage en vez de envolver esto
  * en otro withRouter: alcanza con un puente por ruta y así sigue siendo obvio
  * que los hooks viven en un solo archivo.
+ *
+ * En el teléfono (`mobile`) se arma distinto: título grande, el buscador
+ * (que ahí no está en la barra), una fila de chips rápidos con el botón
+ * "Filtros" que abre todos en una hoja, la tira de semana y la lista del día.
+ * Los filtros y su estado son los mismos: solo cambia dónde se tocan.
  */
 class BookingBoard extends Component {
   state = {
@@ -79,6 +95,8 @@ class BookingBoard extends Component {
     toTime: '',
     teacherQuery: '',
     onlyFavorites: false,
+    // Solo en el teléfono: si la hoja de filtros está abierta.
+    filtersOpen: false,
   }
 
   // Dos contadores y no uno: si un cambio de mes compartiera token con el
@@ -343,6 +361,20 @@ class BookingBoard extends Component {
     )
   }
 
+  /** Cuántos filtros hay prendidos, para el "Filtros (3)" del teléfono. */
+  countFilters() {
+    const { dayKeys, subjectIds, modalities, kinds, fromTime, toTime, teacherQuery } = this.state
+    return (
+      dayKeys.length +
+      subjectIds.length +
+      modalities.length +
+      kinds.length +
+      (fromTime || toTime ? 1 : 0) +
+      (teacherQuery ? 1 : 0) +
+      (this.state.onlyFavorites ? 1 : 0)
+    )
+  }
+
   getFilteredByDate() {
     return groupCardsByDate(filterCards(this.getCards(), this.getFilters()))
   }
@@ -484,6 +516,14 @@ class BookingBoard extends Component {
     })
   }
 
+  handleOpenFilters = () => {
+    this.setState({ filtersOpen: true })
+  }
+
+  handleCloseFilters = () => {
+    this.setState({ filtersOpen: false })
+  }
+
   handleReservar = (card) => () => {
     this.setState({ booking: card, booked: null })
   }
@@ -553,8 +593,182 @@ class BookingBoard extends Component {
     )
   }
 
+  /** Las props de BookingFilters, iguales en la columna y en la hoja. */
+  getFiltersProps() {
+    return {
+      subjects: this.getFilterSubjects(),
+      dayKeys: this.state.dayKeys,
+      subjectIds: this.state.subjectIds,
+      modalities: this.state.modalities,
+      kinds: this.state.kinds,
+      fromTime: this.state.fromTime,
+      toTime: this.state.toTime,
+      teacherQuery: this.state.teacherQuery,
+      showFavorites: this.isStudent(),
+      onlyFavorites: this.state.onlyFavorites,
+      hasFilters: this.hasFilters(),
+      onToggleDay: this.handleToggleDay,
+      onToggleSubject: this.handleToggleSubject,
+      onToggleModality: this.handleToggleModality,
+      onToggleKind: this.handleToggleKind,
+      onChangeRange: this.handleChangeRange,
+      onClearTeacher: this.handleClearTeacher,
+      onToggleFavorites: this.handleToggleFavorites,
+      onClear: this.handleClear,
+    }
+  }
+
+  renderResults(porFecha) {
+    const { selectedIso, loading } = this.state
+    return (
+      <BookingResults
+        date={fromISODate(selectedIso)}
+        cards={porFecha[selectedIso] || []}
+        loading={loading}
+        filtered={this.hasFilters()}
+        packs={this.state.packs}
+        favoriteIds={this.isStudent() ? this.state.favoriteIds : null}
+        favoriteError={this.state.favoriteError}
+        onReservar={this.handleReservar}
+        onFavoriteChange={this.handleFavoriteChange}
+        onFavoriteError={this.handleFavoriteError}
+      />
+    )
+  }
+
+  renderDialog() {
+    const { booking } = this.state
+    if (!booking) return null
+    return (
+      <BookingDialog
+        card={booking}
+        rescheduleOf={this.state.rescheduling}
+        packs={this.state.packs}
+        onClose={this.handleCloseDialog}
+        onBooked={this.handleBooked}
+      />
+    )
+  }
+
+  /**
+   * Los chips de arriba en el teléfono: el botón que abre la hoja y los
+   * filtros de un toque (favoritos, modalidad, tipo). Una sola fila que se
+   * desliza de costado, como los filtros de las apps de iOS.
+   */
+  renderQuickFilters() {
+    const cuantos = this.countFilters()
+    const { modalities, kinds, onlyFavorites } = this.state
+
+    return (
+      <div className="booking-quick" role="group" aria-label="Filtros rápidos">
+        <button
+          type="button"
+          className={`subject-chip booking-quick-open ${cuantos > 0 ? 'selected' : ''}`}
+          onClick={this.handleOpenFilters}
+          aria-label={cuantos > 0 ? `Filtros, ${cuantos} activos` : 'Filtros'}
+        >
+          <FilterIcon />
+          Filtros
+          {cuantos > 0 ? <span className="booking-quick-count">{cuantos}</span> : null}
+        </button>
+        {this.isStudent() ? (
+          <button
+            type="button"
+            className={`subject-chip ${onlyFavorites ? 'selected' : ''}`}
+            aria-pressed={onlyFavorites}
+            onClick={this.handleToggleFavorites}
+          >
+            <HeartIcon filled={onlyFavorites} />
+            Favoritos
+          </button>
+        ) : null}
+        {MODALITIES.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            className={`subject-chip ${modalities.includes(item.key) ? 'selected' : ''}`}
+            aria-pressed={modalities.includes(item.key)}
+            onClick={this.handleToggleModality(item.key)}
+          >
+            {item.label}
+          </button>
+        ))}
+        {QUICK_KINDS.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            className={`subject-chip ${kinds.includes(item.key) ? 'selected' : ''}`}
+            aria-pressed={kinds.includes(item.key)}
+            onClick={this.handleToggleKind(item.key)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+    )
+  }
+
+  renderFiltersSheet() {
+    if (!this.state.filtersOpen) return null
+    return (
+      <Modal title="Filtros" onClose={this.handleCloseFilters}>
+        <BookingFilters {...this.getFiltersProps()} inSheet />
+        <div className="booking-sheet-foot">
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={this.handleClear}
+            disabled={!this.hasFilters()}
+          >
+            Limpiar
+          </button>
+          <button type="button" className="btn btn-primary" onClick={this.handleCloseFilters}>
+            Listo
+          </button>
+        </div>
+      </Modal>
+    )
+  }
+
+  renderMobile() {
+    const { selectedIso, loading } = this.state
+    const porFecha = this.getFilteredByDate()
+
+    return (
+      <div className="booking-board is-mobile">
+        <div className="booking-mobile-head">
+          <h1 className="large-title">{this.state.rescheduling ? 'Reprogramar' : 'Reservar'}</h1>
+          {/* El buscador de la barra lateral, que en el teléfono vive acá:
+              buscar es para reservar. */}
+          {this.isStudent() ? <SearchBar /> : null}
+          {this.renderQuickFilters()}
+        </div>
+
+        <MonthPane
+          mobile
+          compactTitle
+          eventsByDate={this.getLessonsByDate()}
+          freeByDate={this.getFreeByDate(porFecha)}
+          selectedIso={selectedIso}
+          loading={loading}
+          markedLabel="hay horarios"
+          onSelectDay={this.handleSelectDay}
+          onRangeChange={this.handleRangeChange}
+        >
+          {this.renderBanner()}
+        </MonthPane>
+
+        {this.renderResults(porFecha)}
+        {this.renderFiltersSheet()}
+        {this.renderDialog()}
+      </div>
+    )
+  }
+
   render() {
-    const { selectedIso, loading, booking } = this.state
+    if (this.props.mobile) return this.renderMobile()
+
+    const { selectedIso, loading } = this.state
     const porFecha = this.getFilteredByDate()
 
     return (
@@ -575,55 +789,20 @@ class BookingBoard extends Component {
               a la izquierda, porque el calendario es el contenido principal.
               Adentro, los filtros arriba y los horarios del día abajo. */}
           <aside className="booking-aside">
-            <BookingFilters
-              subjects={this.getFilterSubjects()}
-              dayKeys={this.state.dayKeys}
-              subjectIds={this.state.subjectIds}
-              modalities={this.state.modalities}
-              kinds={this.state.kinds}
-              fromTime={this.state.fromTime}
-              toTime={this.state.toTime}
-              teacherQuery={this.state.teacherQuery}
-              showFavorites={this.isStudent()}
-              onlyFavorites={this.state.onlyFavorites}
-              hasFilters={this.hasFilters()}
-              onToggleDay={this.handleToggleDay}
-              onToggleSubject={this.handleToggleSubject}
-              onToggleModality={this.handleToggleModality}
-              onToggleKind={this.handleToggleKind}
-              onChangeRange={this.handleChangeRange}
-              onClearTeacher={this.handleClearTeacher}
-              onToggleFavorites={this.handleToggleFavorites}
-              onClear={this.handleClear}
-            />
+            <BookingFilters {...this.getFiltersProps()} />
 
-            <BookingResults
-              date={fromISODate(selectedIso)}
-              cards={porFecha[selectedIso] || []}
-              loading={loading}
-              filtered={this.hasFilters()}
-              packs={this.state.packs}
-              favoriteIds={this.isStudent() ? this.state.favoriteIds : null}
-              favoriteError={this.state.favoriteError}
-              onReservar={this.handleReservar}
-              onFavoriteChange={this.handleFavoriteChange}
-              onFavoriteError={this.handleFavoriteError}
-            />
+            {this.renderResults(porFecha)}
           </aside>
         </div>
 
-        {booking ? (
-          <BookingDialog
-            card={booking}
-            rescheduleOf={this.state.rescheduling}
-            packs={this.state.packs}
-            onClose={this.handleCloseDialog}
-            onBooked={this.handleBooked}
-          />
-        ) : null}
+        {this.renderDialog()}
       </div>
     )
   }
 }
 
-export default BookingBoard
+BookingBoard.defaultProps = {
+  mobile: false,
+}
+
+export default withViewport(BookingBoard)

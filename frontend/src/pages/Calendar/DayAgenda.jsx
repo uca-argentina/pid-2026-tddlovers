@@ -1,9 +1,9 @@
-import { Component } from 'react'
+import { Component, createRef } from 'react'
 import ClassActions from '../../components/ClassActions.jsx'
 import FavoriteButton from '../../components/FavoriteButton.jsx'
 import { ClockIcon, PinIcon, SpinnerIcon, UsersIcon, VideoIcon } from '../../components/icons.jsx'
 import { formatRangeLabel } from '../../utils/availability.js'
-import { formatDayLong, formatDuration } from '../../utils/calendar.js'
+import { formatDayLong, formatDuration, fromISODate, toISODate } from '../../utils/calendar.js'
 import { isFavorite } from '../../utils/favorites.js'
 import { formatMoney } from '../../utils/rates.js'
 import {
@@ -15,8 +15,13 @@ import {
 import './DayAgenda.css'
 
 /**
- * Panel del día seleccionado: las clases de ese día con todo lo que hace
- * falta para ir a darlas o a tomarlas — horario, materia, con quién, cupo,
+ * La lista de clases: TODAS las del rango cargado, agrupadas por día y en
+ * orden, como la vista de lista del Calendario de iOS. Elegir un día en el
+ * calendario no filtra: lleva la lista hasta ese día y lo resalta. Si ese día
+ * no tiene clases aparece igual, en su lugar, con "No hay clases este día",
+ * para que tocar un día vacío no parezca que no hizo nada.
+ *
+ * Cada clase tiene todo lo que hace falta para ir a darla o a tomarla — horario, materia, con quién, cupo,
  * dónde (el link o la dirección exacta, que el alumno recién ve acá, después
  * de reservar) y precio. Las ordena CalendarPage por hora.
  *
@@ -205,14 +210,99 @@ class DayAgenda extends Component {
     )
   }
 
+  listRef = createRef()
+
+  // El grupo de cada día, para poder llevar la lista hasta él.
+  groupRefs = {}
+
+  componentDidMount() {
+    this.scrollToSelected(false)
+  }
+
+  componentDidUpdate(prevProps) {
+    // Al elegir otro día, o cuando terminan de llegar las clases (antes no
+    // había adónde ir).
+    if (
+      prevProps.selectedIso !== this.props.selectedIso ||
+      (prevProps.loading && !this.props.loading)
+    ) {
+      this.scrollToSelected(prevProps.selectedIso !== this.props.selectedIso)
+    }
+  }
+
+  setGroupRef = (iso) => (node) => {
+    if (node) this.groupRefs[iso] = node
+    else delete this.groupRefs[iso]
+  }
+
+  /**
+   * Lleva la lista (y solo la lista, no la página) hasta el día elegido. La
+   * lista es position: relative, así que offsetTop ya es relativo a ella.
+   * En jsdom no hay scrollTo en los elementos: ahí no hace nada.
+   */
+  scrollToSelected(smooth) {
+    const list = this.listRef.current
+    const group = this.groupRefs[this.props.selectedIso]
+    if (!list || !group || typeof list.scrollTo !== 'function') return
+    const behavior = smooth ? 'smooth' : 'auto'
+    if (list.scrollHeight > list.clientHeight) {
+      list.scrollTo({ top: group.offsetTop, behavior })
+      return
+    }
+    // En tablets la lista no scrollea sola (la que scrollea es la página):
+    // ahí se mueve la página, pero solo si el día lo eligió el usuario, no
+    // al entrar.
+    if (smooth) group.scrollIntoView?.({ behavior, block: 'start' })
+  }
+
+  /**
+   * Los días que van en la lista, en orden: los que tienen clases, más el
+   * elegido aunque esté vacío.
+   */
+  getDays() {
+    const { classesByDate, selectedIso } = this.props
+    const dias = Object.keys(classesByDate).filter((iso) => classesByDate[iso].length > 0)
+    if (selectedIso && !dias.includes(selectedIso)) dias.push(selectedIso)
+    return dias.sort()
+  }
+
+  renderDay(iso) {
+    const { classesByDate, selectedIso } = this.props
+    const clases = classesByDate[iso] || []
+    const elegido = iso === selectedIso
+    const hoy = iso === toISODate(new Date())
+    const titleId = `day-agenda-${iso}`
+
+    return (
+      <li
+        key={iso}
+        ref={this.setGroupRef(iso)}
+        className={`day-agenda-group ${elegido ? 'is-selected' : ''}`}
+        aria-labelledby={titleId}
+      >
+        {/* Fijo arriba mientras se scrollean las clases de ese día. */}
+        <h3 className="day-agenda-day" id={titleId}>
+          {formatDayLong(fromISODate(iso))}
+          {hoy ? <span className="day-agenda-today">Hoy</span> : null}
+        </h3>
+        {clases.length === 0 ? (
+          <p className="day-agenda-day-empty">No hay clases este día.</p>
+        ) : (
+          <ul className="day-agenda-items">{clases.map((item) => this.renderItem(item))}</ul>
+        )}
+      </li>
+    )
+  }
+
   render() {
-    const { date, classes, loading } = this.props
+    const { classesByDate, loading } = this.props
+    const total = Object.values(classesByDate).reduce((suma, lista) => suma + lista.length, 0)
 
     return (
       <section className="day-agenda">
-        <h2 className="day-agenda-title">{formatDayLong(date)}</h2>
+        <h2 className="day-agenda-title">Tus clases</h2>
         <p className="day-agenda-count">
-          {classes.length} {classes.length === 1 ? 'clase' : 'clases'}
+          {total} {total === 1 ? 'clase' : 'clases'}
         </p>
 
         {loading ? (
@@ -220,20 +310,20 @@ class DayAgenda extends Component {
             <SpinnerIcon className="spin" />
             Cargando clases...
           </p>
-        ) : null}
-        {!loading && classes.length === 0 ? (
-          <p className="day-agenda-empty">No hay clases este día.</p>
-        ) : null}
-        {!loading && classes.length > 0 ? (
-          <ul className="day-agenda-list">{classes.map((item) => this.renderItem(item))}</ul>
-        ) : null}
+        ) : (
+          <ol className="day-agenda-list" ref={this.listRef}>
+            {this.getDays().map((iso) => this.renderDay(iso))}
+          </ol>
+        )}
       </section>
     )
   }
 }
 
 DayAgenda.defaultProps = {
-  classes: [],
+  // { 'YYYY-MM-DD': [clase, ...] }, cada día ya ordenado por hora.
+  classesByDate: {},
+  selectedIso: null,
   loading: false,
   viewRole: 'student',
   favoriteIds: null,

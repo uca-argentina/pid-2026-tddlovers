@@ -14,10 +14,15 @@ vi.mock('../../api/client.js', () => ({
 const fila = (over = {}) =>
   apiClass({ id: 'a', subjectName: 'Física', teacherName: 'Carla Benítez', maxStudents: 4, ...over })
 
+// Las clases de un solo día, el que está elegido.
 function renderAgenda(items, viewRole = 'teacher') {
   return render(
     <MemoryRouter>
-      <DayAgenda date={new Date(2099, 8, 14)} classes={items} viewRole={viewRole} />
+      <DayAgenda
+        classesByDate={{ '2099-09-14': items }}
+        selectedIso="2099-09-14"
+        viewRole={viewRole}
+      />
     </MemoryRouter>,
   )
 }
@@ -44,5 +49,47 @@ describe('DayAgenda', () => {
 
     expect(screen.getByText('Aceptada')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Pagar' })).toBeInTheDocument()
+  })
+
+  it('lista las clases de todos los días, en orden, y no solo las del elegido', () => {
+    const lunes = fila({ id: 'l', subjectName: 'Química', maxStudents: 1 })
+    const jueves = fila({ id: 'j', subjectName: 'Historia', maxStudents: 1 })
+    render(
+      <MemoryRouter>
+        <DayAgenda
+          classesByDate={{ '2099-09-17': [jueves], '2099-09-14': [lunes] }}
+          selectedIso="2099-09-17"
+          viewRole="student"
+        />
+      </MemoryRouter>,
+    )
+
+    const dias = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)
+    expect(dias).toEqual(['Lunes, 14 de septiembre', 'Jueves, 17 de septiembre'])
+    expect(screen.getByText('Química')).toBeInTheDocument()
+    expect(screen.getByText('Historia')).toBeInTheDocument()
+    expect(screen.getByText('2 clases')).toBeInTheDocument()
+  })
+
+  it('el día elegido aparece en su lugar aunque no tenga clases', () => {
+    const lunes = fila({ id: 'l', subjectName: 'Química', maxStudents: 1 })
+    const jueves = fila({ id: 'j', subjectName: 'Historia', maxStudents: 1 })
+    render(
+      <MemoryRouter>
+        <DayAgenda
+          classesByDate={{ '2099-09-14': [lunes], '2099-09-17': [jueves] }}
+          selectedIso="2099-09-15"
+          viewRole="student"
+        />
+      </MemoryRouter>,
+    )
+
+    const dias = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)
+    expect(dias).toEqual([
+      'Lunes, 14 de septiembre',
+      'Martes, 15 de septiembre',
+      'Jueves, 17 de septiembre',
+    ])
+    expect(screen.getByText('No hay clases este día.')).toBeInTheDocument()
   })
 })
