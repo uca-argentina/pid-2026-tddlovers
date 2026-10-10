@@ -83,6 +83,13 @@ export function formatMonthTitle(date) {
   return capitalize(MONTH_TITLE_FORMAT.format(date))
 }
 
+const MONTH_NAME_FORMAT = new Intl.DateTimeFormat('es-AR', { month: 'long' })
+
+/** 'Septiembre' — el mes solo, para la tira de semana (el año va aparte). */
+export function formatMonthName(date) {
+  return capitalize(MONTH_NAME_FORMAT.format(date))
+}
+
 /** 'Lunes 14 de septiembre' — para el encabezado del día seleccionado. */
 export function formatDayLong(date) {
   return capitalize(DAY_LONG_FORMAT.format(date))

@@ -338,3 +338,95 @@
   color: var(--color-danger);
   background: var(--color-danger-bg);
 }
+
+/* --- Teléfono: como Ajustes de iOS ------------------------------------------ */
+
+@media (max-width: 700px) {
+  /* Sin tarjeta grande: cada sección es su propio grupo sobre el fondo. */
+  .profile-page.is-mobile .profile-card {
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  /* La identidad centrada arriba, como la tarjeta de la cuenta en Ajustes. */
+  .profile-page.is-mobile .profile-identity {
+    flex-direction: column;
+    text-align: center;
+    gap: 10px;
+    padding: 8px 0 4px;
+  }
+
+  .profile-page.is-mobile .profile-avatar {
+    width: 84px;
+    height: 84px;
+    font-size: 30px;
+  }
+
+  .profile-page.is-mobile .profile-name {
+    font-size: 24px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+
+  .profile-page.is-mobile .profile-identity + .banner,
+  .profile-page.is-mobile .banner {
+    margin-top: 16px;
+  }
+
+  .profile-page.is-mobile .profile-section {
+    margin-top: 22px;
+    padding: 14px 16px;
+    border-radius: 14px;
+    background: var(--color-surface-solid);
+  }
+
+  .profile-page.is-mobile .profile-section-title {
+    margin-bottom: 4px;
+    font-size: 12.5px;
+  }
+
+  /* Las filas de solo lectura: etiqueta a la izquierda, valor a la derecha,
+     separadas por una línea finita. */
+  .profile-page.is-mobile .profile-readonly {
+    gap: 0;
+  }
+
+  .profile-page.is-mobile .profile-readonly-row {
+    justify-content: space-between;
+    padding: 11px 0;
+  }
+
+  .profile-page.is-mobile .profile-readonly-row + .profile-readonly-row {
+    border-top: 1px solid var(--color-border);
+  }
+
+  .profile-page.is-mobile .profile-readonly-label {
+    font-size: 15px;
+    color: var(--color-text);
+  }
+
+  .profile-page.is-mobile .profile-readonly-value {
+    font-size: 15px;
+    color: var(--color-text-muted);
+    text-align: right;
+  }
+
+  .profile-page.is-mobile .btn-row {
+    margin-top: 20px;
+  }
+
+  /* El grupo "General" ya es un .ios-group: la sección no le pone fondo. */
+  .profile-page.is-mobile .profile-settings {
+    padding: 0;
+    background: transparent;
+  }
+
+  /* Acá el título sí va afuera, arriba del grupo, como en iOS. */
+  .profile-page.is-mobile .profile-settings .profile-section-title {
+    margin: 0 0 8px;
+    padding: 0 16px;
+  }
+}

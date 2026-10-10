@@ -403,6 +403,48 @@ describe('BookingBoard', () => {
     expect(fetchFavoriteTeachers).not.toHaveBeenCalled()
   })
 
+  describe('en el teléfono', () => {
+    it('tiene título, buscador, chips rápidos y la tira de semana', async () => {
+      renderBoard('/disponibilidad', { mobile: true })
+      await esperarCarga()
+
+      expect(screen.getByRole('heading', { name: 'Reservar' })).toBeInTheDocument()
+      expect(screen.getByLabelText('Buscar docentes o materias')).toBeInTheDocument()
+      expect(screen.getByRole('group', { name: 'Días de la semana' })).toBeInTheDocument()
+      expect(screen.getByText('13:00 – 17:00')).toBeInTheDocument()
+    })
+
+    it('un chip rápido filtra sin abrir la hoja', async () => {
+      fetchAvailability.mockResolvedValue([slot(), carla()])
+      renderBoard('/disponibilidad', { mobile: true })
+      await esperarCarga()
+
+      const rapidos = screen.getByRole('group', { name: 'Filtros rápidos' })
+      await userEvent.click(within(rapidos).getByRole('button', { name: 'Presencial' }))
+
+      expect(screen.queryByText('13:00 – 17:00')).not.toBeInTheDocument()
+      expect(screen.getByText('09:00 – 11:00')).toBeInTheDocument()
+      expect(within(rapidos).getByRole('button', { name: 'Filtros, 1 activos' })).toBeInTheDocument()
+    })
+
+    it('"Filtros" abre la hoja con todos los filtros, y "Limpiar" los saca', async () => {
+      renderBoard('/disponibilidad', { mobile: true })
+      await esperarCarga()
+
+      await userEvent.click(screen.getByRole('button', { name: 'Filtros' }))
+      const hoja = screen.getByRole('dialog', { name: 'Filtros' })
+      const otroDia = DIA_HOY === 'lunes' ? 'Martes' : 'Lunes'
+      await userEvent.click(within(hoja).getByRole('button', { name: otroDia }))
+      expect(screen.queryByText('13:00 – 17:00')).not.toBeInTheDocument()
+
+      await userEvent.click(within(hoja).getByRole('button', { name: 'Limpiar' }))
+      await userEvent.click(within(hoja).getByRole('button', { name: 'Listo' }))
+
+      expect(screen.queryByRole('dialog', { name: 'Filtros' })).not.toBeInTheDocument()
+      expect(screen.getByText('13:00 – 17:00')).toBeInTheDocument()
+    })
+  })
+
   it('"Limpiar filtros" vuelve a mostrar todo', async () => {
     renderBoard()
     await esperarCarga()

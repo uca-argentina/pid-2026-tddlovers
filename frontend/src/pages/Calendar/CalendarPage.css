@@ -63,3 +63,23 @@
 .calendar-aside > .banner {
   margin-bottom: 12px;
 }
+
+@media (max-width: 700px) {
+  .calendar-page {
+    gap: 18px;
+  }
+}
+
+/* Teléfono: la pantalla no scrollea entera. La tira de semana queda fija
+   arriba y lo que scrollea es la lista de clases, como en el Calendario de
+   iOS (ver DayAgenda.css). */
+@media (max-width: 700px) {
+  .calendar-page {
+    height: 100%;
+  }
+
+  .calendar-aside {
+    flex: 1;
+    min-height: 0;
+  }
+}

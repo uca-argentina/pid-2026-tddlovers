@@ -126,7 +126,7 @@
   margin-bottom: 0;
 }
 
-@media (max-width: 600px) {
+@media (max-width: 700px) {
   .window-form-actions {
     flex-direction: column-reverse;
   }

@@ -231,3 +231,16 @@
   color: var(--color-text-muted);
   line-height: 1.5;
 }
+
+/* Teléfono: título grande como el resto de las pantallas (ver .large-title). */
+@media (max-width: 700px) {
+  .packs-title {
+    font-size: 30px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+
+  .packs-subtitle {
+    font-size: 13.5px;
+  }
+}

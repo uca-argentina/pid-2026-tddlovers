@@ -1,6 +1,7 @@
 import { Component } from 'react'
 import { createPortal } from 'react-dom'
 import { ErrorIcon } from './icons.jsx'
+import { matchesQuery, MOBILE_QUERY } from '../utils/media.js'
 import './Modal.css'
 
 /**
@@ -21,11 +22,21 @@ import './Modal.css'
  *   - el foco entra al abrir y vuelve al botón que lo abrió al cerrar.
  *   - trampa de foco: tabular no se escapa a lo que quedó atrás.
  *   - el fondo no scrollea mientras está abierto.
+ *
+ * En el teléfono el CSS lo convierte en una hoja que sube desde abajo, como
+ * las de iOS, y se cierra arrastrando la manija (o el título) hacia abajo.
+ * El arrastre mueve el panel tocando el style directo, sin setState: son
+ * decenas de eventos por segundo y no cambia nada que React tenga que saber.
  */
 class Modal extends Component {
   panelRef = null
 
   previousFocus = null
+
+  // Dónde arrancó el arrastre de la hoja (clientY), o null si no se arrastra.
+  dragStart = null
+
+  dragDelta = 0
 
   componentDidMount() {
     this.previousFocus = document.activeElement
@@ -99,6 +110,37 @@ class Modal extends Component {
     }
   }
 
+  /** Arrastrar la hoja hacia abajo: solo en el teléfono, desde la manija o el título. */
+  handleDragStart = (event) => {
+    if (!matchesQuery(MOBILE_QUERY) || !this.panelRef) return
+    // El botón de cerrar es un botón, no una manija.
+    if (event.target.closest?.('button')) return
+    this.dragStart = event.clientY
+    this.dragDelta = 0
+    this.panelRef.style.transition = 'none'
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+  }
+
+  handleDragMove = (event) => {
+    if (this.dragStart === null) return
+    // Hacia arriba no se estira: la hoja ya está entera.
+    this.dragDelta = Math.max(event.clientY - this.dragStart, 0)
+    this.panelRef.style.transform = `translateY(${this.dragDelta}px)`
+  }
+
+  handleDragEnd = () => {
+    if (this.dragStart === null) return
+    this.dragStart = null
+    const panel = this.panelRef
+    panel.style.transition = ''
+    // Más de 100px (o más de un cuarto de la hoja) cierra; menos, vuelve.
+    if (this.dragDelta > Math.min(100, panel.offsetHeight / 4)) {
+      this.props.onClose()
+      return
+    }
+    panel.style.transform = ''
+  }
+
   handleBackdropPointerDown = (event) => {
     // Solo el fondo, no un arrastre que empezó adentro y terminó afuera.
     if (event.target === event.currentTarget) this.props.onClose()
@@ -117,7 +159,22 @@ class Modal extends Component {
           tabIndex={-1}
           ref={this.setPanelRef}
         >
-          <div className="modal-head">
+          {/* La manija de la hoja: solo se ve en el teléfono. */}
+          <div
+            className="modal-grabber"
+            aria-hidden="true"
+            onPointerDown={this.handleDragStart}
+            onPointerMove={this.handleDragMove}
+            onPointerUp={this.handleDragEnd}
+            onPointerCancel={this.handleDragEnd}
+          />
+          <div
+            className="modal-head"
+            onPointerDown={this.handleDragStart}
+            onPointerMove={this.handleDragMove}
+            onPointerUp={this.handleDragEnd}
+            onPointerCancel={this.handleDragEnd}
+          >
             <h2 className="modal-title">{title}</h2>
             <button type="button" className="modal-close" onClick={onClose} aria-label="Cerrar">
               <ErrorIcon />

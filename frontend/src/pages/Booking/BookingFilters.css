@@ -161,3 +161,17 @@
     border-radius: 14px;
   }
 }
+
+/* Adentro de la hoja "Filtros" del teléfono: sin tarjeta, la hoja ya lo es. */
+.booking-filters.is-sheet {
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.booking-filters.is-sheet .booking-filters-favorites,
+.booking-filters.is-sheet .booking-filters-foot {
+  padding-inline: 0;
+}

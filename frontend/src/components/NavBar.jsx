@@ -11,6 +11,7 @@ import {
   UserIcon,
   UsersIcon,
 } from './icons.jsx'
+import withViewport from '../routes/withViewport.jsx'
 import { getInitials } from '../utils/user.js'
 import './NavBar.css'
 
@@ -30,11 +31,76 @@ import './NavBar.css'
  * falta ningún puente para poder seguir siendo un class component. El
  * `className` de NavLink acepta una función: no es un hook, es una render
  * prop.
+ *
+ * En el teléfono (`mobile`) es otra barra: la cápsula flotante de abajo con
+ * cinco pestañas como en iOS, sin marca ni buscador (el buscador vive en la
+ * pantalla de Reservar y el tema en el Perfil). Favoritos no entra en cinco:
+ * se llega desde el Perfil.
  */
 class NavBar extends Component {
   getLinkClass = ({ isActive }) => `navbar-item ${isActive ? 'is-active' : ''}`
 
+  renderMobile() {
+    const { user, viewRole } = this.props
+    const iniciales = getInitials(user)
+    const perfil = (
+      <NavLink to="/perfil" className={this.getLinkClass} aria-label="Mi perfil">
+        {iniciales ? (
+          <span className="navbar-avatar" aria-hidden="true">
+            {iniciales}
+          </span>
+        ) : (
+          <UserIcon />
+        )}
+        <span className="navbar-item-label">Perfil</span>
+      </NavLink>
+    )
+
+    if (viewRole === 'admin') {
+      return (
+        <header className="navbar is-mobile">
+          <nav className="navbar-nav" aria-label="Secciones">
+            <NavLink to="/admin" className={this.getLinkClass} aria-label="Revisar docentes">
+              <UsersIcon />
+              <span className="navbar-item-label">Docentes</span>
+            </NavLink>
+            {perfil}
+          </nav>
+        </header>
+      )
+    }
+
+    // "Disponibilidad" no entra en una pestaña de 70px: el docente la ve como
+    // "Horarios", que es lo que carga ahí.
+    const esDocente = viewRole === 'teacher'
+    return (
+      <header className="navbar is-mobile">
+        <nav className="navbar-nav" aria-label="Secciones">
+          <NavLink to="/" end className={this.getLinkClass} aria-label="Mi calendario">
+            <CalendarIcon />
+            <span className="navbar-item-label">Calendario</span>
+          </NavLink>
+          <NavLink to="/disponibilidad" className={this.getLinkClass} aria-label="Disponibilidad">
+            <ClockIcon />
+            <span className="navbar-item-label">{esDocente ? 'Horarios' : 'Reservar'}</span>
+          </NavLink>
+          <NavLink to="/reservas" className={this.getLinkClass} aria-label="Mis reservas">
+            <ListCheckIcon />
+            <span className="navbar-item-label">Reservas</span>
+          </NavLink>
+          <NavLink to="/paquetes" className={this.getLinkClass} aria-label="Paquetes de clases">
+            <BookIcon />
+            <span className="navbar-item-label">Paquetes</span>
+          </NavLink>
+          {perfil}
+        </nav>
+      </header>
+    )
+  }
+
   render() {
+    if (this.props.mobile) return this.renderMobile()
+
     // La pantalla es la misma para los dos roles, pero lo que se va a hacer
     // ahí no: el docente carga los horarios que da y el alumno busca uno para
     // reservar. El aria-label sí queda igual para los dos.
@@ -130,6 +196,7 @@ class NavBar extends Component {
 
 NavBar.defaultProps = {
   viewRole: 'student',
+  mobile: false,
 }
 
-export default NavBar
+export default withViewport(NavBar)

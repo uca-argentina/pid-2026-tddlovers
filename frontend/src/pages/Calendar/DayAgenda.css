@@ -42,16 +42,74 @@
 }
 
 /* La lista scrollea sola: el panel no crece más allá del alto del
-   calendario que tiene al lado. */
+   calendario que tiene al lado. Es position: relative para que el offsetTop
+   de cada día (ver scrollToSelected) se mida desde acá. */
 .day-agenda-list {
+  position: relative;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  min-height: 0;
+  /* El encabezado fijo de cada día no queda pegado al borde de arriba. */
+  scroll-padding-top: 0;
+}
+
+/* Un día de la lista: su encabezado y sus clases. */
+.day-agenda-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* El encabezado del día queda fijo arriba mientras se scrollean sus clases,
+   como en la vista de lista del Calendario de iOS. */
+.day-agenda-day {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 4px 0 6px;
+  background: var(--color-surface-solid);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+/* El día elegido en el calendario, en el color principal. */
+.day-agenda-group.is-selected .day-agenda-day {
+  color: var(--color-primary);
+}
+
+.day-agenda-today {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.day-agenda-day-empty {
+  margin: 0;
+  padding: 2px 0 4px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.day-agenda-items {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  overflow-y: auto;
-  min-height: 0;
 }
 
 /* Misma tarjeta que las de Reservar (BookingResults.css): mismas medidas,
@@ -192,5 +250,57 @@
 
   .day-agenda-list {
     overflow-y: visible;
+  }
+}
+
+/* Teléfono: el panel deja de ser una tarjeta. Queda el día como encabezado
+   de sección y las clases como tarjetas sueltas sobre el fondo, debajo de la
+   tira de semana. */
+@media (max-width: 700px) {
+  .day-agenda {
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .day-agenda-title {
+    font-size: 17px;
+  }
+
+  /* Sobre el fondo de la pantalla, no sobre una tarjeta. */
+  .day-agenda-day {
+    background: var(--color-bg);
+    font-size: 15px;
+  }
+
+  .day-agenda-items {
+    gap: 10px;
+  }
+
+  .day-agenda-item {
+    padding: 14px 16px;
+    border-width: 1px;
+    border-radius: 16px;
+    box-shadow: var(--shadow-panel);
+  }
+
+  .day-agenda-empty {
+    justify-content: center;
+    padding: 32px 0;
+  }
+}
+
+@media (max-width: 700px) {
+  .day-agenda {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .day-agenda-list {
+    overflow-y: auto;
+    /* Que al final se pueda subir el último día hasta arriba de todo. */
+    padding-bottom: 40vh;
   }
 }

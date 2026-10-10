@@ -57,3 +57,12 @@
     padding-bottom: 12px;
   }
 }
+
+/* Teléfono: el buscador ya no está arriba (vive en Reservar), así que nadie
+   reserva lugar para él. Laterales de 16px como las pantallas de iOS. */
+@media (max-width: 700px) {
+  .app-main,
+  .app-main.has-search {
+    padding: calc(12px + env(safe-area-inset-top)) 16px 16px;
+  }
+}

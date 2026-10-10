@@ -2,7 +2,9 @@ import { Component } from 'react'
 import { Link } from 'react-router-dom'
 import Banner from '../../components/Banner.jsx'
 import FormField from '../../components/FormField.jsx'
-import { PlusIcon, SpinnerIcon } from '../../components/icons.jsx'
+import ThemeToggle from '../../components/ThemeToggle.jsx'
+import { ChevronRightIcon, HeartIcon, PlusIcon, SpinnerIcon } from '../../components/icons.jsx'
+import withViewport from '../../routes/withViewport.jsx'
 import { isValidPhone } from '../../utils/validation.js'
 import { getInitials } from '../../utils/user.js'
 import { approvalNotice } from '../../utils/approval.js'
@@ -66,6 +68,11 @@ function ratesSignature(rates) {
  *
  * Como las rutas no tienen portero, se puede caer acá sin estar logueado: en
  * ese caso se muestra un cartel en vez de explotar.
+ *
+ * En el teléfono (`mobile`) se ve como Ajustes de iOS: la identidad centrada
+ * arriba, cada sección como un grupo, y al final un grupo con lo que en
+ * escritorio está en la barra lateral y en el teléfono no entra (Favoritos,
+ * el modo oscuro) más "Cerrar sesión".
  */
 class ProfilePage extends Component {
   // Borrador de edición. Arranca copiando lo que vino por props: el usuario
@@ -413,8 +420,31 @@ class ProfilePage extends Component {
     )
   }
 
+  /** El grupo de abajo del perfil en el teléfono, como las filas de Ajustes. */
+  renderMobileSettings() {
+    const esAlumno = this.props.viewRole === 'student'
+    return (
+      <div className="profile-section profile-settings">
+        <h2 className="profile-section-title">General</h2>
+        <div className="ios-group">
+          {esAlumno ? (
+            <Link className="ios-row" to="/favoritos">
+              <HeartIcon className="ios-row-icon is-favorite" />
+              <span className="ios-row-label">Docentes favoritos</span>
+              <ChevronRightIcon className="ios-row-chevron" />
+            </Link>
+          ) : null}
+          <ThemeToggle variant="switch" />
+          <Link className="ios-row is-danger" to="/ingresar" onClick={this.props.onLogout}>
+            <span className="ios-row-label">Cerrar sesión</span>
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
   render() {
-    const { user } = this.props
+    const { user, mobile } = this.props
     const { telefono, touched, subjectsLoading, subjectsError, saving, saveError, saved } =
       this.state
 
@@ -438,7 +468,7 @@ class ProfilePage extends Component {
     const aviso = approvalNotice(user)
 
     return (
-      <div className="profile-page">
+      <div className={`profile-page ${mobile ? 'is-mobile' : ''}`}>
         <form className="profile-card" onSubmit={this.handleSubmit} noValidate>
           <div className="profile-identity">
             <span className="profile-avatar" aria-hidden="true">
@@ -538,12 +568,17 @@ class ProfilePage extends Component {
 
           {/* Un <Link> y no un <button>: así navega solo y de paso no corre
               riesgo de mandar el formulario. El onClick limpia la sesión en
-              App, que es quien es dueño del usuario. */}
-          <div className="profile-logout">
-            <Link className="profile-logout-link" to="/ingresar" onClick={this.props.onLogout}>
-              Cerrar sesión
-            </Link>
-          </div>
+              App, que es quien es dueño del usuario. En el teléfono va en el
+              grupo "General". */}
+          {mobile ? (
+            this.renderMobileSettings()
+          ) : (
+            <div className="profile-logout">
+              <Link className="profile-logout-link" to="/ingresar" onClick={this.props.onLogout}>
+                Cerrar sesión
+              </Link>
+            </div>
+          )}
         </form>
       </div>
     )
@@ -552,6 +587,7 @@ class ProfilePage extends Component {
 
 ProfilePage.defaultProps = {
   viewRole: 'student',
+  mobile: false,
 }
 
-export default ProfilePage
+export default withViewport(ProfilePage)

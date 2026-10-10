@@ -81,6 +81,31 @@ export function ChevronRightIcon(props) {
   )
 }
 
+export function ChevronDownIcon(props) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M4.5 7.5L10 14l5.5-6.5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+/** Dos perillas: abrir los filtros. */
+export function FilterIcon(props) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" {...props}>
+      <path d="M3 6h8M15 6h2M3 14h2M9 14h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <circle cx="13" cy="6" r="2" stroke="currentColor" strokeWidth="1.8" />
+      <circle cx="7" cy="14" r="2" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  )
+}
+
 export function SearchIcon(props) {
   return (
     <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" {...props}>
