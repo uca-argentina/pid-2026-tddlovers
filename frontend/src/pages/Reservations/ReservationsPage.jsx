@@ -1,10 +1,12 @@
 import { Component } from 'react'
 import Banner from '../../components/Banner.jsx'
 import ClassActions from '../../components/ClassActions.jsx'
+import FavoriteButton from '../../components/FavoriteButton.jsx'
 import { SpinnerIcon } from '../../components/icons.jsx'
-import { fetchClasses } from '../../api/client.js'
+import { fetchClasses, fetchFavoriteTeachers } from '../../api/client.js'
 import { formatRangeLabel } from '../../utils/availability.js'
 import { addDays, formatDayLong, fromISODate, toISODate } from '../../utils/calendar.js'
+import { favoriteIdsOf, isFavorite, withFavorite } from '../../utils/favorites.js'
 import { formatMoney } from '../../utils/rates.js'
 import { modalityLabel } from '../../utils/windows.js'
 import './ReservationsPage.css'
@@ -36,22 +38,67 @@ const NEWEST_FIRST = new Set(['dadas', 'cancelada'])
  *
  * A diferencia del calendario, una grupal no se junta: cada reserva es de un
  * alumno y se acepta o cancela por separado.
+ *
+ * El alumno puede marcar desde acá a sus docentes como favoritos: es donde
+ * están los docentes con los que ya tomó clase.
  */
 class ReservationsPage extends Component {
   state = {
     classes: [],
     loading: true,
     error: null,
+    // Ids (string) de los docentes favoritos; null = no se muestran corazones.
+    favoriteIds: null,
+    favoriteError: null,
   }
 
   fetchToken = 0
 
+  favoritesToken = 0
+
   componentDidMount() {
     this.load()
+    this.loadFavorites()
+  }
+
+  componentDidUpdate(prevProps) {
+    if (prevProps.viewRole !== this.props.viewRole) this.loadFavorites()
   }
 
   componentWillUnmount() {
     this.fetchToken += 1
+    this.favoritesToken += 1
+  }
+
+  /**
+   * Solo el alumno tiene favoritos. Si el pedido falla no se muestran los
+   * corazones: uno vacío para un docente que ya es favorito mentiría.
+   */
+  loadFavorites() {
+    const token = ++this.favoritesToken
+    if (this.props.viewRole !== 'student') {
+      this.setState({ favoriteIds: null })
+      return
+    }
+    fetchFavoriteTeachers()
+      .then((teachers) => {
+        if (token !== this.favoritesToken) return
+        this.setState({ favoriteIds: favoriteIdsOf(teachers) })
+      })
+      .catch(() => {
+        if (token === this.favoritesToken) this.setState({ favoriteIds: null })
+      })
+  }
+
+  handleFavoriteChange = (teacherId, favorite) => {
+    this.setState((prev) => ({
+      favoriteIds: withFavorite(prev.favoriteIds, teacherId, favorite),
+      favoriteError: null,
+    }))
+  }
+
+  handleFavoriteError = (message) => {
+    this.setState({ favoriteError: message })
   }
 
   load = () => {
@@ -109,14 +156,25 @@ class ReservationsPage extends Component {
           <span className="reservation-time">{formatRangeLabel(item.startTime, item.endTime)}</span>
         </div>
         <p className="reservation-subject">{item.subjectName}</p>
-        <p className="reservation-meta">
-          {otro}
-          {` · ${modalityLabel(item.modality)}`}
-          {` · ${formatMoney(item.priceCents)}`}
-          {item.packTokens > 0
-            ? ` · ${item.packTokens === 1 ? '1 clase' : `${item.packTokens} clases`} del paquete`
-            : ''}
-        </p>
+        <div className="reservation-meta-row">
+          <p className="reservation-meta">
+            {otro}
+            {` · ${modalityLabel(item.modality)}`}
+            {` · ${formatMoney(item.priceCents)}`}
+            {item.packTokens > 0
+              ? ` · ${item.packTokens === 1 ? '1 clase' : `${item.packTokens} clases`} del paquete`
+              : ''}
+          </p>
+          {viewRole === 'student' && this.state.favoriteIds ? (
+            <FavoriteButton
+              teacherId={item.teacherId}
+              teacherName={item.teacherName}
+              favorite={isFavorite(this.state.favoriteIds, item.teacherId)}
+              onChange={this.handleFavoriteChange}
+              onError={this.handleFavoriteError}
+            />
+          ) : null}
+        </div>
         <ClassActions cls={item} viewRole={viewRole} onChange={this.handleChange} />
       </li>
     )
@@ -164,6 +222,9 @@ class ReservationsPage extends Component {
             ? 'Aceptá o rechazá las solicitudes y tomá lista de las clases que diste.'
             : 'Seguí el estado de tus clases: pagalas cuando el docente las acepte.'}
         </p>
+        {this.state.favoriteError ? (
+          <Banner type="danger">{this.state.favoriteError}</Banner>
+        ) : null}
         {this.renderBody()}
       </div>
     )

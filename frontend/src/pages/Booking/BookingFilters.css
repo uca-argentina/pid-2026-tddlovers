@@ -117,6 +117,15 @@
 }
 
 /* El chip del docente buscado, que llega desde el buscador de la barra. */
+.booking-filters-favorites {
+  padding: 0 6px 8px;
+}
+
+.booking-filters-favorites .subject-chip svg {
+  width: 14px;
+  height: 14px;
+}
+
 .booking-filters-foot {
   display: flex;
   flex-wrap: wrap;

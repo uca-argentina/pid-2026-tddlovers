@@ -7,9 +7,14 @@ import { apiClass } from '../../testing/fixtures.js'
 
 // El mock del cliente evita depender de los datos de mentira reales: acá
 // definimos exactamente qué clases hay y en qué día.
-const { fetchClasses } = vi.hoisted(() => ({ fetchClasses: vi.fn() }))
+const { addFavoriteTeacher, fetchClasses, fetchFavoriteTeachers } = vi.hoisted(() => ({
+  addFavoriteTeacher: vi.fn(() => Promise.resolve(null)),
+  fetchClasses: vi.fn(),
+  // Salvo en sus tests, el alumno no tiene favoritos.
+  fetchFavoriteTeachers: vi.fn(() => Promise.resolve([])),
+}))
 
-vi.mock('../../api/client.js', () => ({ fetchClasses }))
+vi.mock('../../api/client.js', () => ({ addFavoriteTeacher, fetchClasses, fetchFavoriteTeachers }))
 
 // Las clases traen links (reprogramar, ver solicitudes): hace falta un router.
 function render(ui) {
@@ -77,6 +82,47 @@ describe('CalendarPage', () => {
 
     expect(await screen.findByText(/Laura Gómez/)).toBeInTheDocument()
     expect(screen.queryByText(/Sofía Ramírez/)).not.toBeInTheDocument()
+  })
+
+  it('el alumno puede marcar como favorito al docente de una clase', async () => {
+    const iso = toISODate(today)
+    fetchClasses.mockResolvedValue([
+      classOn(iso, { teacherId: 't1', teacherName: 'Laura Gómez' }),
+    ])
+
+    render(<CalendarPage viewRole="student" />)
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Agregar a favoritos a Laura Gómez' }),
+    )
+    expect(addFavoriteTeacher).toHaveBeenCalledWith('t1')
+    expect(
+      await screen.findByRole('button', { name: 'Sacar de favoritos a Laura Gómez' }),
+    ).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('el corazón arranca lleno si el docente ya es favorito', async () => {
+    const iso = toISODate(today)
+    fetchClasses.mockResolvedValue([classOn(iso, { teacherId: 't1', teacherName: 'Laura Gómez' })])
+    fetchFavoriteTeachers.mockResolvedValueOnce([
+      { id: 't1', nombre: 'Laura', apellido: 'Gómez', subjects: [] },
+    ])
+
+    render(<CalendarPage viewRole="student" />)
+
+    expect(
+      await screen.findByRole('button', { name: 'Sacar de favoritos a Laura Gómez' }),
+    ).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('el docente no ve corazones', async () => {
+    const iso = toISODate(today)
+    fetchClasses.mockResolvedValue([classOn(iso, { studentName: 'Sofía Ramírez' })])
+
+    render(<CalendarPage viewRole="teacher" />)
+
+    await screen.findByText(/Sofía Ramírez/)
+    expect(screen.queryByRole('button', { name: /favoritos/ })).not.toBeInTheDocument()
   })
 
   it('muestra al alumno cuando se mira como docente', async () => {
@@ -154,7 +200,8 @@ describe('CalendarPage', () => {
     render(<CalendarPage viewRole="teacher" />)
 
     expect(await screen.findByText('Sofía Ramírez, Tomás Díaz')).toBeInTheDocument()
-    expect(screen.getByText('Alumnos (2 de 4):')).toBeInTheDocument()
+    // La pastilla de cupo dice cuántos van, como en las tarjetas de Reservar.
+    expect(screen.getByText('Grupal · 2 de 4')).toBeInTheDocument()
     expect(screen.getByText('1 clase')).toBeInTheDocument()
   })
 
@@ -214,7 +261,7 @@ describe('CalendarPage', () => {
     expect(screen.getByText('1 h 30 min')).toBeInTheDocument()
     expect(screen.getByText('Híbrida')).toBeInTheDocument()
     expect(screen.getByText('Laura Gómez')).toBeInTheDocument()
-    expect(screen.getByText('Grupal · hasta 4 · 3 de 4 anotados')).toBeInTheDocument()
+    expect(screen.getByText('Grupal · 3 de 4')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Entrar a la videollamada' })).toHaveAttribute(
       'href',
       'https://meet.example.com/abc',

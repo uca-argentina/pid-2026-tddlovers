@@ -1,5 +1,5 @@
 import { Component } from 'react'
-import { ChevronRightIcon, ErrorIcon } from '../../components/icons.jsx'
+import { ChevronRightIcon, ErrorIcon, HeartIcon } from '../../components/icons.jsx'
 import TimeRangeSlider from '../../components/TimeRangeSlider.jsx'
 import { DAY_KEYS, DAY_LABELS } from '../../utils/availability.js'
 import { WEEKDAY_LABELS } from '../../utils/calendar.js'
@@ -194,12 +194,37 @@ class BookingFilters extends Component {
     )
   }
 
+  /**
+   * "Solo favoritos" no es una sección plegable: es un único sí/no, y
+   * plegado escondería un filtro activo detrás de un clic. Solo para el
+   * alumno (el único que tiene favoritos).
+   */
+  renderFavorites() {
+    const { showFavorites, onlyFavorites, onToggleFavorites } = this.props
+    if (!showFavorites) return null
+    return (
+      <div className="booking-filters-favorites">
+        <button
+          type="button"
+          className={`subject-chip ${onlyFavorites ? 'selected' : ''}`}
+          aria-pressed={onlyFavorites}
+          onClick={onToggleFavorites}
+        >
+          <HeartIcon filled={onlyFavorites} />
+          Solo favoritos
+        </button>
+      </div>
+    )
+  }
+
   render() {
     const { teacherQuery, onClearTeacher, onClear, hasFilters } = this.props
 
     return (
       <div className="booking-filters">
         <h2 className="booking-filters-title">Filtros</h2>
+
+        {this.renderFavorites()}
 
         {this.renderDays()}
         {this.renderSubjects()}
@@ -248,6 +273,9 @@ BookingFilters.defaultProps = {
   fromTime: '',
   toTime: '',
   teacherQuery: '',
+  showFavorites: false,
+  onlyFavorites: false,
+  onToggleFavorites: () => {},
   hasFilters: false,
 }
 

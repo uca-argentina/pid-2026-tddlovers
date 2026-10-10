@@ -7,11 +7,13 @@ import Banner from '../../components/Banner.jsx'
 import {
   fetchAvailability,
   fetchClass,
+  fetchFavoriteTeachers,
   fetchMyLessons,
   fetchMyPacks,
   fetchSubjects,
 } from '../../api/client.js'
 import { formatDayLong, fromISODate, toISODate } from '../../utils/calendar.js'
+import { favoriteIdsOf, withFavorite } from '../../utils/favorites.js'
 import {
   annotateClashes,
   filterCards,
@@ -62,6 +64,12 @@ class BookingBoard extends Component {
     // Los paquetes que compró el alumno: cada tarjeta dice cuántas clases le
     // quedan con ese docente, y el modal ofrece reservar con el paquete.
     packs: [],
+    // Los ids (string) de los docentes favoritos del alumno: el corazón de
+    // cada tarjeta y el filtro "Solo favoritos".
+    favoriteIds: [],
+    // Si falló marcar o desmarcar un favorito. Va arriba de las tarjetas, al
+    // lado del corazón que se tocó, y no arriba del calendario donde no se ve.
+    favoriteError: null,
     // --- filtros ---
     dayKeys: [],
     subjectIds: [],
@@ -70,6 +78,7 @@ class BookingBoard extends Component {
     fromTime: '',
     toTime: '',
     teacherQuery: '',
+    onlyFavorites: false,
   }
 
   // Dos contadores y no uno: si un cambio de mes compartiera token con el
@@ -83,6 +92,8 @@ class BookingBoard extends Component {
 
   packsToken = 0
 
+  favoritesToken = 0
+
   // Cache de un solo valor, igual que shortRunsCache en AvailabilityPage: la
   // clave es la IDENTIDAD de los dos arrays, que sirve porque solo cambian
   // cuando vuelve una respuesta. Sin esto, tocar un chip recalcularía las
@@ -94,12 +105,17 @@ class BookingBoard extends Component {
     this.applyQuery()
     this.loadReschedule()
     this.loadPacks()
+    this.loadFavorites()
   }
 
   componentDidUpdate(prevProps) {
     // Al abrir la app directo en esta pantalla, el usuario llega después
-    // (App lo recupera con /me): recién ahí se sabe si tiene paquetes.
-    if (prevProps.user !== this.props.user) this.loadPacks()
+    // (App lo recupera con /me): recién ahí se sabe si tiene paquetes y
+    // favoritos.
+    if (prevProps.user !== this.props.user) {
+      this.loadPacks()
+      this.loadFavorites()
+    }
     if (prevProps.router.location.search !== this.props.router.location.search) {
       this.applyQuery()
       if (prevProps.router.searchParams.get('reprogramar') !== this.getRescheduleId()) {
@@ -113,6 +129,31 @@ class BookingBoard extends Component {
     this.subjectsToken += 1
     this.rescheduleToken += 1
     this.packsToken += 1
+    this.favoritesToken += 1
+  }
+
+  isStudent() {
+    return this.props.user?.role === 'student'
+  }
+
+  /**
+   * Solo un alumno tiene favoritos. Si falla, el tablero sigue andando: los
+   * corazones arrancan vacíos y marcar uno igual se guarda.
+   */
+  loadFavorites() {
+    const token = ++this.favoritesToken
+    if (!this.isStudent()) {
+      this.setState({ favoriteIds: [], onlyFavorites: false })
+      return
+    }
+    fetchFavoriteTeachers()
+      .then((teachers) => {
+        if (token !== this.favoritesToken) return
+        this.setState({ favoriteIds: favoriteIdsOf(teachers) })
+      })
+      .catch(() => {
+        if (token === this.favoritesToken) this.setState({ favoriteIds: [] })
+      })
   }
 
   /**
@@ -121,7 +162,7 @@ class BookingBoard extends Component {
    */
   loadPacks() {
     const token = ++this.packsToken
-    if (this.props.user?.role !== 'student') {
+    if (!this.isStudent()) {
       this.setState({ packs: [] })
       return
     }
@@ -284,12 +325,14 @@ class BookingBoard extends Component {
 
   getFilters() {
     const { dayKeys, subjectIds, modalities, kinds, fromTime, toTime, teacherQuery } = this.state
-    return { dayKeys, subjectIds, modalities, kinds, fromTime, toTime, teacherQuery }
+    const teacherIds = this.state.onlyFavorites ? this.state.favoriteIds : null
+    return { dayKeys, subjectIds, modalities, kinds, fromTime, toTime, teacherQuery, teacherIds }
   }
 
   hasFilters() {
     const { dayKeys, subjectIds, modalities, kinds, fromTime, toTime, teacherQuery } = this.state
     return (
+      this.state.onlyFavorites ||
       dayKeys.length > 0 ||
       subjectIds.length > 0 ||
       modalities.length > 0 ||
@@ -406,9 +449,31 @@ class BookingBoard extends Component {
     this.setState({ teacherQuery: '' })
   }
 
+  handleToggleFavorites = () => {
+    this.dropQuery()
+    this.setState((prev) => ({ onlyFavorites: !prev.onlyFavorites }))
+  }
+
+  /**
+   * El corazón ya guardó: se actualiza la lista acá y no se vuelve a pedir.
+   * Con "Solo favoritos" prendido, sacar uno hace desaparecer sus tarjetas,
+   * que es justo lo que pide ese filtro.
+   */
+  handleFavoriteChange = (teacherId, favorite) => {
+    this.setState((prev) => ({
+      favoriteIds: withFavorite(prev.favoriteIds, teacherId, favorite),
+      favoriteError: null,
+    }))
+  }
+
+  handleFavoriteError = (message) => {
+    this.setState({ favoriteError: message })
+  }
+
   handleClear = () => {
     this.dropQuery()
     this.setState({
+      onlyFavorites: false,
       dayKeys: [],
       subjectIds: [],
       modalities: [],
@@ -519,6 +584,8 @@ class BookingBoard extends Component {
               fromTime={this.state.fromTime}
               toTime={this.state.toTime}
               teacherQuery={this.state.teacherQuery}
+              showFavorites={this.isStudent()}
+              onlyFavorites={this.state.onlyFavorites}
               hasFilters={this.hasFilters()}
               onToggleDay={this.handleToggleDay}
               onToggleSubject={this.handleToggleSubject}
@@ -526,6 +593,7 @@ class BookingBoard extends Component {
               onToggleKind={this.handleToggleKind}
               onChangeRange={this.handleChangeRange}
               onClearTeacher={this.handleClearTeacher}
+              onToggleFavorites={this.handleToggleFavorites}
               onClear={this.handleClear}
             />
 
@@ -535,7 +603,11 @@ class BookingBoard extends Component {
               loading={loading}
               filtered={this.hasFilters()}
               packs={this.state.packs}
+              favoriteIds={this.isStudent() ? this.state.favoriteIds : null}
+              favoriteError={this.state.favoriteError}
               onReservar={this.handleReservar}
+              onFavoriteChange={this.handleFavoriteChange}
+              onFavoriteError={this.handleFavoriteError}
             />
           </aside>
         </div>

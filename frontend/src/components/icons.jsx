@@ -240,6 +240,24 @@ export function UsersIcon(props) {
   )
 }
 
+/**
+ * Corazón: docente favorito. Con `filled` se pinta entero (ya es favorito);
+ * sin él, solo el contorno.
+ */
+export function HeartIcon({ filled = false, ...props }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M10 16.5s-6.5-3.9-6.5-8.6A3.4 3.4 0 0110 5.6a3.4 3.4 0 016.5 2.3c0 4.7-6.5 8.6-6.5 8.6z"
+        fill={filled ? 'currentColor' : 'none'}
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 /** Libro abierto: las materias que se pueden reservar. */
 export function BookIcon(props) {
   return (

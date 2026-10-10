@@ -349,3 +349,24 @@ export function createVacation({ startDate, endDate }) {
 export function deleteVacation(id) {
   return request(`/api/teachers/me/vacations/${id}`, { method: 'DELETE' })
 }
+
+// --- Docentes favoritos del alumno ------------------------------------------------
+
+/**
+ * Los docentes favoritos del alumno logueado, con las materias que ofrecen
+ * ({ id, nombre, apellido, subjects }). Solo los aprobados: si a uno lo dan
+ * de baja, el favorito queda guardado pero no viene hasta que lo aprueben.
+ */
+export function fetchFavoriteTeachers() {
+  return request('/api/favorites')
+}
+
+/** Idempotente: marcarlo dos veces no hace nada. Sin body (204). */
+export function addFavoriteTeacher(teacherId) {
+  return request(`/api/favorites/${teacherId}`, { method: 'PUT' })
+}
+
+/** Idempotente: sacar uno que no estaba no hace nada. Sin body (204). */
+export function removeFavoriteTeacher(teacherId) {
+  return request(`/api/favorites/${teacherId}`, { method: 'DELETE' })
+}

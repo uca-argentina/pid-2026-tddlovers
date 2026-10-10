@@ -17,6 +17,7 @@ const {
   fetchMyLessons,
   fetchMyWindows,
   fetchMyVacations,
+  fetchFavoriteTeachers,
   fetchMyPacks,
   fetchSubjects,
   updateWindow,
@@ -29,6 +30,7 @@ const {
   // Nadie tiene vacaciones cargadas en estos tests.
   fetchMyVacations: vi.fn(() => Promise.resolve([])),
   fetchMyPacks: vi.fn(() => Promise.resolve([])),
+  fetchFavoriteTeachers: vi.fn(() => Promise.resolve([])),
   fetchSubjects: vi.fn(),
   updateWindow: vi.fn(),
 }))
@@ -41,6 +43,7 @@ vi.mock('../../api/client.js', () => ({
   fetchMyWindows,
   fetchMyVacations,
   fetchMyPacks,
+  fetchFavoriteTeachers,
   fetchSubjects,
   updateWindow,
 }))

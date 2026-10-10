@@ -1,8 +1,10 @@
 import { Component } from 'react'
 import ClassActions from '../../components/ClassActions.jsx'
-import { PinIcon, SpinnerIcon, UsersIcon, VideoIcon } from '../../components/icons.jsx'
+import FavoriteButton from '../../components/FavoriteButton.jsx'
+import { ClockIcon, PinIcon, SpinnerIcon, UsersIcon, VideoIcon } from '../../components/icons.jsx'
 import { formatRangeLabel } from '../../utils/availability.js'
 import { formatDayLong, formatDuration } from '../../utils/calendar.js'
+import { isFavorite } from '../../utils/favorites.js'
 import { formatMoney } from '../../utils/rates.js'
 import {
   capacityLabel,
@@ -28,75 +30,85 @@ import './DayAgenda.css'
  * alumno con su propia reserva: acepta y toma lista de a uno.
  */
 class DayAgenda extends Component {
-  /** El nombre de la contraparte, según desde qué rol se esté mirando. */
-  getCounterpart(item) {
-    const alumnos = (item.students || []).filter(Boolean)
-    if (this.props.viewRole === 'teacher' && item.maxStudents > 1 && alumnos.length > 0) {
-      // Una grupal: todos los anotados y cuánto lugar queda, aunque por ahora
-      // haya uno solo.
-      return {
-        label: `Alumnos (${alumnos.length} de ${item.maxStudents})`,
-        name: alumnos.join(', '),
-        empty: false,
-      }
-    }
-    if (this.props.viewRole === 'teacher') {
-      return {
-        label: 'Alumno',
-        // Defensivo: toda reserva tiene alumno. Si el backend manda una sin
-        // nombre, preferimos este texto antes que un "Alumno: undefined".
-        name: item.studentName || 'Sin reservar',
-        empty: !item.studentName,
-      }
-    }
-    return { label: 'Docente', name: item.teacherName, empty: false }
-  }
-
   /**
-   * El cupo. Para el alumno, en una grupal, cuántos van a estar (el número,
-   * no quiénes). El docente ya ve los nombres en la línea de alumnos.
+   * Con quién es la clase, según desde qué rol se mire: el alumno ve al
+   * docente y el docente a sus alumnos (en una grupal, todos los anotados).
+   * `empty` = una reserva sin nombre de alumno, que no debería pasar.
    */
-  renderCapacity(item) {
-    const grupal = item.maxStudents > 1
-    const anotados =
-      grupal && this.props.viewRole !== 'teacher' && item.enrolled
-        ? ` · ${item.enrolled} de ${item.maxStudents} anotados`
-        : ''
-
-    return (
-      <li>
-        <UsersIcon />
-        <span>
-          {capacityLabel(item.maxStudents)}
-          {anotados}
-        </span>
-      </li>
-    )
+  getCounterpart(item) {
+    if (this.props.viewRole !== 'teacher') return { name: item.teacherName, empty: false }
+    const alumnos = (item.students || []).filter(Boolean)
+    if (item.maxStudents > 1 && alumnos.length > 0) {
+      return { name: alumnos.join(', '), empty: false }
+    }
+    // Defensivo: toda reserva tiene alumno. Si el backend manda una sin
+    // nombre, preferimos este texto antes que un "con undefined".
+    return { name: item.studentName || 'Sin reservar', empty: !item.studentName }
   }
 
   /**
-   * Dónde es la clase: el link para entrar y/o la dirección exacta con su
-   * localidad abajo, según la modalidad.
+   * La pastilla de arriba a la derecha, como en las tarjetas de Reservar. En
+   * una grupal dice cuántos van: el alumno no ve quiénes, el docente sí (en
+   * la línea de abajo).
+   */
+  getCapacity(item) {
+    if (item.maxStudents <= 1) return capacityLabel(item.maxStudents)
+    const anotados =
+      this.props.viewRole === 'teacher'
+        ? (item.students || []).filter(Boolean).length
+        : item.enrolled
+    return anotados
+      ? `Grupal · ${anotados} de ${item.maxStudents}`
+      : capacityLabel(item.maxStudents)
+  }
+
+  /**
+   * Dónde es la clase, un renglón por lugar: la videollamada con su link y/o
+   * la dirección exacta con la localidad abajo (el alumno recién la ve acá,
+   * después de reservar). La modalidad va adelante del primero.
    */
   renderPlace(item) {
     const link = needsMeetingUrl(item.modality) && item.meetingUrl
     const direccion = needsAddress(item.modality) && item.address
+    const modalidad = <span className="day-agenda-modality">{modalityLabel(item.modality)}</span>
+
+    // Sin link ni dirección (no debería pasar) queda al menos la modalidad.
+    if (!link && !direccion) {
+      const Icono = item.modality === 'in_person' ? PinIcon : VideoIcon
+      return (
+        <li>
+          <Icono />
+          {modalidad}
+        </li>
+      )
+    }
 
     return (
       <>
         {link ? (
           <li>
             <VideoIcon />
-            <a href={item.meetingUrl} target="_blank" rel="noreferrer">
-              Entrar a la videollamada
-            </a>
+            <span>
+              {modalidad}
+              {' · '}
+              <a href={item.meetingUrl} target="_blank" rel="noreferrer">
+                Entrar a la videollamada
+              </a>
+            </span>
           </li>
         ) : null}
         {direccion ? (
           <li className="day-agenda-address">
             <PinIcon />
             <span>
-              {item.address}
+              {/* En una híbrida la modalidad ya la dijo el renglón del link. */}
+              {link ? null : (
+                <>
+                  {modalidad}
+                  {' · '}
+                </>
+              )}
+              <span className="day-agenda-address-text">{item.address}</span>
               {item.locality ? (
                 <span className="day-agenda-locality">{item.locality}</span>
               ) : null}
@@ -128,23 +140,61 @@ class DayAgenda extends Component {
     ))
   }
 
+  /** El corazón del docente, solo para el alumno (favoriteIds null = no hay). */
+  renderFavorite(item) {
+    const { viewRole, favoriteIds, onFavoriteChange, onFavoriteError } = this.props
+    if (viewRole !== 'student' || !favoriteIds) return null
+    return (
+      <FavoriteButton
+        teacherId={item.teacherId}
+        teacherName={item.teacherName}
+        favorite={isFavorite(favoriteIds, item.teacherId)}
+        onChange={onFavoriteChange}
+        onError={onFavoriteError}
+      />
+    )
+  }
+
+  /**
+   * Una clase, con el mismo lenguaje que las tarjetas de Reservar: la
+   * materia manda, abajo con quién, después los datos con su ícono y el
+   * precio al pie. El horario va en azul (el color de las clases propias en
+   * el calendario) y no en el verde de "libre" de Reservar.
+   */
   renderItem(item) {
     const counterpart = this.getCounterpart(item)
+    const grupal = item.maxStudents > 1
 
     return (
       <li key={item.id} className="day-agenda-item">
         <div className="day-agenda-head">
-          <span className="day-agenda-time">{formatRangeLabel(item.startTime, item.endTime)}</span>
-          <span className="day-agenda-duration">{formatDuration(item.startTime, item.endTime)}</span>
-          <span className="day-agenda-modality">{modalityLabel(item.modality)}</span>
+          <span className="day-agenda-subject">{item.subjectName}</span>
+          <span className={`day-agenda-kind ${grupal ? 'is-group' : ''}`}>
+            <UsersIcon />
+            {this.getCapacity(item)}
+          </span>
         </div>
-        <p className="day-agenda-subject">{item.subjectName}</p>
-        <p className={`day-agenda-person ${counterpart.empty ? 'is-empty' : ''}`}>
-          <span className="day-agenda-person-label">{counterpart.label}:</span> {counterpart.name}
-        </p>
+        <div className="day-agenda-person-row">
+          <p className={`day-agenda-person ${counterpart.empty ? 'is-empty' : ''}`}>
+            {counterpart.empty ? null : 'con '}
+            <span className="day-agenda-person-name">{counterpart.name}</span>
+          </p>
+          {this.renderFavorite(item)}
+        </div>
 
         <ul className="day-agenda-facts">
-          {this.renderCapacity(item)}
+          <li>
+            <ClockIcon />
+            <span>
+              <span className="day-agenda-time">
+                {formatRangeLabel(item.startTime, item.endTime)}
+              </span>
+              {' · '}
+              <span className="day-agenda-duration">
+                {formatDuration(item.startTime, item.endTime)}
+              </span>
+            </span>
+          </li>
           {this.renderPlace(item)}
         </ul>
 
@@ -186,7 +236,10 @@ DayAgenda.defaultProps = {
   classes: [],
   loading: false,
   viewRole: 'student',
+  favoriteIds: null,
   onClassChange: () => {},
+  onFavoriteChange: () => {},
+  onFavoriteError: () => {},
 }
 
 export default DayAgenda

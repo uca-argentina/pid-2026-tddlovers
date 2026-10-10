@@ -4,15 +4,21 @@ import { MemoryRouter } from 'react-router-dom'
 import ReservationsPage from './ReservationsPage.jsx'
 import { apiClass } from '../../testing/fixtures.js'
 
-const { acceptLesson, fetchClasses } = vi.hoisted(() => ({
-  acceptLesson: vi.fn(),
-  fetchClasses: vi.fn(),
-}))
+const { acceptLesson, addFavoriteTeacher, fetchClasses, fetchFavoriteTeachers } = vi.hoisted(
+  () => ({
+    acceptLesson: vi.fn(),
+    addFavoriteTeacher: vi.fn(),
+    fetchClasses: vi.fn(),
+    fetchFavoriteTeachers: vi.fn(),
+  }),
+)
 
 vi.mock('../../api/client.js', () => ({
   acceptLesson,
+  addFavoriteTeacher,
   cancelLesson: vi.fn(),
   fetchClasses,
+  fetchFavoriteTeachers,
   markAttendance: vi.fn(),
   payLesson: vi.fn(),
 }))
@@ -31,6 +37,8 @@ function renderPage(viewRole = 'student') {
 beforeEach(() => {
   fetchClasses.mockReset()
   acceptLesson.mockReset()
+  fetchFavoriteTeachers.mockReset().mockResolvedValue([])
+  addFavoriteTeacher.mockReset().mockResolvedValue(null)
 })
 
 describe('ReservationsPage', () => {
@@ -85,5 +93,29 @@ describe('ReservationsPage', () => {
     renderPage()
 
     expect(await screen.findByText('Se cayó todo')).toBeInTheDocument()
+  })
+
+  it('el alumno marca como favorito al docente de una reserva', async () => {
+    fetchClasses.mockResolvedValue([reserva({ teacherId: 't1', teacherName: 'Laura Gómez' })])
+
+    renderPage()
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Agregar a favoritos a Laura Gómez' }),
+    )
+    expect(addFavoriteTeacher).toHaveBeenCalledWith('t1')
+    expect(
+      await screen.findByRole('button', { name: 'Sacar de favoritos a Laura Gómez' }),
+    ).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('el docente no ve corazones', async () => {
+    fetchClasses.mockResolvedValue([reserva()])
+
+    renderPage('teacher')
+
+    await screen.findByRole('region', { name: /Pendientes/ })
+    expect(screen.queryByRole('button', { name: /favoritos/ })).not.toBeInTheDocument()
+    expect(fetchFavoriteTeachers).not.toHaveBeenCalled()
   })
 })

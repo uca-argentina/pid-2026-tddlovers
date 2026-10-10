@@ -1,9 +1,10 @@
 import { Component } from 'react'
+import FavoriteButton from '../../components/FavoriteButton.jsx'
 import { ClockIcon, PinIcon, UsersIcon, VideoIcon } from '../../components/icons.jsx'
 import { formatRangeLabel } from '../../utils/availability.js'
 import { formatClashes, formatEnrolled, lowestRate } from '../../utils/booking.js'
 import { formatHourlyRate } from '../../utils/rates.js'
-import { classesLabel, formatPackDate, packClassesLabel } from '../../utils/packs.js'
+import { packClassesLabel } from '../../utils/packs.js'
 import { capacityLabel, modalityLabel, needsAddress } from '../../utils/windows.js'
 
 /**
@@ -59,22 +60,18 @@ class BookingCard extends Component {
   }
 
   /**
-   * Si el alumno tiene un paquete vigente con este docente: cuántas clases le
-   * quedan (cada asistencia descuenta una) y hasta cuándo.
+   * Si el alumno tiene un paquete vigente con este docente: cuántas clases
+   * puede reservar todavía. Se cuentan las disponibles (no las que quedan) para
+   * no prometer clases que ya están apartadas por otras reservas; si no queda
+   * ninguna, no se muestra nada y el modal explica que se paga aparte.
    */
   renderPack() {
     const { pack } = this.props
-    if (!pack) return null
-    const quedan = pack.remaining === 1 ? 'Te queda' : 'Te quedan'
+    if (!pack || pack.available <= 0) return null
+    const quedan = pack.available === 1 ? 'Te queda' : 'Te quedan'
     return (
       <p className="booking-card-pack">
-        {quedan} {packClassesLabel(pack.remaining, pack.classMinutes)} del paquete · vence el{' '}
-        {formatPackDate(pack.expiresOn)}
-        {pack.available < pack.remaining
-          ? ` · ${classesLabel(pack.remaining - pack.available)} ya reservada${
-              pack.remaining - pack.available === 1 ? '' : 's'
-            }`
-          : ''}
+        {quedan} {packClassesLabel(pack.available, pack.classMinutes)} del paquete.
       </p>
     )
   }
@@ -111,7 +108,18 @@ class BookingCard extends Component {
             {capacityLabel(card.maxStudents)}
           </span>
         </div>
-        <p className="booking-card-teacher">con {card.teacherName}</p>
+        <div className="booking-card-teacher-row">
+          <p className="booking-card-teacher">con {card.teacherName}</p>
+          {this.props.showFavorite ? (
+            <FavoriteButton
+              teacherId={card.teacherId}
+              teacherName={card.teacherName}
+              favorite={this.props.favorite}
+              onChange={this.props.onFavoriteChange}
+              onError={this.props.onFavoriteError}
+            />
+          ) : null}
+        </div>
 
         <ul className="booking-card-facts">
           <li>
@@ -154,6 +162,13 @@ class BookingCard extends Component {
       </li>
     )
   }
+}
+
+BookingCard.defaultProps = {
+  favorite: false,
+  showFavorite: false,
+  onFavoriteChange: () => {},
+  onFavoriteError: () => {},
 }
 
 export default BookingCard
