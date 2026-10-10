@@ -1,7 +1,7 @@
 name: Backend tests
 
-# El deploy no pasa por acá: Render (backend) y Vercel (frontend) despliegan
-# solos desde GitHub. Render espera a que este check pase.
+# El deploy no pasa por acá: Render despliega backend y frontend solo desde
+# GitHub, y espera a que este check pase.
 on:
   push:
     branches: [main]

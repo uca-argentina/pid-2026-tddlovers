@@ -41,13 +41,13 @@ docker compose -f docker-compose.dev.yml up -d --force-recreate backend frontend
 
 ## Producción
 
-* **Frontend**: Vercel, proyecto con *Root Directory* `frontend`. Cada PR tiene su preview, pero todas usan el backend y la base de producción.
-* **Backend**: Render, definido en `render.yaml` (Blueprint), región Virginia. En el plan gratuito se duerme tras ~15 min sin uso y el primer pedido tarda ~1 minuto.
+* **Frontend**: Render, *Static Site* definido en el mismo `render.yaml`.
+* **Backend**: Render, *Web Service* definido en `render.yaml` (Blueprint), región Virginia. En el plan gratuito se duerme tras ~15 min sin uso y el primer pedido tarda ~1 minuto.
 * **Base**: Neon, región `aws-us-east-1` (la misma que el backend).
 
-El navegador nunca habla directo con Render: `vercel.json` reenvía `/api/*` al backend, así la app y la API comparten origen y la cookie de sesión funciona sin CORS. Si cambia la URL del servicio en Render, hay que actualizarla ahí.
+El navegador nunca habla directo con el backend: el sitio estático reenvía `/api/*` al backend (rewrite en `render.yaml`), así la app y la API comparten origen y la cookie de sesión funciona sin CORS. Si cambia la URL del backend en Render, hay que actualizarla ahí.
 
-Despliegue: Vercel y Render despliegan solos al mergear a `main` (Render, solo si pasaron los tests de GitHub Actions).
+Despliegue: Render despliega los dos automáticamente al mergear a `main`, una vez que pasan los tests de GitHub Actions.
 
 Variables del backend en Render:
 
@@ -72,8 +72,7 @@ pid-2026-tddlovers/
   frontend/     React + Vite
   backend/      Fastify
   docker-compose.dev.yml   desarrollo local
-  render.yaml              backend en Render
-  frontend/vercel.json     frontend en Vercel
+  render.yaml              backend y frontend en Render
   .env.example
 ```
 

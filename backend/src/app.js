@@ -17,7 +17,7 @@ import availabilityRoutes from './routes/availability/index.js';
  */
 export function buildApp(opts = {}) {
   // trustProxy: en producción los pedidos llegan a través de proxies (el
-  // rewrite de Vercel y el balanceador de Render), así que sin esto Fastify
+  // rewrite del frontend y el balanceador de Render), así que sin esto Fastify
   // ve la IP del proxy en vez de la del usuario — y los límites por IP serían
   // un único cupo compartido por todos.
   const app = Fastify({ logger: true, trustProxy: true, ...opts });
