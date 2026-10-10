@@ -63,7 +63,12 @@ export default fp(async function sessionPlugin(app) {
 
     const session = await findValidSession(unsigned.value);
     if (session) {
-      request.user = { id: session.user_id, email: session.email, role: session.role };
+      request.user = {
+        id: session.user_id,
+        email: session.email,
+        role: session.role,
+        approvalStatus: session.approval_status ?? null,
+      };
     }
   });
 

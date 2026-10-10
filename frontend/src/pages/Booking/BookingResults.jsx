@@ -2,6 +2,7 @@ import { Component } from 'react'
 import BookingCard from './BookingCard.jsx'
 import { SpinnerIcon } from '../../components/icons.jsx'
 import { formatDayLong } from '../../utils/calendar.js'
+import { packSummaryWith } from '../../utils/packs.js'
 import './BookingResults.css'
 
 /**
@@ -27,12 +28,14 @@ class BookingResults extends Component {
 
   render() {
     const { date, cards, loading } = this.props
+    // Las de vacaciones se muestran (en gris) pero no se pueden reservar.
+    const reservables = cards.filter((card) => !card.onVacation).length
 
     return (
       <section className="booking-results">
         <h2 className="booking-results-title">{formatDayLong(date)}</h2>
         <p className="booking-results-count">
-          {cards.length} {cards.length === 1 ? 'clase para reservar' : 'clases para reservar'}
+          {reservables} {reservables === 1 ? 'clase para reservar' : 'clases para reservar'}
         </p>
 
         {loading ? (
@@ -45,7 +48,12 @@ class BookingResults extends Component {
         {!loading && cards.length > 0 ? (
           <ul className="booking-results-list">
             {cards.map((card) => (
-              <BookingCard key={card.id} card={card} onReservar={this.props.onReservar(card)} />
+              <BookingCard
+                key={card.id}
+                card={card}
+                pack={packSummaryWith(this.props.packs, card.teacherId)}
+                onReservar={this.props.onReservar(card)}
+              />
             ))}
           </ul>
         ) : null}
@@ -58,6 +66,7 @@ BookingResults.defaultProps = {
   cards: [],
   loading: false,
   filtered: false,
+  packs: [],
   // Curried como todos los handlers por ítem de la app: onReservar(card)
   // devuelve el handler del botón de esa tarjeta.
   onReservar: () => () => {},

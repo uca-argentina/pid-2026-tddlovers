@@ -22,6 +22,14 @@ import {
   needsAddress,
   needsMeetingUrl,
 } from '../../utils/windows.js'
+import {
+  activePacksWith,
+  classesLabel,
+  formatPackDate,
+  maxTokensFor,
+  packClassesLabel,
+  usablePackFor,
+} from '../../utils/packs.js'
 import './BookingDialog.css'
 
 // La duración con la que arranca el selector al elegir un horario: una hora
@@ -41,6 +49,12 @@ const DEFAULT_MINUTES = 60
  * duración vienen fijas, así que elegir una grupal completa los tres pasos
  * de una.
  *
+ * Si el alumno tiene un paquete con este docente que sirve para ese día, elige
+ * cuántas clases del paquete usa (de entrada, todas las que entran en la
+ * duración). Cada una cubre la duración fija del paquete; lo que se pase se
+ * paga aparte con la tarifa ("1 clase de 1 h + 30 min a pagar"). Materia,
+ * horario y duración se eligen igual, y al reprogramar también.
+ *
  * Acá NO se vuelve a calcular qué está libre: la tarjeta ya trae los inicios
  * posibles con su duración máxima (del backend, recortados por las clases
  * propias en annotateClashes). Una segunda cuenta sería una segunda verdad.
@@ -59,9 +73,36 @@ class BookingDialog extends Component {
       groupStart: null,
       start: unico ? unico.start : null,
       minutes: unico ? Math.min(DEFAULT_MINUTES, unico.maxMinutes) : null,
+      // Cuántas clases del paquete usa. null = "todas las que entran", que
+      // es lo que conviene de entrada y se acomoda solo si cambia la duración.
+      packTokens: null,
       saving: false,
       error: null,
     }
+  }
+
+  getUsablePack() {
+    const { packs, card } = this.props
+    return usablePackFor(packs, card.teacherId, card.date)
+  }
+
+  /** Cuántas clases del paquete entran como mucho en la clase elegida. */
+  getMaxTokens(selection = this.getSelection()) {
+    return maxTokensFor(this.getUsablePack(), selection?.minutes)
+  }
+
+  /** Cuántas usa: lo que eligió, recortado a lo que entra ahora. */
+  getTokens(selection = this.getSelection()) {
+    const max = this.getMaxTokens(selection)
+    const { packTokens } = this.state
+    return packTokens === null ? max : Math.min(packTokens, max)
+  }
+
+  /** Lo que se paga aparte: la duración menos lo que cubre el paquete. */
+  getExtraMinutes(selection) {
+    const pack = this.getUsablePack()
+    const cubiertos = pack ? this.getTokens(selection) * pack.classMinutes : 0
+    return Math.max(selection.minutes - cubiertos, 0)
   }
 
   getSubject(subjectId = this.state.subjectId) {
@@ -105,10 +146,11 @@ class BookingDialog extends Component {
     }
   }
 
+  /** Lo que se paga: la clase entera, o solo lo que se pasa del paquete. */
   getPriceCents(selection) {
     const subject = selection && this.getSubject(selection.subjectId)
     if (!subject) return null
-    return classPriceCents(subject.hourlyRateCents, selection.minutes)
+    return classPriceCents(subject.hourlyRateCents, this.getExtraMinutes(selection))
   }
 
   handleSubject = (subjectId) => () => {
@@ -142,6 +184,12 @@ class BookingDialog extends Component {
     this.setState({ minutes, error: null })
   }
 
+  handleTokens = (delta) => () => {
+    const actual = this.getTokens()
+    const max = this.getMaxTokens()
+    this.setState({ packTokens: Math.max(0, Math.min(actual + delta, max)), error: null })
+  }
+
   handleConfirm = () => {
     const { card, onBooked } = this.props
     const { saving } = this.state
@@ -161,6 +209,12 @@ class BookingDialog extends Component {
     }
     // Reprogramar manda lo mismo que reservar, salvo la materia: la pone el
     // backend, es la de la clase vieja (la tarjeta ya viene recortada a esa).
+    const tokens = this.getTokens(selection)
+    const usedPack = tokens > 0
+    if (usedPack) {
+      pedido.packId = this.getUsablePack().id
+      pedido.packTokens = tokens
+    }
     const guardar = rescheduleOf ? rescheduleLesson(rescheduleOf.id, pedido) : bookLesson(pedido)
 
     guardar
@@ -169,6 +223,7 @@ class BookingDialog extends Component {
           subjectName: subject.name,
           teacherName: card.teacherName,
           rescheduled: Boolean(rescheduleOf),
+          usedPack,
         }),
       )
       .catch((error) => {
@@ -356,12 +411,106 @@ class BookingDialog extends Component {
             {selection.joining ? ' · te sumás a una clase grupal' : ''}
           </span>
         </p>
-        <p className="booking-dialog-price">
-          {formatMoney(this.getPriceCents(selection))}
-          {this.props.card.maxStudents > 1 && subject.hourlyRateCents > 0 ? (
-            <span className="booking-dialog-duration"> por alumno</span>
-          ) : null}
+        {this.getTokens(selection) > 0 && this.getExtraMinutes(selection) === 0 ? (
+          <p className="booking-dialog-price">Incluida en tu paquete</p>
+        ) : (
+          <p className="booking-dialog-price">
+            {formatMoney(this.getPriceCents(selection))}
+            {this.props.card.maxStudents > 1 && subject.hourlyRateCents > 0 ? (
+              <span className="booking-dialog-duration"> por alumno</span>
+            ) : null}
+            {this.getTokens(selection) > 0 ? (
+              <span className="booking-dialog-duration">
+                {` + ${classesLabel(this.getTokens(selection))} del paquete`}
+              </span>
+            ) : null}
+          </p>
+        )}
+      </div>
+    )
+  }
+
+  /**
+   * Cuántas clases del paquete usa, y qué cubren. Si tiene un paquete vigente
+   * con este docente pero no sirve para este día (vence antes, o ya reservó
+   * todas las que le quedan), se explica en vez de esconderlo.
+   */
+  renderPack() {
+    const { packs, card } = this.props
+    const usable = this.getUsablePack()
+
+    if (!usable) {
+      const activos = activePacksWith(packs, card.teacherId)
+      if (activos.length === 0) return null
+      const vencenAntes = activos.every((pack) => card.date > pack.expiresOn)
+      return (
+        <p className="booking-dialog-pack-note">
+          {vencenAntes
+            ? 'Tu paquete con este docente vence antes de este día: esta clase se paga aparte.'
+            : 'Ya reservaste todas las clases de tu paquete con este docente: esta se paga aparte.'}
         </p>
+      )
+    }
+
+    const selection = this.getSelection()
+    const disponible = `${packClassesLabel(usable.available, usable.classMinutes)} para reservar · vence el ${formatPackDate(usable.expiresOn)}`
+
+    // Sin duración elegida todavía no se sabe cuántas entran.
+    if (!selection) {
+      return (
+        <div className="booking-dialog-pack">
+          <span>
+            Tu paquete
+            <span className="booking-dialog-pack-detail">Te quedan {disponible}</span>
+          </span>
+        </div>
+      )
+    }
+
+    const tokens = this.getTokens(selection)
+    const max = this.getMaxTokens(selection)
+    const extra = this.getExtraMinutes(selection)
+    const { saving } = this.state
+
+    let detalle
+    if (max === 0) {
+      detalle = `Cada clase del paquete dura ${formatMinutes(usable.classMinutes)}: alargá la clase para usarla.`
+    } else if (tokens === 0) {
+      detalle = 'No usás el paquete: pagás la clase entera.'
+    } else if (extra === 0) {
+      detalle = `Cubre toda la clase (${formatMinutes(selection.minutes)}).`
+    } else {
+      detalle = `Cubre ${formatMinutes(tokens * usable.classMinutes)} · pagás aparte ${formatMinutes(extra)}.`
+    }
+
+    return (
+      <div className="booking-dialog-pack">
+        <span className="booking-dialog-pack-text">
+          Clases de tu paquete ({formatMinutes(usable.classMinutes)} c/u)
+          <span className="booking-dialog-pack-detail">{detalle}</span>
+          <span className="booking-dialog-pack-detail">Te quedan {disponible}</span>
+        </span>
+        <span className="booking-dialog-stepper" role="group" aria-label="Clases del paquete a usar">
+          <button
+            type="button"
+            onClick={this.handleTokens(-1)}
+            disabled={saving || tokens === 0}
+            aria-label="Usar una clase menos del paquete"
+          >
+            −
+          </button>
+          <output aria-live="polite" aria-label={`Usás ${classesLabel(tokens)} del paquete`}>
+            {tokens}
+          </output>
+          <button
+            type="button"
+            onClick={this.handleTokens(1)}
+            disabled={saving || tokens >= max}
+            aria-label="Usar una clase más del paquete"
+          >
+            +
+          </button>
+        </span>
       </div>
     )
   }
@@ -413,6 +562,7 @@ class BookingDialog extends Component {
           {this.renderStarts()}
           {this.renderDuration()}
 
+          {this.renderPack()}
           {this.renderSummary()}
 
           {error ? <Banner type="danger">{error}</Banner> : null}
@@ -435,6 +585,11 @@ class BookingDialog extends Component {
       </Modal>
     )
   }
+}
+
+BookingDialog.defaultProps = {
+  packs: [],
+  rescheduleOf: null,
 }
 
 export default BookingDialog

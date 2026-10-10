@@ -343,6 +343,14 @@ class DayWindowsDialog extends Component {
         <div className="day-dialog">
           {this.renderNav()}
 
+          {/* Los horarios siguen ahí (vuelven solos cuando terminan), pero ese
+              día nadie los puede reservar. */}
+          {this.props.onVacation ? (
+            <Banner type="warning">
+              Estás de vacaciones este día: los alumnos ven tus horarios en gris y no los pueden
+              reservar.
+            </Banner>
+          ) : null}
           {notice ? <Banner type="success">{notice}</Banner> : null}
           {/* El error de guardar va adentro del formulario; este es el de
               borrar, que no tiene formulario. */}

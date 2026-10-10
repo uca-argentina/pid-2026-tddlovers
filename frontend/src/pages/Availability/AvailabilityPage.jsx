@@ -1,5 +1,7 @@
 import { Component } from 'react'
 import { Link } from 'react-router-dom'
+import Banner from '../../components/Banner.jsx'
+import { approvalNotice } from '../../utils/approval.js'
 import withRouter from '../../routes/withRouter.jsx'
 import TeacherAvailability from './TeacherAvailability.jsx'
 import BookingBoard from '../Booking/BookingBoard.jsx'
@@ -53,7 +55,15 @@ class AvailabilityPage extends Component {
       )
     }
 
-    return <TeacherAvailability user={user} />
+    // Un docente sin aprobar carga su disponibilidad igual (así está listo
+    // el día que lo aprueban), pero se le avisa que todavía nadie la ve.
+    const aviso = approvalNotice(user)
+    return (
+      <>
+        {aviso ? <Banner type="warning">{aviso}</Banner> : null}
+        <TeacherAvailability user={user} />
+      </>
+    )
   }
 
   render() {

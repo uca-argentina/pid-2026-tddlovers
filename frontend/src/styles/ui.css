@@ -154,6 +154,13 @@
   color: var(--color-success);
 }
 
+/* Un aviso que no es un error: algo que el usuario tiene que saber (p. ej. el
+   docente que todavía no fue aprobado). */
+.banner-warning {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
 .banner svg {
   width: 18px;
   height: 18px;

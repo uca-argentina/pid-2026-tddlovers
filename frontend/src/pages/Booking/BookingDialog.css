@@ -200,6 +200,67 @@
   font-variant-numeric: tabular-nums;
 }
 
+.booking-dialog-pack {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 35%, transparent);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+/* − 1 + para elegir cuántas clases del paquete usa. */
+.booking-dialog-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.booking-dialog-stepper button {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-solid);
+  color: var(--color-text);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.booking-dialog-stepper button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.booking-dialog-stepper output {
+  min-width: 20px;
+  text-align: center;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.booking-dialog-pack-detail {
+  display: block;
+  margin-top: 2px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.booking-dialog-pack-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
 .booking-dialog-price {
   font-size: 17px;
   color: var(--color-text);

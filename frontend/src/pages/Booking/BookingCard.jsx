@@ -3,6 +3,7 @@ import { ClockIcon, PinIcon, UsersIcon, VideoIcon } from '../../components/icons
 import { formatRangeLabel } from '../../utils/availability.js'
 import { formatClashes, formatEnrolled, lowestRate } from '../../utils/booking.js'
 import { formatHourlyRate } from '../../utils/rates.js'
+import { classesLabel, formatPackDate, packClassesLabel } from '../../utils/packs.js'
 import { capacityLabel, modalityLabel, needsAddress } from '../../utils/windows.js'
 
 /**
@@ -57,6 +58,27 @@ class BookingCard extends Component {
     )
   }
 
+  /**
+   * Si el alumno tiene un paquete vigente con este docente: cuántas clases le
+   * quedan (cada asistencia descuenta una) y hasta cuándo.
+   */
+  renderPack() {
+    const { pack } = this.props
+    if (!pack) return null
+    const quedan = pack.remaining === 1 ? 'Te queda' : 'Te quedan'
+    return (
+      <p className="booking-card-pack">
+        {quedan} {packClassesLabel(pack.remaining, pack.classMinutes)} del paquete · vence el{' '}
+        {formatPackDate(pack.expiresOn)}
+        {pack.available < pack.remaining
+          ? ` · ${classesLabel(pack.remaining - pack.available)} ya reservada${
+              pack.remaining - pack.available === 1 ? '' : 's'
+            }`
+          : ''}
+      </p>
+    )
+  }
+
   renderGroups() {
     const { card } = this.props
     const grupos = this.getGroupsWithRoom()
@@ -73,11 +95,15 @@ class BookingCard extends Component {
 
   render() {
     const { card } = this.props
-    const aviso = formatClashes(card.clashes, card.bookable)
+    // De vacaciones no hay nada que reservar: lo que importa es el motivo, no
+    // las superposiciones con clases propias.
+    const aviso = card.onVacation ? null : formatClashes(card.clashes, card.bookable)
     const materias = card.subjects.map((subject) => subject.name).join(' · ')
 
     return (
-      <li className={`booking-card ${card.bookable ? '' : 'is-blocked'}`}>
+      <li
+        className={`booking-card ${card.bookable ? '' : 'is-blocked'} ${card.onVacation ? 'is-vacation' : ''}`}
+      >
         <div className="booking-card-head">
           <span className="booking-card-subject">{materias}</span>
           <span className={`booking-card-kind ${card.maxStudents > 1 ? 'is-group' : ''}`}>
@@ -98,6 +124,10 @@ class BookingCard extends Component {
           {this.renderLocation()}
         </ul>
 
+        {card.onVacation ? (
+          <p className="booking-card-vacation">El docente está de vacaciones este día.</p>
+        ) : null}
+        {this.renderPack()}
         {this.renderGroups()}
 
         {card.joined.length > 0 ? (
@@ -116,9 +146,9 @@ class BookingCard extends Component {
             onClick={this.props.onReservar}
             // Los botones de todas las tarjetas dicen lo mismo: sin esto, leído
             // con un lector de pantalla no se sabe cuál es cuál.
-            aria-label={`Reservar con ${card.teacherName}, ${formatRangeLabel(card.start, card.end)}`}
+            aria-label={`Reservar con ${card.teacherName}, ${formatRangeLabel(card.start, card.end)}${card.onVacation ? ', de vacaciones' : ''}`}
           >
-            Reservar
+            {card.onVacation ? 'De vacaciones' : 'Reservar'}
           </button>
         </div>
       </li>

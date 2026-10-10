@@ -8,6 +8,7 @@ import {
 import { formatRangeLabel } from '../../utils/availability.js'
 import { formatDayLong, toISODate, WEEKDAY_LABELS } from '../../utils/calendar.js'
 import { matchesQuery, watchQuery } from '../../utils/media.js'
+import { isOnVacation } from '../../utils/vacations.js'
 import {
   capacityLabel,
   formatWeekTitle,
@@ -35,6 +36,9 @@ const HOUR_HEIGHT = 52
  * Cada semana es distinta: se muestran las ventanas sueltas de esas fechas y
  * las semanales que ya habían arrancado. La cuenta la hace windowsOn.
  *
+ * Los días de vacaciones se ven en gris con un cartel: los horarios siguen
+ * (vuelven solos cuando terminan), pero nadie los puede reservar.
+ *
  * Como no hay ventanas que se pisen en un mismo día (lo valida el backend),
  * los bloques nunca van lado a lado: cada uno ocupa el ancho de su columna.
  */
@@ -55,7 +59,7 @@ class WeekCalendar extends Component {
   }
 
   getDays() {
-    const { weekStart, windows, today } = this.props
+    const { weekStart, windows, today, vacations } = this.props
     return weekDates(weekStart).map((date, index) => {
       const iso = toISODate(date)
       return {
@@ -64,19 +68,21 @@ class WeekCalendar extends Component {
         index,
         isToday: iso === today,
         isPast: iso < today,
+        onVacation: isOnVacation(vacations, iso),
         windows: windowsOn(windows, iso),
       }
     })
   }
 
   /** "13:00 a 16:00, presencial, grupal · hasta 4, se repite todas las semanas". */
-  describeWindow(window) {
+  describeWindow(window, day = null) {
     const partes = [
       `${window.start} a ${window.end}`,
       modalityLabel(window.modality).toLowerCase(),
       capacityLabel(window.maxStudents).toLowerCase(),
     ]
     if (window.repeatsWeekly) partes.push('se repite todas las semanas')
+    if (day?.onVacation) partes.push('de vacaciones, no se puede reservar')
     return partes.join(', ')
   }
 
@@ -128,11 +134,11 @@ class WeekCalendar extends Component {
       <button
         key={window.id}
         type="button"
-        className={`week-cal-block ${compact ? 'is-compact' : ''} ${window.maxStudents > 1 ? 'is-group' : ''}`}
+        className={`week-cal-block ${compact ? 'is-compact' : ''} ${window.maxStudents > 1 ? 'is-group' : ''} ${day.onVacation ? 'is-vacation' : ''}`}
         style={{ top, height }}
         onClick={() => this.props.onOpenWindow(day.iso, window.id)}
-        aria-label={this.describeWindow(window)}
-        title={compact ? this.describeWindow(window) : undefined}
+        aria-label={this.describeWindow(window, day)}
+        title={compact || day.onVacation ? this.describeWindow(window, day) : undefined}
       >
         <span className="week-cal-block-subject">
           {window.repeatsWeekly ? <RepeatIcon className="week-cal-block-repeat" /> : null}
@@ -161,12 +167,13 @@ class WeekCalendar extends Component {
           <button
             key={day.iso}
             type="button"
-            className={`week-cal-day-head ${day.isToday ? 'is-today' : ''} ${day.isPast ? 'is-past' : ''}`}
+            className={`week-cal-day-head ${day.isToday ? 'is-today' : ''} ${day.isPast ? 'is-past' : ''} ${day.onVacation ? 'is-vacation' : ''}`}
             onClick={() => this.props.onOpenDay(day.iso)}
-            aria-label={`Ver los horarios del ${formatDayLong(day.date).toLowerCase()}`}
+            aria-label={`Ver los horarios del ${formatDayLong(day.date).toLowerCase()}${day.onVacation ? ', de vacaciones' : ''}`}
           >
             <span className="week-cal-weekday">{WEEKDAY_LABELS[day.index]}</span>
             <span className="week-cal-daynum">{day.date.getDate()}</span>
+            {day.onVacation ? <span className="week-cal-vacation-tag">Vacaciones</span> : null}
           </button>
         ))}
 
@@ -184,7 +191,7 @@ class WeekCalendar extends Component {
         {days.map((day) => (
           <div
             key={day.iso}
-            className={`week-cal-col ${day.isToday ? 'is-today' : ''} ${day.isPast ? 'is-past' : ''}`}
+            className={`week-cal-col ${day.isToday ? 'is-today' : ''} ${day.isPast ? 'is-past' : ''} ${day.onVacation ? 'is-vacation' : ''}`}
             style={{ height: alto }}
           >
             {day.windows.map((window) => this.renderBlock(day, window, hours))}
@@ -201,7 +208,7 @@ class WeekCalendar extends Component {
         {days.map((day) => (
           <li
             key={day.iso}
-            className={`week-cal-agenda-day ${day.isToday ? 'is-today' : ''} ${day.isPast ? 'is-past' : ''}`}
+            className={`week-cal-agenda-day ${day.isToday ? 'is-today' : ''} ${day.isPast ? 'is-past' : ''} ${day.onVacation ? 'is-vacation' : ''}`}
           >
             <button
               type="button"
@@ -211,6 +218,7 @@ class WeekCalendar extends Component {
             >
               <span>{formatDayLong(day.date)}</span>
               {day.isToday ? <span className="week-cal-today-tag">Hoy</span> : null}
+              {day.onVacation ? <span className="week-cal-vacation-tag">Vacaciones</span> : null}
             </button>
             {day.windows.length === 0 ? (
               <p className="week-cal-agenda-empty">Sin horarios</p>
@@ -220,9 +228,9 @@ class WeekCalendar extends Component {
                   <li key={window.id}>
                     <button
                       type="button"
-                      className={`week-cal-agenda-item ${window.maxStudents > 1 ? 'is-group' : ''}`}
+                      className={`week-cal-agenda-item ${window.maxStudents > 1 ? 'is-group' : ''} ${day.onVacation ? 'is-vacation' : ''}`}
                       onClick={() => this.props.onOpenWindow(day.iso, window.id)}
-                      aria-label={this.describeWindow(window)}
+                      aria-label={this.describeWindow(window, day)}
                     >
                       <span className="week-cal-block-time">
                         {formatRangeLabel(window.start, window.end)}
@@ -261,6 +269,7 @@ class WeekCalendar extends Component {
 
 WeekCalendar.defaultProps = {
   windows: [],
+  vacations: [],
   loading: false,
   showingThisWeek: false,
 }

@@ -18,6 +18,14 @@ vi.mock('../../db/rates.js', () => ({
   findRate: vi.fn(),
 }));
 
+vi.mock('../../db/packs.js', () => ({
+  listStudentPacks: vi.fn(),
+}));
+
+vi.mock('../../db/vacations.js', () => ({
+  isTeacherOnVacation: vi.fn().mockResolvedValue(false),
+}));
+
 vi.mock('../../db/sessions.js', () => ({
   createSession: vi.fn(),
   findValidSession: vi.fn(),
@@ -36,6 +44,8 @@ const {
 } = await import('../../db/classes.js');
 const { findWindowById } = await import('../../db/availability.js');
 const { findRate } = await import('../../db/rates.js');
+const { listStudentPacks } = await import('../../db/packs.js');
+const { isTeacherOnVacation } = await import('../../db/vacations.js');
 const { findValidSession } = await import('../../db/sessions.js');
 const { buildApp } = await import('../../app.js');
 
@@ -77,6 +87,7 @@ const ventana = (over = {}) => ({
   locality: null,
   address: null,
   teacherName: 'Laura Gómez',
+  teacherApprovalStatus: 'approved',
   ...over,
 });
 
@@ -109,6 +120,8 @@ const clase = (over = {}) => ({
   cancelledBy: null,
   cancelReason: null,
   rescheduledFrom: null,
+  studentPackId: null,
+  packTokens: 0,
   enrolled: 1,
   ...over,
 });
@@ -161,6 +174,8 @@ describe('POST /api/classes', () => {
       subjectId: MATE,
       // 1 h 30 min a $ 5.000/h.
       priceCents: 750000,
+      studentPackId: null,
+      packTokens: 0,
     });
   });
 
@@ -286,6 +301,48 @@ describe('POST /api/classes', () => {
     expect(bookClass).not.toHaveBeenCalled();
   });
 
+  it('a teacher pending approval cannot receive bookings', async () => {
+    findWindowById.mockResolvedValueOnce(ventana({ teacherApprovalStatus: 'pending' }));
+    const headers = await authedHeaders(app);
+
+    const res = await app.inject({ method: 'POST', url: '/api/classes', headers, payload: reserva() });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json().message).toMatch(/no puede recibir reservas/);
+    expect(bookClass).not.toHaveBeenCalled();
+  });
+
+  it('a rejected teacher cannot receive bookings either', async () => {
+    findWindowById.mockResolvedValueOnce(ventana({ teacherApprovalStatus: 'rejected' }));
+    const headers = await authedHeaders(app);
+
+    const res = await app.inject({ method: 'POST', url: '/api/classes', headers, payload: reserva() });
+
+    expect(res.statusCode).toBe(409);
+    expect(bookClass).not.toHaveBeenCalled();
+  });
+
+  it('a teacher on vacation that day cannot be booked', async () => {
+    isTeacherOnVacation.mockResolvedValueOnce(true);
+    const headers = await authedHeaders(app);
+
+    const res = await app.inject({ method: 'POST', url: '/api/classes', headers, payload: reserva() });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json().message).toMatch(/vacaciones/);
+    expect(isTeacherOnVacation).toHaveBeenCalledWith(DOCENTE, '2099-09-14');
+    expect(bookClass).not.toHaveBeenCalled();
+  });
+
+  it('passes on the conflict when the vacation was loaded meanwhile', async () => {
+    bookClass.mockResolvedValueOnce({ conflict: 'El docente está de vacaciones ese día.' });
+    const headers = await authedHeaders(app);
+
+    const res = await app.inject({ method: 'POST', url: '/api/classes', headers, payload: reserva() });
+
+    expect(res.statusCode).toBe(409);
+  });
+
   it('rejects a date the window does not fall on', async () => {
     const headers = await authedHeaders(app);
 
@@ -386,6 +443,155 @@ const comoDocente = (over = {}) => clase({ teacherId: 'user-1', studentId: 'otro
 // Una fecha que ya pasó, para "la clase ya empezó".
 const PASADA = '2020-03-02';
 
+// Un paquete comprado tal como lo devuelve listStudentPacks (db/packs.js): 4
+// clases de 1 h.
+const PACK_ID = '3a2b1c0d-9e8f-4a7b-8c6d-5e4f3a2b1c0d';
+const paqueteComprado = (over = {}) => ({
+  id: PACK_ID,
+  packId: 'oferta-1',
+  teacherId: DOCENTE,
+  teacherName: 'Laura Gómez',
+  classCount: 4,
+  classMinutes: 60,
+  priceCents: 1800000,
+  purchasedAt: '2099-09-01T12:00:00.000Z',
+  expiresOn: '2099-09-30',
+  attended: 0,
+  reserved: 0,
+  ...over,
+});
+
+describe('POST /api/classes with a pack', () => {
+  let app;
+
+  beforeEach(() => {
+    app = buildApp({ logger: false });
+    findWindowById.mockResolvedValue(ventana());
+    hasOverlappingClass.mockResolvedValue(false);
+    // $ 5.000 la hora.
+    findRate.mockResolvedValue(500000);
+    bookClass.mockResolvedValue({ id: CLASE_ID });
+    findClassById.mockResolvedValue(clase());
+    listStudentPacks.mockResolvedValue([paqueteComprado()]);
+  });
+
+  afterEach(async () => {
+    vi.clearAllMocks();
+    await app.close();
+  });
+
+  const reservar = async (payload) => {
+    const headers = await authedHeaders(app);
+    return app.inject({ method: 'POST', url: '/api/classes', headers, payload });
+  };
+
+  it('a class as long as the tokens used costs nothing more', async () => {
+    const res = await reservar(
+      reserva({ durationMinutes: 60, packId: PACK_ID, packTokens: 1 })
+    );
+
+    expect(res.statusCode).toBe(201);
+    expect(listStudentPacks).toHaveBeenCalledWith({
+      studentId: 'user-1',
+      teacherId: DOCENTE,
+      excludeClassId: null,
+    });
+    // Materia, modalidad y duración las sigue eligiendo el alumno.
+    expect(bookClass).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subjectId: MATE,
+        endTime: '14:00',
+        priceCents: 0,
+        studentPackId: PACK_ID,
+        packTokens: 1,
+      })
+    );
+  });
+
+  it('1 h 30 with one token of 1 h pays the extra 30 min', async () => {
+    const res = await reservar(reserva({ packId: PACK_ID, packTokens: 1 }));
+
+    expect(res.statusCode).toBe(201);
+    expect(bookClass).toHaveBeenCalledWith(
+      expect.objectContaining({ endTime: '14:30', priceCents: 250000, packTokens: 1 })
+    );
+  });
+
+  it('can use more than one token in a longer class', async () => {
+    findWindowById.mockResolvedValue(ventana({ end: '16:00' }));
+
+    const res = await reservar(
+      reserva({ durationMinutes: 150, packId: PACK_ID, packTokens: 2 })
+    );
+
+    expect(res.statusCode).toBe(201);
+    // 2 h cubiertas + 30 min a $ 5.000/h.
+    expect(bookClass).toHaveBeenCalledWith(
+      expect.objectContaining({ priceCents: 250000, packTokens: 2 })
+    );
+  });
+
+  it('the tokens cannot cover more than the class lasts', async () => {
+    const res = await reservar(reserva({ packId: PACK_ID, packTokens: 2 }));
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().fields).toEqual({ packTokens: 'invalid' });
+    expect(bookClass).not.toHaveBeenCalled();
+  });
+
+  it('without a pack the pack is not touched and the whole class is paid', async () => {
+    await reservar(reserva());
+
+    expect(listStudentPacks).not.toHaveBeenCalled();
+    expect(bookClass).toHaveBeenCalledWith(
+      expect.objectContaining({ studentPackId: null, packTokens: 0, priceCents: 750000 })
+    );
+  });
+
+  it('tokens without a pack, or a malformed pack id, are rejected', async () => {
+    expect((await reservar(reserva({ packTokens: 1 }))).statusCode).toBe(400);
+    expect((await reservar(reserva({ packId: 'abc', packTokens: 1 }))).statusCode).toBe(400);
+    expect(bookClass).not.toHaveBeenCalled();
+  });
+
+  it('asking for more tokens than are available is a conflict', async () => {
+    listStudentPacks.mockResolvedValueOnce([paqueteComprado({ attended: 3, reserved: 1 })]);
+
+    const res = await reservar(reserva({ packId: PACK_ID, packTokens: 1 }));
+
+    expect(res.statusCode).toBe(409);
+    expect(bookClass).not.toHaveBeenCalled();
+  });
+
+  it('cannot book a class after the pack expires', async () => {
+    listStudentPacks.mockResolvedValueOnce([paqueteComprado({ expiresOn: '2099-09-13' })]);
+
+    const res = await reservar(reserva({ packId: PACK_ID, packTokens: 1 }));
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json().message).toMatch(/vence/);
+    expect(bookClass).not.toHaveBeenCalled();
+  });
+
+  it('someone else\'s pack, or one with another teacher, is not found', async () => {
+    listStudentPacks.mockResolvedValueOnce([]);
+
+    const res = await reservar(reserva({ packId: PACK_ID, packTokens: 1 }));
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json().message).toMatch(/No tenés ese paquete/);
+  });
+
+  it('passes on the conflict when the pack filled up meanwhile', async () => {
+    bookClass.mockResolvedValueOnce({ conflict: 'Ya no te quedan clases disponibles en el paquete.' });
+
+    const res = await reservar(reserva({ packId: PACK_ID, packTokens: 1 }));
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json().message).toMatch(/paquete/);
+  });
+});
+
 describe('class states', () => {
   let app;
 
@@ -438,6 +644,30 @@ describe('class states', () => {
 
   it('the teacher accepts a pending class', async () => {
     findClassById.mockResolvedValue(comoDocente());
+
+    const res = await post('accept', { role: 'teacher' });
+
+    expect(res.statusCode).toBe(200);
+    expect(transitionClass).toHaveBeenCalledWith(CLASE_ID, { from: 'pendiente', to: 'aceptada' });
+  });
+
+  it('accepting a class the pack covers entirely confirms it, already paid', async () => {
+    findClassById.mockResolvedValue(comoDocente({ studentPackId: PACK_ID, packTokens: 1, priceCents: 0 }));
+
+    const res = await post('accept', { role: 'teacher' });
+
+    expect(res.statusCode).toBe(200);
+    expect(transitionClass).toHaveBeenCalledWith(CLASE_ID, {
+      from: 'pendiente',
+      to: 'confirmada',
+      paid: true,
+    });
+  });
+
+  it('a pack class with an extra to pay is accepted and still has to be paid', async () => {
+    findClassById.mockResolvedValue(
+      comoDocente({ studentPackId: PACK_ID, packTokens: 1, priceCents: 250000 })
+    );
 
     const res = await post('accept', { role: 'teacher' });
 
@@ -585,6 +815,27 @@ describe('class states', () => {
       );
       // Su propia clase vieja no cuenta como choque.
       expect(hasOverlappingClass).toHaveBeenCalledWith(expect.objectContaining({ excludeId: CLASE_ID }));
+    });
+
+    it('a reschedule can use pack tokens, and the old class does not hold its own', async () => {
+      findClassById.mockResolvedValue(
+        clase({ status: 'confirmada', date: '2099-09-07', studentPackId: PACK_ID, packTokens: 1 })
+      );
+      listStudentPacks.mockResolvedValueOnce([paqueteComprado({ reserved: 0 })]);
+
+      const res = await post('reschedule', {
+        payload: { ...nuevoHorario, packId: PACK_ID, packTokens: 1 },
+      });
+
+      expect(res.statusCode).toBe(201);
+      // La vieja se cancela en la misma transacción: no ocupa lugar.
+      expect(listStudentPacks).toHaveBeenCalledWith(
+        expect.objectContaining({ excludeClassId: CLASE_ID })
+      );
+      expect(rescheduleClass).toHaveBeenCalledWith(
+        CLASE_ID,
+        expect.objectContaining({ studentPackId: PACK_ID, packTokens: 1, priceCents: 0 })
+      );
     });
 
     it('only with the same teacher', async () => {

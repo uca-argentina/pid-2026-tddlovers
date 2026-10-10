@@ -27,9 +27,9 @@ class AppLayout extends Component {
     return (
       <div className="app-shell">
         <NavBar viewRole={viewRole} user={user} />
-        {/* Sin buscador (el docente no lo tiene) no hace falta dejarle lugar
-            arriba en el teléfono. */}
-        <main className={`app-main ${viewRole === 'teacher' ? '' : 'has-search'}`}>
+        {/* Sin buscador (solo lo tiene el alumno) no hace falta dejarle
+            lugar arriba en el teléfono. */}
+        <main className={`app-main ${viewRole === 'student' ? 'has-search' : ''}`}>
           <Outlet />
         </main>
       </div>

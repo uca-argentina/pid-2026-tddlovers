@@ -1,0 +1,190 @@
+/* Lista angosta, como el perfil y las reservas: .app-main es ancho por el
+   calendario. */
+.admin-page {
+  width: 100%;
+  max-width: 720px;
+  margin-inline: auto;
+}
+
+.admin-title {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.admin-subtitle {
+  margin: 4px 0 16px;
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+.admin-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--color-text-muted);
+  padding: 24px 0;
+}
+
+.admin-empty svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Las pestañas hacen scroll horizontal en el teléfono en vez de partirse en
+   dos renglones. */
+.admin-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  margin-bottom: 16px;
+  padding-bottom: 2px;
+}
+
+.admin-tab {
+  flex-shrink: 0;
+  min-height: 34px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.admin-tab:hover {
+  color: var(--color-text);
+}
+
+.admin-tab.is-active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+
+.admin-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.admin-teacher {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 16px;
+  background: var(--color-surface-solid);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-panel);
+}
+
+.admin-teacher .banner {
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+
+.admin-teacher-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.admin-teacher-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.admin-teacher-meta {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+/* Mismas pastillas que el estado de una reserva (ClassActions.css). */
+.admin-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.admin-status.is-warning {
+  color: var(--color-warning);
+  background: var(--color-warning-bg);
+}
+
+.admin-status.is-success {
+  color: var(--color-success);
+  background: var(--color-success-bg);
+}
+
+.admin-status.is-danger {
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+}
+
+.admin-teacher-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.admin-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.admin-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.admin-action svg {
+  width: 14px;
+  height: 14px;
+}
+
+.admin-action.is-primary {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.admin-action.is-primary:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+.admin-action.is-danger {
+  background: transparent;
+  color: var(--color-danger);
+  border-color: color-mix(in srgb, var(--color-danger) 35%, transparent);
+}
+
+.admin-action.is-danger:hover:not(:disabled) {
+  background: var(--color-danger-bg);
+}

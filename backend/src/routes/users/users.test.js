@@ -36,12 +36,13 @@ const MATE = '47ac9e88-4099-4ab4-b1fe-3898d7b279c4';
 const FISICA = 'fe220bd6-9180-448d-8430-4dcccc866303';
 
 /** Deja una sesión válida y devuelve las cabeceras para pegarle al PATCH. */
-async function authedHeaders(app, role = 'teacher') {
+async function authedHeaders(app, role = 'teacher', approvalStatus = 'approved') {
   findValidSession.mockResolvedValue({
     session_id: 'session-1',
     user_id: 'user-1',
     email: 'a@example.com',
     role,
+    approval_status: role === 'teacher' ? approvalStatus : null,
   });
   await app.ready();
 
@@ -136,6 +137,7 @@ describe('PATCH /api/users/me', () => {
       nombre: 'Ada',
       apellido: 'Lovelace',
       telefono: '+54 11 5555-5555',
+      approval_status: 'approved',
     });
     findSubjectIdsByTeacher.mockResolvedValue([MATE, FISICA]);
 
@@ -155,6 +157,7 @@ describe('PATCH /api/users/me', () => {
       nombre: 'Ada',
       apellido: 'Lovelace',
       telefono: '+54 11 5555-5555',
+      approvalStatus: 'approved',
       subjectIds: [MATE, FISICA],
       rates: [],
     });
@@ -163,6 +166,7 @@ describe('PATCH /api/users/me', () => {
       telefono: '+54 11 5555-5555',
       subjectIds: [MATE, FISICA],
       rates: undefined,
+      approvalStatus: 'approved',
     });
   });
 
@@ -174,6 +178,7 @@ describe('PATCH /api/users/me', () => {
       nombre: 'Ada',
       apellido: 'Lovelace',
       telefono: null,
+      approval_status: null,
     });
 
     const headers = await authedHeaders(app, 'student');
@@ -197,6 +202,7 @@ describe('PATCH /api/users/me', () => {
       telefono: null,
       subjectIds: undefined,
       rates: undefined,
+      approvalStatus: undefined,
     });
   });
 
@@ -208,6 +214,7 @@ describe('PATCH /api/users/me', () => {
       nombre: 'Ada',
       apellido: 'Lovelace',
       telefono: null,
+      approval_status: 'approved',
     });
 
     const headers = await authedHeaders(app);
@@ -222,6 +229,68 @@ describe('PATCH /api/users/me', () => {
     expect(res.json().telefono).toBeNull();
   });
 
+  describe('approval', () => {
+    const fila = (approval_status) => ({
+      id: 'user-1',
+      email: 'a@example.com',
+      role: 'teacher',
+      nombre: 'Ada',
+      apellido: 'Lovelace',
+      telefono: null,
+      approval_status,
+    });
+
+    it('a teacher pending approval can still edit the profile and stays pending', async () => {
+      updateUserProfile.mockResolvedValueOnce(fila('pending'));
+      const headers = await authedHeaders(app, 'teacher', 'pending');
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/users/me',
+        headers,
+        payload: { telefono: '' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().approvalStatus).toBe('pending');
+      expect(updateUserProfile).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({ approvalStatus: 'pending' })
+      );
+    });
+
+    it('a rejected teacher can edit the profile, which sends it back to review', async () => {
+      updateUserProfile.mockResolvedValueOnce(fila('pending'));
+      const headers = await authedHeaders(app, 'teacher', 'rejected');
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/users/me',
+        headers,
+        payload: { telefono: '' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().approvalStatus).toBe('pending');
+      expect(updateUserProfile).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({ approvalStatus: 'pending' })
+      );
+    });
+
+    it('an approved teacher stays approved after editing', async () => {
+      updateUserProfile.mockResolvedValueOnce(fila('approved'));
+      const headers = await authedHeaders(app, 'teacher', 'approved');
+
+      await app.inject({ method: 'PATCH', url: '/api/users/me', headers, payload: { telefono: '' } });
+
+      expect(updateUserProfile).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({ approvalStatus: 'approved' })
+      );
+    });
+  });
+
   describe('rates', () => {
     const TEACHER = {
       id: 'user-1',
@@ -230,6 +299,7 @@ describe('PATCH /api/users/me', () => {
       nombre: 'Ada',
       apellido: 'Lovelace',
       telefono: null,
+      approval_status: 'approved',
     };
     const tarifa = (over = {}) => ({
       subjectId: MATE,
@@ -258,6 +328,7 @@ describe('PATCH /api/users/me', () => {
         telefono: null,
         subjectIds: [MATE, FISICA],
         rates,
+        approvalStatus: 'approved',
       });
     });
 

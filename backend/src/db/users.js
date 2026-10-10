@@ -1,6 +1,6 @@
 import { getPool } from './pool.js';
 
-const PROFILE_COLUMNS = 'id, email, role, nombre, apellido, telefono, created_at';
+const PROFILE_COLUMNS = 'id, email, role, nombre, apellido, telefono, approval_status, created_at';
 
 // Para los docentes, subjectIds vincula el usuario nuevo con el catálogo de
 // materias en la misma transacción que el insert: así una falla a medio camino
@@ -18,9 +18,12 @@ export async function createUser({
   try {
     await client.query('BEGIN');
 
+    // Todo docente nace pendiente: no aparece en búsquedas ni recibe
+    // reservas hasta que un admin lo apruebe (ver lib/teacherApproval.js).
     const result = await client.query(
-      `INSERT INTO users (email, password_hash, role, nombre, apellido, telefono)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO users (email, password_hash, role, nombre, apellido, telefono, approval_status)
+       VALUES ($1, $2, $3, $4, $5, $6,
+               CASE WHEN $3::user_role = 'teacher' THEN 'pending'::teacher_approval_status END)
        RETURNING ${PROFILE_COLUMNS}`,
       [email, passwordHash, role, nombre, apellido, telefono ?? null]
     );
@@ -63,6 +66,9 @@ export async function findSubjectIdsByTeacher(teacherId) {
  * buscador no sugiere a nadie a quien no se le pueda reservar nada. Solo
  * nombre y materias — el buscador no tiene por qué ver el mail ni el
  * teléfono de nadie.
+ *
+ * Solo docentes aprobados: un pendiente o rechazado no se ofrece (ver
+ * TeacherApproval.canReceiveBookings).
  */
 export async function listTeachers() {
   const result = await getPool().query(
@@ -75,7 +81,7 @@ export async function listTeachers() {
          SELECT 1 FROM teacher_rates r WHERE r.teacher_id = u.id AND r.subject_id = s.id
        )
      ) subj ON subj.subjects IS NOT NULL
-     WHERE u.role = 'teacher'
+     WHERE u.role = 'teacher' AND u.approval_status = 'approved'
      ORDER BY u.nombre, u.apellido`
   );
   return result.rows;
@@ -89,15 +95,23 @@ export async function listTeachers() {
  *
  * `subjectIds` y `rates` se ignoran para los alumnos: el registro tampoco les
  * pide materias. Cualquiera de los dos puede venir undefined = no se toca.
+ *
+ * `approvalStatus` es el estado en que queda el docente después de editar
+ * (lo decide TeacherApproval.afterProfileEdit en la ruta); undefined = no se
+ * toca.
  */
-export async function updateUserProfile(userId, { telefono, subjectIds, rates }) {
+export async function updateUserProfile(userId, { telefono, subjectIds, rates, approvalStatus }) {
   const client = await getPool().connect();
   try {
     await client.query('BEGIN');
 
     const result = await client.query(
-      `UPDATE users SET telefono = $2 WHERE id = $1 RETURNING ${PROFILE_COLUMNS}`,
-      [userId, telefono ?? null]
+      `UPDATE users
+       SET telefono = $2,
+           approval_status = COALESCE($3::teacher_approval_status, approval_status)
+       WHERE id = $1
+       RETURNING ${PROFILE_COLUMNS}`,
+      [userId, telefono ?? null, approvalStatus ?? null]
     );
     const user = result.rows[0];
     if (!user) {
@@ -155,7 +169,7 @@ export async function updateUserProfile(userId, { telefono, subjectIds, rates })
 
 export async function findUserByEmail(email) {
   const result = await getPool().query(
-    `SELECT id, email, password_hash, role, nombre, apellido, telefono, created_at
+    `SELECT id, email, password_hash, role, nombre, apellido, telefono, approval_status, created_at
      FROM users
      WHERE email = $1`,
     [email]

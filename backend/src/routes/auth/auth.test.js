@@ -97,7 +97,9 @@ describe('auth routes', () => {
       expect(res.json().message).toMatch(/carácter especial/);
     });
 
-    it('rejects an invalid role', async () => {
+    // 'admin' existe en la base, pero nadie se registra como admin: hay una
+    // sola cuenta, fija, que crea la migración 013.
+    it('rejects an invalid role, admin included', async () => {
       const { token, cookieHeader } = await getCsrf(app);
       const res = await app.inject({
         method: 'POST',
@@ -165,7 +167,7 @@ describe('auth routes', () => {
         nombre: 'Ada',
         apellido: 'Lovelace',
         telefono: null,
-        subjectIds: [],
+        approval_status: null,
       });
       createSession.mockResolvedValueOnce({
         id: 'session-1',
@@ -188,6 +190,7 @@ describe('auth routes', () => {
         nombre: 'Ada',
         apellido: 'Lovelace',
         telefono: null,
+        approvalStatus: null,
         subjectIds: [],
         rates: [],
       });
@@ -207,7 +210,7 @@ describe('auth routes', () => {
         nombre: 'Ada',
         apellido: 'Lovelace',
         telefono: null,
-        subjectIds: [],
+        approval_status: 'pending',
       });
       createSession.mockResolvedValueOnce({
         id: 'session-1',
@@ -277,7 +280,7 @@ describe('auth routes', () => {
         nombre: 'Ada',
         apellido: 'Lovelace',
         telefono: null,
-        subjectIds: [],
+        approval_status: 'pending',
       });
       createSession.mockResolvedValueOnce({
         id: 'session-1',
@@ -300,6 +303,8 @@ describe('auth routes', () => {
         nombre: 'Ada',
         apellido: 'Lovelace',
         telefono: null,
+        // Un docente recién registrado espera aprobación: el front lo avisa.
+        approvalStatus: 'pending',
         subjectIds: [],
         rates: [],
       });
@@ -346,6 +351,7 @@ describe('auth routes', () => {
         nombre: 'Ada',
         apellido: 'Lovelace',
         telefono: null,
+        approval_status: null,
       });
 
       await app.ready();
@@ -364,6 +370,7 @@ describe('auth routes', () => {
         nombre: 'Ada',
         apellido: 'Lovelace',
         telefono: null,
+        approvalStatus: null,
         subjectIds: [],
         rates: [],
       });

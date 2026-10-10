@@ -4,7 +4,13 @@ import BookingFilters from './BookingFilters.jsx'
 import BookingResults from './BookingResults.jsx'
 import BookingDialog from './BookingDialog.jsx'
 import Banner from '../../components/Banner.jsx'
-import { fetchAvailability, fetchClass, fetchMyLessons, fetchSubjects } from '../../api/client.js'
+import {
+  fetchAvailability,
+  fetchClass,
+  fetchMyLessons,
+  fetchMyPacks,
+  fetchSubjects,
+} from '../../api/client.js'
 import { formatDayLong, fromISODate, toISODate } from '../../utils/calendar.js'
 import {
   annotateClashes,
@@ -53,6 +59,9 @@ class BookingBoard extends Component {
     booked: null,
     // La clase que se está reprogramando (?reprogramar=<id>), o null.
     rescheduling: null,
+    // Los paquetes que compró el alumno: cada tarjeta dice cuántas clases le
+    // quedan con ese docente, y el modal ofrece reservar con el paquete.
+    packs: [],
     // --- filtros ---
     dayKeys: [],
     subjectIds: [],
@@ -72,6 +81,8 @@ class BookingBoard extends Component {
 
   rescheduleToken = 0
 
+  packsToken = 0
+
   // Cache de un solo valor, igual que shortRunsCache en AvailabilityPage: la
   // clave es la IDENTIDAD de los dos arrays, que sirve porque solo cambian
   // cuando vuelve una respuesta. Sin esto, tocar un chip recalcularía las
@@ -82,9 +93,13 @@ class BookingBoard extends Component {
     this.loadSubjects()
     this.applyQuery()
     this.loadReschedule()
+    this.loadPacks()
   }
 
   componentDidUpdate(prevProps) {
+    // Al abrir la app directo en esta pantalla, el usuario llega después
+    // (App lo recupera con /me): recién ahí se sabe si tiene paquetes.
+    if (prevProps.user !== this.props.user) this.loadPacks()
     if (prevProps.router.location.search !== this.props.router.location.search) {
       this.applyQuery()
       if (prevProps.router.searchParams.get('reprogramar') !== this.getRescheduleId()) {
@@ -97,6 +112,26 @@ class BookingBoard extends Component {
     this.rangeToken += 1
     this.subjectsToken += 1
     this.rescheduleToken += 1
+    this.packsToken += 1
+  }
+
+  /**
+   * Solo un alumno logueado tiene paquetes. Si falla, el tablero sigue
+   * andando: simplemente no se ofrece reservar con paquete.
+   */
+  loadPacks() {
+    const token = ++this.packsToken
+    if (this.props.user?.role !== 'student') {
+      this.setState({ packs: [] })
+      return
+    }
+    fetchMyPacks()
+      .then((packs) => {
+        if (token === this.packsToken) this.setState({ packs: Array.isArray(packs) ? packs : [] })
+      })
+      .catch(() => {
+        if (token === this.packsToken) this.setState({ packs: [] })
+      })
   }
 
   getRescheduleId() {
@@ -277,7 +312,8 @@ class BookingBoard extends Component {
   getFreeByDate(porFecha) {
     const counts = {}
     for (const [iso, cards] of Object.entries(porFecha)) {
-      counts[iso] = cards.length
+      // Las de vacaciones se muestran en gris pero no son "libres".
+      counts[iso] = cards.filter((card) => !card.onVacation).length
     }
     return counts
   }
@@ -405,6 +441,8 @@ class BookingBoard extends Component {
     // La reprogramación terminó: la pantalla vuelve a ser la de reservar.
     if (booked.rescheduled) this.dropParam('reprogramar')
     if (from && to) this.loadRange(from, to)
+    // Una clase con paquete aparta un lugar del paquete.
+    if (booked.usedPack) this.loadPacks()
   }
 
   handleStopReschedule = () => {
@@ -496,6 +534,7 @@ class BookingBoard extends Component {
               cards={porFecha[selectedIso] || []}
               loading={loading}
               filtered={this.hasFilters()}
+              packs={this.state.packs}
               onReservar={this.handleReservar}
             />
           </aside>
@@ -505,6 +544,7 @@ class BookingBoard extends Component {
           <BookingDialog
             card={booking}
             rescheduleOf={this.state.rescheduling}
+            packs={this.state.packs}
             onClose={this.handleCloseDialog}
             onBooked={this.handleBooked}
           />
