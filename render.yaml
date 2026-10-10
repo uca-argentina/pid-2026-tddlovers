@@ -1,5 +1,5 @@
-# Blueprint de Render para el backend. El frontend va en Vercel
-# (frontend/vercel.json) y la base en Neon; ver "Producción" en el README.
+# Blueprint de Render: backend y frontend. La base va en Neon; ver
+# "Producción" en el README.
 #
 # Al aplicarlo, Render pide los valores marcados `sync: false` (DATABASE_URL).
 
@@ -24,3 +24,23 @@ services:
       # Cadena *pooled* de Neon (host con -pooler), con ?sslmode=require.
       - key: DATABASE_URL
         sync: false
+
+  - type: web
+    name: pid-2026-tddlovers-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    autoDeployTrigger: checksPass
+    routes:
+      # El cliente le pega a /api con ruta relativa: reenviarlo desde acá deja
+      # la app y la API en el mismo origen, así la cookie de sesión (sameSite
+      # lax) viaja sin CORS. onrender.com es un sufijo público, así que
+      # frontend y backend en subdominios propios serían sitios distintos.
+      - type: rewrite
+        source: /api/*
+        destination: https://pid-2026-tddlovers-backend.onrender.com/api/*
+      # Rutas de React Router: cualquier otra cosa que no sea un archivo.
+      - type: rewrite
+        source: /*
+        destination: /index.html
