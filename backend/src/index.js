@@ -4,7 +4,11 @@ import { closePool } from './db/pool.js';
 
 const app = buildApp();
 
-app.listen({ port: 4000, host: '0.0.0.0' }, (err) => {
+// Render asigna el puerto en PORT y solo enruta tráfico a ese; en local y en
+// Docker no se setea y queda el 4000 de siempre.
+const port = Number(process.env.PORT) || 4000;
+
+app.listen({ port, host: '0.0.0.0' }, (err) => {
   if (err) {
     app.log.error(err);
     process.exit(1);

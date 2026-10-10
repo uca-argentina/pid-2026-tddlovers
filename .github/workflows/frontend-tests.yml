@@ -1,0 +1,24 @@
+name: Frontend tests
+
+# El deploy no pasa por acá: Render despliega backend y frontend solo desde
+# GitHub, y espera a que este check pase.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm test
+

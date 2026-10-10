@@ -10,7 +10,7 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 // fetch NO manda cookies salvo que se le pida, y el backend guarda la sesión
 // (`sid`) y el secreto del CSRF en cookies httpOnly. En dev no se nota porque
 // el proxy de Vite hace que todo sea same-origin, pero en producción el front
-// sale por nginx/Caddy y sin esto la sesión se pierde en cada pedido.
+// sale por el rewrite del sitio estático de Render y sin esto la sesión se pierde en cada pedido.
 const CREDENTIALS = 'include'
 
 // El backend exige un token CSRF (header x-csrf-token) en cualquier POST de
