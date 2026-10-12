@@ -42,7 +42,7 @@ export function vacationRangeError({ startDate, endDate }, today) {
   if (!startDate) return 'Elegí desde qué día.'
   if (!endDate) return 'Elegí hasta qué día.'
   if (endDate < startDate) return 'El último día no puede ser antes del primero.'
-  if (endDate < today) return 'Esas vacaciones ya terminaron.'
-  if (vacationDays({ startDate, endDate }) > 365) return 'Las vacaciones pueden durar hasta 365 días.'
+  if (endDate < today) return 'Esa licencia ya terminó.'
+  if (vacationDays({ startDate, endDate }) > 365) return 'Una licencia puede durar hasta 365 días.'
   return null
 }

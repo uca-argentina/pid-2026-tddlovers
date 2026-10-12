@@ -81,7 +81,27 @@ class ClassDetailDialog extends Component {
             <PinIcon />
             <span>
               {cls.address}
-              {cls.locality ? <span className="class-detail-muted"> · {cls.locality}</span> : null}
+              {/* La dirección armada ya trae la localidad; las clases
+                  reservadas antes de las direcciones guardadas, no. */}
+              {cls.locality && !cls.address.includes(cls.locality) ? (
+                <span className="class-detail-muted"> · {cls.locality}</span>
+              ) : null}
+            </span>
+          </li>
+        ) : null}
+        {/* El alumno ve la dirección exacta recién cuando pagó (el backend
+            no la manda antes): hasta entonces, la localidad y por qué. */}
+        {needsAddress(cls.modality) && !cls.address ? (
+          <li>
+            <PinIcon />
+            <span>
+              {cls.locality || 'Presencial'}
+              <span className="class-detail-muted">
+                {' · '}
+                {cls.status === 'cancelada'
+                  ? 'La clase se canceló.'
+                  : 'La dirección exacta aparece cuando pagues la clase.'}
+              </span>
             </span>
           </li>
         ) : null}

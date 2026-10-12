@@ -59,7 +59,7 @@ describe('TurnActions', () => {
     render(<TurnActions rows={[cancelada]} now={ANTES} />)
 
     expect(screen.getByText('Cancelada')).toBeInTheDocument()
-    expect(screen.getByText('Se canceló por tus vacaciones.')).toBeInTheDocument()
+    expect(screen.getByText('Se canceló por tu licencia.')).toBeInTheDocument()
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
 

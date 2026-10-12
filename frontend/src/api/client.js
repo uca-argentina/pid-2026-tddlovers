@@ -396,6 +396,38 @@ export function deleteVacation(id) {
   return request(`/api/teachers/me/vacations/${id}`, { method: 'DELETE' })
 }
 
+// --- Direcciones guardadas del docente --------------------------------------------
+
+/** Las guardadas, la predeterminada primero. */
+export function fetchMyAddresses() {
+  return request('/api/teachers/me/addresses')
+}
+
+/** { label, street, number, postalCode, locality, city, floor, apartment, notes, isDefault }. */
+export function createAddress(address) {
+  return request('/api/teachers/me/addresses', {
+    method: 'POST',
+    body: JSON.stringify(address),
+  })
+}
+
+/** Las ventanas que la usan cambian con ella; las clases ya reservadas no. */
+export function updateAddress(id, address) {
+  return request(`/api/teachers/me/addresses/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(address),
+  })
+}
+
+export function setDefaultAddress(id) {
+  return request(`/api/teachers/me/addresses/${id}/default`, { method: 'POST' })
+}
+
+/** 409 con el motivo si la usa alguna ventana. */
+export function deleteAddress(id) {
+  return request(`/api/teachers/me/addresses/${id}`, { method: 'DELETE' })
+}
+
 // --- Docentes favoritos del alumno ------------------------------------------------
 
 /**

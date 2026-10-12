@@ -35,7 +35,12 @@ import { isTeacherOnVacation } from '../../db/vacations.js';
 import { VACATION_MESSAGE } from '../../lib/vacations.js';
 import { occursOn, toMinutes, toTime } from '../../lib/availabilityExpansion.js';
 import { classPriceCents, isValidClassMinutes, MIN_CLASS_MINUTES } from '../../lib/teacherRates.js';
-import { CLASS_STATUSES, cancelReasonFor, checkAction } from '../../lib/classStates.js';
+import {
+  CLASS_STATUSES,
+  cancelReasonFor,
+  checkAction,
+  forViewer,
+} from '../../lib/classStates.js';
 import { now } from '../../lib/clock.js';
 import { TeacherApproval } from '../../lib/teacherApproval.js';
 import {
@@ -221,7 +226,8 @@ export default async function classesRoutes(app) {
       to,
       status,
     });
-    return reply.send(classes);
+    // La dirección exacta, solo si ya pagó (lib/classStates.js).
+    return reply.send(classes.map((cls) => forViewer(cls, request.user.role)));
   });
 
   /**
@@ -244,7 +250,7 @@ export default async function classesRoutes(app) {
   app.get('/:id', { onRequest: app.requireAuth }, async (request, reply) => {
     const own = await loadOwnClass(request);
     if (!own) return reply.code(404).send({ message: NOT_FOUND });
-    return reply.send(own.cls);
+    return reply.send(forViewer(own.cls, own.role));
   });
 
   /**
@@ -270,7 +276,7 @@ export default async function classesRoutes(app) {
         const done = await transitionClass(own.cls.id, { from: own.cls.status, ...change });
         if (!done) return reply.code(409).send({ message: CHANGED_MEANWHILE });
 
-        return reply.send(await findClassById(own.cls.id));
+        return reply.send(forViewer(await findClassById(own.cls.id), own.role));
       }
     );
   }
@@ -376,7 +382,7 @@ export default async function classesRoutes(app) {
     const created = await bookClass(checked.booking);
     if (created.conflict) return reply.code(409).send({ message: created.conflict });
 
-    return reply.code(201).send(await findClassById(created.id));
+    return reply.code(201).send(forViewer(await findClassById(created.id), 'student'));
   });
 
   /**
@@ -401,7 +407,7 @@ export default async function classesRoutes(app) {
       const created = await rescheduleClass(own.cls.id, checked.booking);
       if (created.conflict) return reply.code(409).send({ message: created.conflict });
 
-      return reply.code(201).send(await findClassById(created.id));
+      return reply.code(201).send(forViewer(await findClassById(created.id), 'student'));
     }
   );
 

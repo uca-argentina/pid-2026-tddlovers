@@ -9,6 +9,7 @@ import {
   UsersIcon,
   VideoIcon,
 } from '../../components/icons.jsx'
+import { formatAddress } from '../../utils/addresses.js'
 import { formatRangeLabel } from '../../utils/availability.js'
 import { formatHourlyRate } from '../../utils/rates.js'
 import {
@@ -56,16 +57,19 @@ class WindowCard extends Component {
               .join(', ')}
           </li>
         ) : null}
-        {needsAddress(window.modality) && window.locality ? (
+        {needsAddress(window.modality) && window.address ? (
           <li className="window-card-wide">
             <PinIcon />
-            {window.locality}
+            {/* El nombre si es una guardada ("Casa"); la localidad es lo que
+                ve cualquier alumno. */}
+            {window.address.saved ? `${window.address.label} · ` : ''}
+            {window.address.locality}
           </li>
         ) : null}
         {needsAddress(window.modality) && window.address ? (
           <li className="window-card-wide window-card-private">
-            {window.address}
-            <span className="window-card-private-note">(solo la ven quienes reservan)</span>
+            {formatAddress(window.address)}
+            <span className="window-card-private-note">(solo la ven quienes pagaron)</span>
           </li>
         ) : null}
         {needsMeetingUrl(window.modality) && window.meetingUrl ? (

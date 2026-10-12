@@ -1,5 +1,5 @@
 import { Component } from 'react'
-import { NavLink } from 'react-router-dom'
+import { Link, NavLink } from 'react-router-dom'
 import SearchBar from './SearchBar.jsx'
 import ThemeToggle from './ThemeToggle.jsx'
 import {
@@ -124,10 +124,15 @@ class NavBar extends Component {
         {/* El buscador y la marca se esconden en la barra de abajo del
             teléfono; el buscador reaparece arriba del contenido. */}
         <div className="navbar-brand">
-          <span className="navbar-brand-mark" aria-hidden="true">
-            <CalendarIcon />
-          </span>
-          <span className="navbar-brand-name">BookIt</span>
+          {/* La marca lleva al calendario, la pantalla de entrada (al admin,
+              "/" lo manda a su revisión). El botón de tema queda afuera del
+              link: tocarlo no tiene que navegar. */}
+          <Link to="/" className="navbar-brand-link" aria-label="Ir al calendario">
+            <span className="navbar-brand-mark" aria-hidden="true">
+              <CalendarIcon />
+            </span>
+            <span className="navbar-brand-name">BookIt</span>
+          </Link>
           <ThemeToggle />
         </div>
 

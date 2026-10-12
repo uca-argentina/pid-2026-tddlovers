@@ -1,15 +1,36 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import ProfilePage from './ProfilePage.jsx'
 import { apiUser, updatedUser } from '../../testing/fixtures.js'
 
-const { fetchSubjects, updateProfile } = vi.hoisted(() => ({
+const {
+  createAddress,
+  deleteAddress,
+  fetchMyAddresses,
+  fetchSubjects,
+  setDefaultAddress,
+  updateAddress,
+  updateProfile,
+} = vi.hoisted(() => ({
+  createAddress: vi.fn(),
+  deleteAddress: vi.fn(),
+  fetchMyAddresses: vi.fn(),
   fetchSubjects: vi.fn(),
+  setDefaultAddress: vi.fn(),
+  updateAddress: vi.fn(),
   updateProfile: vi.fn(),
 }))
 
-vi.mock('../../api/client.js', () => ({ fetchSubjects, updateProfile }))
+vi.mock('../../api/client.js', () => ({
+  createAddress,
+  deleteAddress,
+  fetchMyAddresses,
+  fetchSubjects,
+  setDefaultAddress,
+  updateAddress,
+  updateProfile,
+}))
 
 const MATERIAS = [
   { id: 1, name: 'Matemática' },
@@ -58,6 +79,7 @@ function botonGuardar() {
 describe('ProfilePage', () => {
   beforeEach(() => {
     fetchSubjects.mockReset().mockResolvedValue(MATERIAS)
+    fetchMyAddresses.mockReset().mockResolvedValue([])
     updateProfile.mockReset().mockImplementation((payload) => Promise.resolve(updatedUser(user, payload)))
   })
 
@@ -157,6 +179,30 @@ describe('ProfilePage', () => {
       </MemoryRouter>,
     )
     expect(await screen.findByLabelText('Dejar de dar Matemática')).toBeInTheDocument()
+  })
+
+  it('al recargar, las materias y tarifas aparecen cuando llega la sesión', async () => {
+    // Recargar la página monta el perfil antes de que App reciba /me: llega
+    // sin usuario (y como alumno, el rol por defecto) y después recibe al
+    // docente con sus materias, sin desmontarse.
+    const { rerender } = render(
+      <MemoryRouter>
+        <ProfilePage user={null} viewRole="student" />
+      </MemoryRouter>,
+    )
+
+    rerender(
+      <MemoryRouter>
+        <ProfilePage user={user} viewRole="teacher" />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByLabelText('Dejar de dar Matemática')).toBeInTheDocument()
+    expect(screen.getByLabelText('Dejar de dar Álgebra')).toBeInTheDocument()
+    expect(tarifa('Matemática', 'virtual')).toHaveValue('5000')
+    expect(telefonoInput()).toHaveValue('+54 11 5555-5555')
+    // Recién cargado no hay nada sin guardar.
+    expect(botonGuardar()).toBeDisabled()
   })
 
   it('como docente hay un solo link a la disponibilidad, no uno por materia', async () => {
@@ -386,5 +432,131 @@ describe('ProfilePage', () => {
       expect(screen.queryByRole('link', { name: /Docentes favoritos/ })).not.toBeInTheDocument()
       expect(screen.getByRole('link', { name: 'Cerrar sesión' })).toBeInTheDocument()
     })
+  })
+})
+
+describe('ProfilePage — direcciones del docente', () => {
+  const CASA = {
+    id: 'a1',
+    label: 'Casa',
+    street: 'Av. Corrientes',
+    number: '1234',
+    postalCode: '1043',
+    locality: 'Balvanera',
+    city: 'CABA',
+    floor: '3',
+    apartment: 'B',
+    notes: null,
+    saved: true,
+    isDefault: true,
+  }
+  const ESCUELA = { ...CASA, id: 'a2', label: 'Escuela', street: 'Honduras', isDefault: false }
+
+  beforeEach(() => {
+    fetchSubjects.mockReset().mockResolvedValue(MATERIAS)
+    fetchMyAddresses.mockReset().mockResolvedValue([CASA, ESCUELA])
+    createAddress.mockReset()
+    deleteAddress.mockReset()
+    setDefaultAddress.mockReset()
+    updateAddress.mockReset()
+  })
+
+  it('el alumno no tiene direcciones', async () => {
+    renderProfile({ viewRole: 'student' })
+    await esperarMaterias()
+    expect(screen.queryByText('Direcciones')).not.toBeInTheDocument()
+    expect(fetchMyAddresses).not.toHaveBeenCalled()
+  })
+
+  it('lista las guardadas con la predeterminada marcada', async () => {
+    renderProfile({ viewRole: 'teacher' })
+
+    expect(await screen.findByText('Av. Corrientes 1234, piso 3, depto. B · CP 1043 · Balvanera, CABA'))
+      .toBeInTheDocument()
+    expect(screen.getByText('Predeterminada')).toBeInTheDocument()
+    // La que ya es predeterminada no ofrece serlo.
+    expect(screen.getAllByRole('button', { name: 'Usar como predeterminada' })).toHaveLength(1)
+    await esperarMaterias()
+  })
+
+  it('agrega una dirección desde el modal, sin mandar el formulario del perfil', async () => {
+    createAddress.mockResolvedValue({ ...ESCUELA, id: 'a3', label: 'Oficina' })
+    renderProfile({ viewRole: 'teacher' })
+    await screen.findByText('Escuela')
+    await esperarMaterias()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Agregar dirección' }))
+    const modal = screen.getByRole('dialog', { name: 'Nueva dirección' })
+    await userEvent.click(within(modal).getByRole('button', { name: 'Guardar dirección' }))
+    expect(within(modal).getAllByText('Completalo.')).toHaveLength(5)
+
+    await userEvent.type(within(modal).getByLabelText('Nombre'), 'Oficina')
+    await userEvent.type(within(modal).getByLabelText('Calle'), 'Florida')
+    await userEvent.type(within(modal).getByLabelText('Número'), '100')
+    await userEvent.type(within(modal).getByLabelText('Código postal'), '1005')
+    await userEvent.type(within(modal).getByLabelText('Localidad'), 'San Nicolás')
+    await userEvent.type(within(modal).getByLabelText('Ciudad'), 'CABA')
+    await userEvent.click(within(modal).getByRole('checkbox', { name: /predeterminada/ }))
+    await userEvent.click(within(modal).getByRole('button', { name: 'Guardar dirección' }))
+
+    expect(createAddress).toHaveBeenCalledWith({
+      label: 'Oficina',
+      street: 'Florida',
+      number: '100',
+      postalCode: '1005',
+      locality: 'San Nicolás',
+      city: 'CABA',
+      floor: '',
+      apartment: '',
+      notes: '',
+      isDefault: true,
+    })
+    expect(await screen.findByText('Listo, guardamos la dirección.')).toBeInTheDocument()
+    expect(updateProfile).not.toHaveBeenCalled()
+  })
+
+  it('pone otra como predeterminada', async () => {
+    setDefaultAddress.mockResolvedValue({ ...ESCUELA, isDefault: true })
+    renderProfile({ viewRole: 'teacher' })
+    await screen.findByText('Escuela')
+    await esperarMaterias()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Usar como predeterminada' }))
+
+    expect(setDefaultAddress).toHaveBeenCalledWith('a2')
+    expect(await screen.findByText('«Escuela» es tu dirección predeterminada.')).toBeInTheDocument()
+  })
+
+  it('si la usa algún horario, dice por qué no la borra', async () => {
+    deleteAddress.mockRejectedValue(
+      new Error('La usa 1 horario de tu disponibilidad: cambiales la dirección antes de borrarla.'),
+    )
+    renderProfile({ viewRole: 'teacher' })
+    await screen.findByText('Escuela')
+    await esperarMaterias()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Borrar Casa' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Sí, borrar' }))
+
+    expect(deleteAddress).toHaveBeenCalledWith('a1')
+    expect(await screen.findByText(/La usa 1 horario de tu disponibilidad/)).toBeInTheDocument()
+  })
+
+  it('editar avisa que cambian los horarios que la usan', async () => {
+    updateAddress.mockResolvedValue({ ...CASA, floor: '9' })
+    renderProfile({ viewRole: 'teacher' })
+    await screen.findByText('Escuela')
+    await esperarMaterias()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Editar Casa' }))
+    const modal = screen.getByRole('dialog', { name: 'Editar dirección' })
+    expect(within(modal).getByText(/Los horarios que usan esta dirección se actualizan solos/))
+      .toBeInTheDocument()
+    const piso = within(modal).getByLabelText(/Piso/)
+    await userEvent.clear(piso)
+    await userEvent.type(piso, '9')
+    await userEvent.click(within(modal).getByRole('button', { name: 'Guardar dirección' }))
+
+    expect(updateAddress).toHaveBeenCalledWith('a1', expect.objectContaining({ floor: '9', isDefault: true }))
   })
 })

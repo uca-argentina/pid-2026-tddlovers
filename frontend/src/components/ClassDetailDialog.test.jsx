@@ -130,3 +130,40 @@ describe('ClassDetailDialog', () => {
     expect(screen.queryByText('Material de la clase')).not.toBeInTheDocument()
   })
 })
+
+describe('ClassDetailDialog — dirección', () => {
+  const presencial = {
+    modality: 'in_person',
+    meetingUrl: null,
+    locality: 'Palermo',
+  }
+
+  it('sin pagar, el alumno ve la localidad y cuándo va a ver la dirección', () => {
+    const cls = apiClass({ ...presencial, address: null, status: 'aceptada' })
+    render(
+      <MemoryRouter>
+        <ClassDetailDialog cls={cls} classes={[cls]} viewRole="student" now={ANTES} />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('Palermo')).toBeInTheDocument()
+    expect(screen.getByText(/La dirección exacta aparece cuando pagues la clase/)).toBeInTheDocument()
+  })
+
+  it('paga, ve la dirección completa', () => {
+    const cls = apiClass({
+      ...presencial,
+      address: 'Honduras 4800 · CP 1414 · Palermo, CABA',
+      status: 'confirmada',
+      paidAt: '2099-09-01T12:00:00.000Z',
+    })
+    render(
+      <MemoryRouter>
+        <ClassDetailDialog cls={cls} classes={[cls]} viewRole="student" now={ANTES} />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('Honduras 4800 · CP 1414 · Palermo, CABA')).toBeInTheDocument()
+    expect(screen.queryByText(/aparece cuando pagues/)).not.toBeInTheDocument()
+  })
+})

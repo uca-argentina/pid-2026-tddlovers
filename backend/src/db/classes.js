@@ -1,4 +1,5 @@
 import { getPool } from './pool.js';
+import { formatAddress } from '../lib/addresses.js';
 
 // La fila tal como la espera el front (ver CLAUDE.md en la raíz): fechas
 // 'YYYY-MM-DD' y horas 'HH:MM', sin zona horaria. Mandar un timestamp UTC
@@ -222,7 +223,7 @@ async function insertClass(
      LIMIT 1`,
     [window.teacherId, date]
   );
-  if (vacation.rowCount > 0) return { conflict: 'El docente está de vacaciones ese día.' };
+  if (vacation.rowCount > 0) return { conflict: 'El docente está de licencia ese día.' };
 
   const existing = await client.query(
     `SELECT to_char(end_time, 'HH24:MI') AS "end", subject_id AS "subjectId",
@@ -266,8 +267,10 @@ async function insertClass(
       window.modality,
       window.maxStudents,
       window.meetingUrl,
-      window.address,
-      window.locality,
+      // La dirección se copia armada: si el docente la edita después, lo
+      // reservado no se mueve.
+      window.address ? formatAddress(window.address) : null,
+      window.address?.locality ?? null,
       priceCents,
       rescheduledFrom,
       studentPackId,

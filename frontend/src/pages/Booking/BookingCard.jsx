@@ -133,7 +133,7 @@ class BookingCard extends Component {
         </ul>
 
         {card.onVacation ? (
-          <p className="booking-card-vacation">El docente está de vacaciones este día.</p>
+          <p className="booking-card-vacation">El docente está de licencia este día.</p>
         ) : null}
         {this.renderPack()}
         {this.renderGroups()}
@@ -154,9 +154,9 @@ class BookingCard extends Component {
             onClick={this.props.onReservar}
             // Los botones de todas las tarjetas dicen lo mismo: sin esto, leído
             // con un lector de pantalla no se sabe cuál es cuál.
-            aria-label={`Reservar con ${card.teacherName}, ${formatRangeLabel(card.start, card.end)}${card.onVacation ? ', de vacaciones' : ''}`}
+            aria-label={`Reservar con ${card.teacherName}, ${formatRangeLabel(card.start, card.end)}${card.onVacation ? ', de licencia' : ''}`}
           >
-            {card.onVacation ? 'De vacaciones' : 'Reservar'}
+            {card.onVacation ? 'De licencia' : 'Reservar'}
           </button>
         </div>
       </li>

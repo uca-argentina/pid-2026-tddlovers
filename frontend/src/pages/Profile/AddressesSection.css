@@ -1,0 +1,176 @@
+/* Las direcciones guardadas en el perfil: una fila por dirección con su
+   nombre, la línea completa y las acciones a la derecha. */
+
+.addresses-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.addresses-head .profile-section-title {
+  margin-bottom: 0;
+}
+
+.addresses-section .banner {
+  margin-bottom: 10px;
+}
+
+.addresses-empty {
+  margin: 0;
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+.addresses-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.addresses-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+}
+
+.addresses-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: var(--color-primary);
+}
+
+.addresses-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.addresses-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.addresses-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.addresses-default {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--color-success-bg);
+  color: var(--color-success);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.addresses-line {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.addresses-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.addresses-confirm {
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+.addresses-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.addresses-icon-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-text-muted) 14%, transparent);
+  color: var(--color-text);
+}
+
+.addresses-icon-button.is-danger:hover:not(:disabled) {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.addresses-icon-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* El modal de agregar / editar. */
+.address-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.address-dialog-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.address-dialog-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--color-text);
+}
+
+.address-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Teléfono: las acciones bajan abajo de la dirección, alineadas a la derecha. */
+@media (max-width: 700px) {
+  .addresses-item {
+    flex-wrap: wrap;
+  }
+
+  .addresses-actions {
+    width: 100%;
+  }
+
+  .address-dialog-actions .btn {
+    flex: 1;
+  }
+}
