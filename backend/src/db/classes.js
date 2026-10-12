@@ -223,7 +223,7 @@ async function insertClass(
      LIMIT 1`,
     [window.teacherId, date]
   );
-  if (vacation.rowCount > 0) return { conflict: 'El docente está de vacaciones ese día.' };
+  if (vacation.rowCount > 0) return { conflict: 'El docente está de licencia ese día.' };
 
   const existing = await client.query(
     `SELECT to_char(end_time, 'HH24:MI') AS "end", subject_id AS "subjectId",

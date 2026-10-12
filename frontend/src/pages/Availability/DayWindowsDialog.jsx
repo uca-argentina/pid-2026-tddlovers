@@ -353,7 +353,7 @@ class DayWindowsDialog extends Component {
               día nadie los puede reservar. */}
           {this.props.onVacation ? (
             <Banner type="warning">
-              Estás de vacaciones este día: los alumnos ven tus horarios en gris y no los pueden
+              Estás de licencia este día: los alumnos ven tus horarios en gris y no los pueden
               reservar.
             </Banner>
           ) : null}

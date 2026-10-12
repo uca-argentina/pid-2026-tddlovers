@@ -84,7 +84,7 @@ class WeekCalendar extends Component {
       capacityLabel(window.maxStudents).toLowerCase(),
     ]
     if (window.repeatsWeekly) partes.push('se repite todas las semanas')
-    if (day?.onVacation) partes.push('de vacaciones, no se puede reservar')
+    if (day?.onVacation) partes.push('de licencia, no se puede reservar')
     return partes.join(', ')
   }
 
@@ -171,11 +171,11 @@ class WeekCalendar extends Component {
             type="button"
             className={`week-cal-day-head ${day.isToday ? 'is-today' : ''} ${day.isPast ? 'is-past' : ''} ${day.onVacation ? 'is-vacation' : ''}`}
             onClick={() => this.props.onOpenDay(day.iso)}
-            aria-label={`Ver los horarios del ${formatDayLong(day.date).toLowerCase()}${day.onVacation ? ', de vacaciones' : ''}`}
+            aria-label={`Ver los horarios del ${formatDayLong(day.date).toLowerCase()}${day.onVacation ? ', de licencia' : ''}`}
           >
             <span className="week-cal-weekday">{WEEKDAY_LABELS[day.index]}</span>
             <span className="week-cal-daynum">{day.date.getDate()}</span>
-            {day.onVacation ? <span className="week-cal-vacation-tag">Vacaciones</span> : null}
+            {day.onVacation ? <span className="week-cal-vacation-tag">Licencia</span> : null}
           </button>
         ))}
 
@@ -275,7 +275,7 @@ class WeekCalendar extends Component {
           }))}
           selectedIso={day.iso}
           markedLabel="hay horarios"
-          mutedLabel="de vacaciones"
+          mutedLabel="de licencia"
           todayDisabled={showingThisWeek && day.isToday}
           onSelect={this.handleSelectDay}
           onPrev={onPrev}
@@ -286,7 +286,7 @@ class WeekCalendar extends Component {
         <div className={`week-cal-day ${day.isPast ? 'is-past' : ''}`}>
           <div className="week-cal-day-title">
             <h3>{formatDayLong(day.date)}</h3>
-            {day.onVacation ? <span className="week-cal-vacation-tag">Vacaciones</span> : null}
+            {day.onVacation ? <span className="week-cal-vacation-tag">Licencia</span> : null}
           </div>
           {day.windows.length === 0 ? (
             <p className="week-cal-day-empty">No tenés horarios este día.</p>

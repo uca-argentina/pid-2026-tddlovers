@@ -357,13 +357,13 @@ describe('POST /api/classes', () => {
     const res = await app.inject({ method: 'POST', url: '/api/classes', headers, payload: reserva() });
 
     expect(res.statusCode).toBe(409);
-    expect(res.json().message).toMatch(/vacaciones/);
+    expect(res.json().message).toMatch(/licencia/);
     expect(isTeacherOnVacation).toHaveBeenCalledWith(DOCENTE, '2099-09-14');
     expect(bookClass).not.toHaveBeenCalled();
   });
 
   it('passes on the conflict when the vacation was loaded meanwhile', async () => {
-    bookClass.mockResolvedValueOnce({ conflict: 'El docente está de vacaciones ese día.' });
+    bookClass.mockResolvedValueOnce({ conflict: 'El docente está de licencia ese día.' });
     const headers = await authedHeaders(app);
 
     const res = await app.inject({ method: 'POST', url: '/api/classes', headers, payload: reserva() });

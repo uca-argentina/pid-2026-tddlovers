@@ -576,7 +576,7 @@ describe('teacher vacations', () => {
     });
 
     expect(res.statusCode).toBe(409);
-    expect(res.json().message).toBe('Se pisa con tus vacaciones del 24/12/2099 al 31/12/2099.');
+    expect(res.json().message).toBe('Se pisa con tu licencia del 24/12/2099 al 31/12/2099.');
   });
 
   it('DELETE removes a range loaded by mistake', async () => {

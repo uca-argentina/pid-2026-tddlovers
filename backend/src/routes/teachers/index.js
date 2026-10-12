@@ -182,7 +182,7 @@ export default async function teachersRoutes(app) {
     const saved = await createVacation(request.user.id, checked.value, now());
     if (saved.conflict) {
       return reply.code(409).send({
-        message: `Se pisa con tus vacaciones ${new VacationRange(saved.conflict).describe()}.`,
+        message: `Se pisa con tu licencia ${new VacationRange(saved.conflict).describe()}.`,
         fields: { startDate: 'invalid' },
       });
     }
@@ -193,7 +193,7 @@ export default async function teachersRoutes(app) {
   app.delete('/me/vacations/:id', write, async (request, reply) => {
     const { id } = request.params;
     const deleted = UUID_RE.test(id) && (await deleteVacation(request.user.id, id));
-    if (!deleted) return reply.code(404).send({ message: 'Esas vacaciones no existen.' });
+    if (!deleted) return reply.code(404).send({ message: 'Esa licencia no existe.' });
     return reply.code(204).send();
   });
 

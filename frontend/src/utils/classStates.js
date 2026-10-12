@@ -118,8 +118,8 @@ export function cancelDescription(cls, role) {
   if (cls.cancelReason === 'reprogramada') return 'Reprogramada a otro horario.'
   if (cls.cancelReason === 'vacaciones') {
     return role === 'teacher'
-      ? 'Se canceló por tus vacaciones.'
-      : 'El docente está de vacaciones: se canceló la clase.'
+      ? 'Se canceló por tu licencia.'
+      : 'El docente está de licencia: se canceló la clase.'
   }
   const fuiYo = cls.cancelledBy === role
   if (cls.cancelReason === 'rechazada') {

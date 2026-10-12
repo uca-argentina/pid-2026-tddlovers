@@ -91,7 +91,7 @@ class TeacherAvailability extends Component {
         if (token !== this.vacationsToken) return
         this.setState({
           vacationsLoading: false,
-          error: error.message || 'No se pudieron cargar tus vacaciones.',
+          error: error.message || 'No se pudieron cargar tus licencias.',
         })
       })
   }
@@ -262,7 +262,7 @@ class TeacherAvailability extends Component {
               onClick={this.handleOpenVacations}
             >
               <SunIcon />
-              Vacaciones
+              Licencia
             </button>
           </div>
         </div>
