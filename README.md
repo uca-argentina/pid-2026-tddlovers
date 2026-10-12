@@ -23,7 +23,10 @@ La app queda en:
 ```
 Frontend: http://localhost:5173
 Backend:  http://localhost:4000
+MinIO:    http://localhost:9001   (consola; usuario y clave: minioadmin)
 ```
+
+Los archivos que los docentes adjuntan a las clases van a un bucket S3. En local es **MinIO**, que levanta el mismo compose (con el bucket `pid-tddlovers-dev` ya creado); el bucket de Backblaze B2 es **solo de producción** y sus claves no se usan nunca en local. Si tu `.env` es de antes de esto, copiá las variables `MINIO_ROOT_*` de `.env.example.dev`.
 
 Si se cambia el `.env` con Docker ya levantado, recrear los contenedores:
 
@@ -53,6 +56,7 @@ Variables del backend en Render:
 
 * `DATABASE_URL`: cadena *pooled* de Neon (host con `-pooler`), con `?sslmode=require`.
 * `COOKIE_SECRET`: la genera Render.
+* `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`: el bucket privado de Backblaze B2 (`pid-tddlovers`, endpoint `https://s3.us-east-005.backblazeb2.com`, región `us-east-005`) donde van los archivos del material de las clases. Las claves son una *application key* de B2 restringida a ese bucket; se cargan solo en Render.
 * `NODE_ENV=production`: marca la cookie de sesión como `secure`.
 
 ### Migraciones en Neon

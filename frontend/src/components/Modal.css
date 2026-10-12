@@ -36,6 +36,34 @@
   padding: 26px 30px 28px;
 }
 
+/* Casi pantalla completa, pegado abajo. La franja de arriba deja ver la
+   página con más desenfoque que un modal común: es contexto, no contenido. */
+.modal-backdrop.is-tall {
+  align-items: flex-end;
+  padding: 64px 20px 0;
+  backdrop-filter: blur(8px);
+}
+
+/* Al cerrarse, el fondo se aclara mientras la hoja baja (Modal.jsx la
+   mueve). La opacidad no sirve: también se llevaría a la hoja, que es hija. */
+.modal-backdrop.is-tall {
+  transition: background-color 0.26s ease, backdrop-filter 0.26s ease;
+}
+
+.modal-backdrop.is-tall.is-closing {
+  background: transparent;
+  backdrop-filter: blur(0);
+}
+
+.modal-panel.is-tall {
+  max-width: 960px;
+  height: 100%;
+  border-bottom: none;
+  border-radius: 24px 24px 0 0;
+  padding: 24px 30px 32px;
+  animation: modal-sheet-up 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
 .modal-panel:focus-visible {
   outline: none;
 }
@@ -106,6 +134,18 @@
     animation: modal-sheet-up 0.32s cubic-bezier(0.32, 0.72, 0, 1);
     transition: transform 0.25s cubic-bezier(0.32, 0.72, 0, 1);
     overscroll-behavior: contain;
+  }
+
+  /* En el teléfono la hoja alta deja la misma franja que las demás, pero
+     con la página desenfocada atrás (las demás la oscurecen nomás). */
+  .modal-backdrop.is-tall {
+    padding: calc(40px + env(safe-area-inset-top)) 0 0;
+    backdrop-filter: blur(8px);
+  }
+
+  .modal-panel.is-tall {
+    height: 100%;
+    padding: 0 18px calc(20px + env(safe-area-inset-bottom));
   }
 
   /* La manija y el título se quedan arriba aunque la hoja scrollee: es de

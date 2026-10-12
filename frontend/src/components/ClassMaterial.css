@@ -1,0 +1,199 @@
+/* El material de una clase dentro de su detalle: resumen y archivos. */
+
+.class-material {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.class-material .banner {
+  margin-bottom: 0;
+  font-size: 13px;
+}
+
+.class-material-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+.class-material-empty svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Respeta los saltos de línea que dejó el docente. */
+.class-material-summary {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-text-muted) 8%, transparent);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.class-material-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.class-material-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.class-material-textarea {
+  width: 100%;
+  min-height: 110px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface-solid);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.class-material-textarea:focus {
+  outline: 2px solid color-mix(in srgb, var(--color-primary) 50%, transparent);
+  border-color: var(--color-primary);
+}
+
+.class-material-editor-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.class-material-counter {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.class-material-files {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.class-material-file {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+}
+
+.class-material-thumb,
+.class-material-file-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: var(--color-primary);
+}
+
+.class-material-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.class-material-file-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.class-material-file-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.class-material-file-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.class-material-file-size {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.class-material-file-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.class-material-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.class-material-delete:hover {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.class-material-delete svg {
+  width: 16px;
+  height: 16px;
+}
+
+.class-material-upload {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.class-material-hint {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+/* Teléfono: el nombre necesita el ancho; los botones bajan a otra línea. */
+@media (max-width: 700px) {
+  .class-material-file {
+    flex-wrap: wrap;
+  }
+
+  .class-material-file-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}

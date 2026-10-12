@@ -120,6 +120,13 @@
   border: 1.5px solid var(--color-border);
   border-radius: 14px;
   background: var(--color-surface-solid);
+  /* Tocarla abre el detalle de la clase. */
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.day-agenda-item:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 45%, var(--color-border));
 }
 
 .day-agenda-head {
@@ -131,9 +138,21 @@
 
 .day-agenda-subject {
   min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
   font-size: 15px;
   font-weight: 700;
   color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.day-agenda-subject:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+  border-radius: 4px;
 }
 
 /* Individual en azul, grupal en verde: igual que en Reservar. */

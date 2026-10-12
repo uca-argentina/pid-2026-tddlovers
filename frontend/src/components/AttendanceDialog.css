@@ -1,0 +1,114 @@
+/* Tomar lista: un renglón por alumno con un selector Presente / Ausente. */
+
+.attendance-summary {
+  margin: 4px 0 12px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.attendance-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.attendance-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.attendance-row:last-child {
+  border-bottom: none;
+}
+
+.attendance-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.attendance-name svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Control segmentado, como los de iOS: las dos opciones juntas. */
+.attendance-toggle {
+  flex-shrink: 0;
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-text-muted) 12%, transparent);
+}
+
+.attendance-option {
+  min-height: 32px;
+  padding: 4px 14px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.attendance-option:disabled {
+  cursor: not-allowed;
+}
+
+.attendance-option.is-present.is-selected {
+  background: var(--color-success);
+  color: #fff;
+}
+
+.attendance-option.is-absent.is-selected {
+  background: var(--color-danger);
+  color: #fff;
+}
+
+.attendance-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+/* El nombre con sus pastillas (estado, pago) abajo. */
+.attendance-name-block,
+.students-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* Gestionar alumnos: los botones pueden ser varios, así que bajan si no entran. */
+.students-row {
+  flex-wrap: wrap;
+}
+
+.students-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.students-confirm {
+  font-size: 13px;
+  color: var(--color-text);
+}
