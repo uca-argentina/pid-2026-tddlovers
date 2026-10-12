@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import Modal from './Modal.jsx'
 
@@ -95,5 +95,80 @@ describe('Modal', () => {
 
     unmount()
     expect(document.body.style.overflow).toBe('')
+  })
+
+  it('con modales apilados, Escape cierra solo el de arriba', async () => {
+    const cerrarAbajo = vi.fn()
+    const cerrarArriba = vi.fn()
+    // El de arriba se abre después, desde el de abajo: como en la app.
+    const pila = (abierto) => (
+      <Modal title="Pendientes" onClose={cerrarAbajo} tall>
+        {abierto ? (
+          <Modal title="Clase" onClose={cerrarArriba}>
+            <button type="button">Aceptar</button>
+          </Modal>
+        ) : null}
+      </Modal>
+    )
+    const { rerender } = render(pila(false))
+    rerender(pila(true))
+
+    await userEvent.keyboard('{Escape}')
+
+    expect(cerrarArriba).toHaveBeenCalledTimes(1)
+    expect(cerrarAbajo).not.toHaveBeenCalled()
+  })
+
+  it('con modales apilados, Tab se queda en el de arriba', async () => {
+    const pila = (abierto) => (
+      <Modal title="Pendientes" onClose={() => {}}>
+        <button type="button">De abajo</button>
+        {abierto ? (
+          <Modal title="Clase" onClose={() => {}}>
+            <button type="button">Aceptar</button>
+          </Modal>
+        ) : null}
+      </Modal>
+    )
+    const { rerender } = render(pila(false))
+    rerender(pila(true))
+    const arriba = screen.getByRole('dialog', { name: 'Clase' })
+    const aceptar = screen.getByRole('button', { name: 'Aceptar' })
+
+    aceptar.focus()
+    await userEvent.tab()
+
+    expect(arriba).toContainElement(document.activeElement)
+  })
+
+  it('la hoja alta baja antes de avisar que se cerró', () => {
+    vi.useFakeTimers()
+    try {
+      const onClose = vi.fn()
+      render(<Modal title="Pendientes" onClose={onClose} tall />)
+
+      fireEvent.click(screen.getByRole('button', { name: 'Cerrar' }))
+
+      // Todavía está bajando: el que la abrió no la desmonta hasta el final.
+      expect(onClose).not.toHaveBeenCalled()
+      expect(screen.getByRole('dialog')).toHaveStyle({ transform: 'translateY(100%)' })
+      expect(screen.getByRole('dialog').parentElement).toHaveClass('is-closing')
+
+      // Un segundo Escape mientras baja no vuelve a cerrar.
+      fireEvent.keyDown(document, { key: 'Escape' })
+      vi.advanceTimersByTime(300)
+      expect(onClose).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('un modal común se cierra al toque', () => {
+    const onClose = vi.fn()
+    render(<Modal title="Filtros" onClose={onClose} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar' }))
+
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 })

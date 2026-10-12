@@ -24,6 +24,19 @@ services:
       # Cadena *pooled* de Neon (host con -pooler), con ?sslmode=require.
       - key: DATABASE_URL
         sync: false
+      # Bucket de Backblaze B2 para los archivos del material de las clases
+      # (backend/src/storage/files.js). Los valores se cargan en el dashboard
+      # de Render, nunca en el repo. Solo producción: en local es MinIO.
+      - key: S3_ENDPOINT
+        sync: false
+      - key: S3_REGION
+        sync: false
+      - key: S3_BUCKET
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
 
   - type: web
     name: pid-2026-tddlovers-frontend

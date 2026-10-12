@@ -34,6 +34,7 @@ export function apiClass(overrides = {}) {
     studentPackId: null,
     packTokens: 0,
     enrolled: 1,
+    hasMaterial: false,
     ...overrides,
   }
 }

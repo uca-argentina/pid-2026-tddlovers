@@ -1,0 +1,101 @@
+/* El detalle de una clase (adentro de un Modal tall). Ancho de lectura: la
+   hoja es ancha, pero el texto en renglones de 960px se lee mal. */
+
+.class-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 720px;
+  margin-top: 8px;
+}
+
+.class-detail-facts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--color-text);
+}
+
+.class-detail-facts li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.class-detail-facts svg {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  color: var(--color-text-muted);
+}
+
+.class-detail-facts a {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.class-detail-muted {
+  color: var(--color-text-muted);
+}
+
+.class-detail-price {
+  margin: -8px 0 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.class-detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Lo usa también ClassMaterial: las dos secciones se ven iguales. */
+.class-detail-section-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.class-detail-hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.class-detail-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.class-detail-row {
+  padding: 4px 14px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+}
+
+.class-detail .class-material {
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+}
+
+.class-detail-attendance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}

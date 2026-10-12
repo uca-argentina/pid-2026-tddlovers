@@ -1,0 +1,105 @@
+/* Los filtros de la lista de una categoría: nombre ancho, después materia y
+   las dos fechas. Mismos campos que el diálogo de vacaciones. */
+
+.category-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.category-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.category-filter input,
+.category-filter select {
+  width: 100%;
+  min-height: 40px;
+  padding: 6px 10px;
+  border: 1.5px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface-solid);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.category-filter input:focus,
+.category-filter select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+/* La lupa adentro del campo de nombre. */
+.category-filter-search {
+  position: relative;
+  display: block;
+}
+
+.category-filter-search svg {
+  position: absolute;
+  top: 50%;
+  left: 11px;
+  width: 15px;
+  height: 15px;
+  transform: translateY(-50%);
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+
+.category-filter-search input {
+  padding-left: 32px;
+}
+
+.category-filter-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.category-filter-clear {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-primary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Tablets: el nombre arriba, entero; abajo materia y fechas. */
+@media (max-width: 900px) {
+  .category-filters {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .category-filter-name {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Teléfono: nombre y materia enteros, las fechas lado a lado. */
+@media (max-width: 700px) {
+  .category-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .category-filter-name,
+  .category-filter:nth-child(2) {
+    grid-column: 1 / -1;
+  }
+}

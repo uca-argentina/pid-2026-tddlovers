@@ -28,18 +28,23 @@ function renderAgenda(items, viewRole = 'teacher') {
 }
 
 describe('DayAgenda', () => {
-  it('en una grupal el docente ve a cada alumno con su propia reserva', () => {
+  it('en una grupal el docente ve una sola clase, sin nombres, con botones para toda la clase', () => {
     const sofia = fila()
-    const tomas = fila({ id: 'b', studentName: 'Tomás Díaz', status: 'confirmada', paidAt: '2099-09-01T12:00:00.000Z' })
+    const tomas = fila({
+      id: 'b',
+      studentName: 'Tomás Díaz',
+      status: 'confirmada',
+      paidAt: '2099-09-01T12:00:00.000Z',
+    })
     const grupal = { ...sofia, students: ['Sofía Ramírez', 'Tomás Díaz'], rows: [sofia, tomas] }
 
     renderAgenda([grupal])
 
-    // Solo Sofía espera respuesta: un solo "Aceptar".
-    expect(screen.getAllByRole('button', { name: 'Aceptar' })).toHaveLength(1)
-    expect(screen.getByText('Pendiente')).toBeInTheDocument()
-    expect(screen.getByText('Confirmada')).toBeInTheDocument()
-    expect(screen.getByText('Tomás Díaz')).toBeInTheDocument()
+    expect(screen.getByText('Pendiente · 1')).toBeInTheDocument()
+    expect(screen.getByText('Confirmada · 1')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Aceptar' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cancelar clase' })).toBeInTheDocument()
+    expect(screen.queryByText(/Tomás Díaz/)).not.toBeInTheDocument()
   })
 
   it('una individual muestra su estado sin nombre repetido', () => {

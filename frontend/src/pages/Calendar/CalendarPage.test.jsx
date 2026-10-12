@@ -2,7 +2,7 @@ import { render as rtlRender, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import CalendarPage from './CalendarPage.jsx'
-import { addMonths, formatMonthTitle, toISODate } from '../../utils/calendar.js'
+import { addDays, addMonths, formatMonthTitle, toISODate } from '../../utils/calendar.js'
 import { apiClass } from '../../testing/fixtures.js'
 
 // El mock del cliente evita depender de los datos de mentira reales: acá
@@ -14,7 +14,14 @@ const { addFavoriteTeacher, fetchClasses, fetchFavoriteTeachers } = vi.hoisted((
   fetchFavoriteTeachers: vi.fn(() => Promise.resolve([])),
 }))
 
-vi.mock('../../api/client.js', () => ({ addFavoriteTeacher, fetchClasses, fetchFavoriteTeachers }))
+vi.mock('../../api/client.js', () => ({
+  addFavoriteTeacher,
+  classFileUrl: () => '',
+  fetchClasses,
+  // El detalle de una clase que ya terminó pide su material.
+  fetchClassMaterial: vi.fn(() => Promise.resolve({ summary: '', updatedAt: null, files: [] })),
+  fetchFavoriteTeachers,
+}))
 
 // Las clases traen links (reprogramar, ver solicitudes): hace falta un router.
 function render(ui) {
@@ -121,19 +128,23 @@ describe('CalendarPage', () => {
 
     render(<CalendarPage viewRole="teacher" />)
 
-    await screen.findByText(/Sofía Ramírez/)
+    await screen.findByText('1 clase')
     expect(screen.queryByRole('button', { name: /favoritos/ })).not.toBeInTheDocument()
   })
 
-  it('muestra al alumno cuando se mira como docente', async () => {
-    const iso = toISODate(today)
+  it('el docente ve al alumno en el detalle de la clase, no en la tarjeta', async () => {
+    const iso = toISODate(addDays(today, 1))
     fetchClasses.mockResolvedValue([
       classOn(iso, { teacherName: 'Laura Gómez', studentName: 'Sofía Ramírez' }),
     ])
 
     render(<CalendarPage viewRole="teacher" />)
 
-    expect(await screen.findByText(/Sofía Ramírez/)).toBeInTheDocument()
+    await screen.findByText('1 clase')
+    expect(screen.queryByText(/Sofía Ramírez/)).not.toBeInTheDocument()
+    // Una clase de mañana: todavía no empezó, así que el detalle muestra al alumno.
+    await userEvent.click(screen.getByRole('button', { name: 'Álgebra' }))
+    expect(screen.getByRole('dialog', { name: 'Álgebra' })).toHaveTextContent('Sofía Ramírez')
     expect(screen.queryByText(/Laura Gómez/)).not.toBeInTheDocument()
   })
 
@@ -186,7 +197,7 @@ describe('CalendarPage', () => {
 
     render(<CalendarPage viewRole="teacher" />)
 
-    expect(await screen.findByText(/Sin reservar/)).toBeInTheDocument()
+    expect(await screen.findByText('1 clase')).toBeInTheDocument()
   })
 
   it('una grupal se ve una sola vez con todos sus alumnos', async () => {
@@ -199,10 +210,10 @@ describe('CalendarPage', () => {
 
     render(<CalendarPage viewRole="teacher" />)
 
-    expect(await screen.findByText('Sofía Ramírez, Tomás Díaz')).toBeInTheDocument()
-    // La pastilla de cupo dice cuántos van, como en las tarjetas de Reservar.
-    expect(screen.getByText('Grupal · 2 de 4')).toBeInTheDocument()
+    // La pastilla de cupo dice cuántos van; los nombres van en el detalle.
+    expect(await screen.findByText('Grupal · 2 de 4')).toBeInTheDocument()
     expect(screen.getByText('1 clase')).toBeInTheDocument()
+    expect(screen.queryByText(/Sofía Ramírez/)).not.toBeInTheDocument()
   })
 
   it('una clase virtual trae el link para entrar', async () => {

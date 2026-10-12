@@ -49,8 +49,13 @@ function minutesUntilStart(cls, now) {
   return toEpochMinutes(cls.date, cls.startTime) - toEpochMinutes(now.iso, now.time)
 }
 
-function hasStarted(cls, now) {
+export function hasStarted(cls, now = nowParts()) {
   return minutesUntilStart(cls, now) <= 0
+}
+
+/** Ya terminó: el fin llegó. Un fin "24:00" es la medianoche siguiente. */
+export function hasEnded(cls, now = nowParts()) {
+  return toEpochMinutes(cls.date, cls.endTime) <= toEpochMinutes(now.iso, now.time)
 }
 
 function withNotice(cls, now) {
@@ -86,6 +91,21 @@ export function allowedActions(cls, role, now = nowParts()) {
  */
 export function owesPayment(cls) {
   return !cls.paidAt && ['aceptada', 'realizada', 'no_presentada'].includes(cls.status)
+}
+
+/**
+ * Si el alumno ya pagó, para el docente: "Pagó", "Sin pagar", o por qué no
+ * hay nada que pagar (lo cubre el paquete, o la tarifa es 0). Devuelve
+ * { label, tone } con los tonos de las pastillas.
+ */
+export function paymentStatus(cls) {
+  if (cls.paidAt) return { label: 'Pagó', tone: 'success' }
+  if (cls.priceCents === 0) {
+    return cls.packTokens > 0
+      ? { label: 'Con paquete', tone: 'info' }
+      : { label: 'Gratis', tone: 'info' }
+  }
+  return { label: 'Sin pagar', tone: 'warning' }
 }
 
 /**

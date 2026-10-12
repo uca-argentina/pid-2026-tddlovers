@@ -341,6 +341,51 @@ export function PencilIcon(props) {
   )
 }
 
+/** Clip: material adjunto. */
+export function PaperclipIcon(props) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M15.5 9.5l-5.7 5.7a3.5 3.5 0 01-5-5l6.2-6.2a2.3 2.3 0 013.3 3.3L8.2 13.4a1.2 1.2 0 01-1.7-1.7l5.3-5.3"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+/** Hoja con la punta doblada: un documento. */
+export function FileIcon(props) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M11.5 2.5H5.5a1 1 0 00-1 1v13a1 1 0 001 1h9a1 1 0 001-1V6.5l-4-4z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      <path d="M11.5 2.5v4h4" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+/** Flecha hacia la bandeja: descargar. */
+export function DownloadIcon(props) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M10 3.5v9M6 8.5l4 4 4-4M4 15.5h12"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 export function SpinnerIcon(props) {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
