@@ -5,7 +5,12 @@ import DayWindowsDialog from './DayWindowsDialog.jsx'
 import VacationsDialog from './VacationsDialog.jsx'
 import Banner from '../../components/Banner.jsx'
 import { PlusIcon, SunIcon } from '../../components/icons.jsx'
-import { fetchMyVacations, fetchMyWindows, fetchSubjects } from '../../api/client.js'
+import {
+  fetchMyAddresses,
+  fetchMyVacations,
+  fetchMyWindows,
+  fetchSubjects,
+} from '../../api/client.js'
 import { addDays, fromISODate, toISODate } from '../../utils/calendar.js'
 import { resolveRates } from '../../utils/rates.js'
 import { startOfWeek } from '../../utils/windows.js'
@@ -37,6 +42,8 @@ class TeacherAvailability extends Component {
     loading: true,
     error: null,
     catalog: [],
+    // Las direcciones guardadas, para elegir una al cargar un horario.
+    addresses: [],
     // null con el modal cerrado; si no, { iso, focusId, key }.
     dialog: null,
     vacations: [],
@@ -55,6 +62,7 @@ class TeacherAvailability extends Component {
   componentDidMount() {
     this.loadWeek(this.state.weekStart)
     this.loadVacations()
+    this.loadAddresses()
     fetchSubjects()
       .then((catalog) => this.setState({ catalog: Array.isArray(catalog) ? catalog : [] }))
       .catch(() => {
@@ -193,7 +201,23 @@ class TeacherAvailability extends Component {
     this.setState({ dialog: null })
   }
 
-  handleChanged = () => this.loadWeek(this.state.weekStart)
+  /**
+   * Después de guardar un horario: la semana, y las direcciones por si se
+   * guardó una nueva desde el formulario.
+   */
+  handleChanged = () => {
+    this.loadAddresses()
+    return this.loadWeek(this.state.weekStart)
+  }
+
+  /**
+   * Si falla, el formulario se queda sin guardadas y ofrece cargar una: no
+   * es motivo para no mostrar la semana.
+   */
+  loadAddresses = () =>
+    fetchMyAddresses()
+      .then((addresses) => this.setState({ addresses: Array.isArray(addresses) ? addresses : [] }))
+      .catch(() => {})
 
   render() {
     const { weekStart, windows, loading, error, dialog, vacations, vacationsOpen } = this.state
@@ -271,6 +295,7 @@ class TeacherAvailability extends Component {
             loading={loading}
             onVacation={isOnVacation(vacations, dialog.iso)}
             rates={rates}
+            addresses={this.state.addresses}
             today={this.getToday()}
             onChangeDay={this.handleChangeDay}
             onChanged={this.handleChanged}

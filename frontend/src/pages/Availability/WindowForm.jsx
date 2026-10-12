@@ -1,6 +1,7 @@
 import { Component } from 'react'
 import { Link } from 'react-router-dom'
 import Banner from '../../components/Banner.jsx'
+import AddressFields from '../../components/AddressFields.jsx'
 import TimeRangeSlider from '../../components/TimeRangeSlider.jsx'
 import { SpinnerIcon } from '../../components/icons.jsx'
 import {
@@ -9,6 +10,7 @@ import {
   rateModalities,
   ratesForModality,
 } from '../../utils/rates.js'
+import { formatAddress, MAX_LABEL_LENGTH } from '../../utils/addresses.js'
 import {
   formatMinutes,
   MAX_STUDENTS_LIMIT,
@@ -17,6 +19,7 @@ import {
   modalityPlural,
   needsAddress,
   needsMeetingUrl,
+  NEW_ADDRESS,
   toMinutes,
   validateDraft,
   weekdayPlural,
@@ -68,6 +71,18 @@ class WindowForm extends Component {
 
   handleModality = (modality) => () => {
     this.update({ modality })
+  }
+
+  handleNewAddress = (newAddress) => {
+    this.update({ newAddress })
+  }
+
+  handleAddressLabel = (event) => {
+    this.update({ newAddress: { ...this.props.draft.newAddress, label: event.target.value } })
+  }
+
+  handleSaveAddress = (event) => {
+    this.update({ saveAddress: event.target.checked })
   }
 
   handleGroup = (group) => () => {
@@ -203,52 +218,99 @@ class WindowForm extends Component {
             <span className="window-form-hint">Solo lo ven los alumnos que reservan.</span>
           </div>
         ) : null}
-        {/* Dos niveles a propósito: la localidad la ve cualquier alumno para
-            decidir si le queda cerca; la dirección exacta, solo el que
-            reservó (igual que el link). */}
-        {needsAddress(draft.modality) ? (
-          <div className="window-form-field">
-            <label className="window-form-label" htmlFor={this.fieldId('locality')}>
-              Localidad
-            </label>
-            <input
-              id={this.fieldId('locality')}
-              className="window-form-input"
-              type="text"
-              placeholder="Palermo, CABA"
-              maxLength={100}
-              value={draft.locality}
-              onChange={this.handleField('locality')}
-              disabled={saving}
-              {...this.invalidProps(errors, 'locality')}
-            />
-            {this.renderError(errors, 'locality') || (
-              <span className="window-form-hint">La ven todos los alumnos, antes de reservar.</span>
-            )}
-          </div>
-        ) : null}
-        {needsAddress(draft.modality) ? (
-          <div className="window-form-field">
-            <label className="window-form-label" htmlFor={this.fieldId('address')}>
-              Dirección exacta
-            </label>
-            <input
-              id={this.fieldId('address')}
-              className="window-form-input"
-              type="text"
-              placeholder="Av. Alicia Moreau de Justo 1300, aula 3"
-              maxLength={200}
-              value={draft.address}
-              onChange={this.handleField('address')}
-              disabled={saving}
-              {...this.invalidProps(errors, 'address')}
-            />
-            {this.renderError(errors, 'address') || (
-              <span className="window-form-hint">Solo la ven los alumnos que reservan.</span>
-            )}
-          </div>
-        ) : null}
+        {needsAddress(draft.modality) ? this.renderAddress(errors) : null}
       </>
+    )
+  }
+
+  /**
+   * La dirección: una de las guardadas (se editan en el perfil, y editarlas
+   * cambia todos los horarios que la usan) u "Otra dirección…", que se carga
+   * acá y, si se tilda, queda guardada en el perfil como cualquier otra.
+   */
+  renderAddress(errors) {
+    const { draft, saving, showErrors, addresses } = this.props
+    const nueva = draft.addressChoice === NEW_ADDRESS
+    const elegida = addresses.find((item) => String(item.id) === String(draft.addressChoice))
+    const deLaDireccion = errors.address || {}
+
+    return (
+      <div className="window-form-field">
+        <label className="window-form-label" htmlFor={this.fieldId('address')}>
+          Dirección
+        </label>
+        <select
+          id={this.fieldId('address')}
+          className="window-form-input window-form-select"
+          value={draft.addressChoice}
+          onChange={this.handleField('addressChoice')}
+          disabled={saving}
+          {...this.invalidProps(errors, 'addressId')}
+        >
+          {/* Solo si la que tenía elegida ya no existe (la borró en el perfil). */}
+          {draft.addressChoice ? null : <option value="">Elegí una dirección</option>}
+          {addresses.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.label}
+              {item.isDefault ? ' (predeterminada)' : ''}
+            </option>
+          ))}
+          <option value={NEW_ADDRESS}>Otra dirección…</option>
+        </select>
+        {this.renderError(errors, 'addressId')}
+        {elegida ? (
+          <span className="window-form-hint">
+            {formatAddress(elegida)}. Antes de pagar, los alumnos ven solo «{elegida.locality}».{' '}
+            <Link className="auth-link" to="/perfil">
+              Editar en tu perfil
+            </Link>
+          </span>
+        ) : null}
+
+        {nueva ? (
+          <div className="window-form-new-address">
+            <AddressFields
+              value={draft.newAddress}
+              onChange={this.handleNewAddress}
+              errors={deLaDireccion}
+              showErrors={showErrors}
+              disabled={saving}
+            />
+            <label className="window-form-check">
+              <input
+                type="checkbox"
+                checked={draft.saveAddress}
+                onChange={this.handleSaveAddress}
+                disabled={saving}
+              />
+              <span>Guardar esta dirección en mi perfil para usarla de nuevo</span>
+            </label>
+            {draft.saveAddress ? (
+              <div className="window-form-field">
+                <label className="window-form-label" htmlFor={this.fieldId('address-label')}>
+                  Nombre de la dirección
+                </label>
+                <input
+                  id={this.fieldId('address-label')}
+                  className="window-form-input"
+                  type="text"
+                  maxLength={MAX_LABEL_LENGTH}
+                  placeholder="Casa, Escuela, Oficina..."
+                  value={draft.newAddress.label}
+                  onChange={this.handleAddressLabel}
+                  disabled={saving}
+                  aria-invalid={showErrors && Boolean(deLaDireccion.label)}
+                />
+                {showErrors && deLaDireccion.label ? (
+                  <span className="window-form-error" role="alert">
+                    {deLaDireccion.label}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
     )
   }
 
@@ -353,6 +415,8 @@ class WindowForm extends Component {
 
 WindowForm.defaultProps = {
   rates: [],
+  // Las direcciones guardadas del docente (la predeterminada primero).
+  addresses: [],
   saving: false,
   showErrors: false,
   serverError: null,

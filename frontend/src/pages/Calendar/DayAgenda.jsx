@@ -113,10 +113,13 @@ class DayAgenda extends Component {
   renderPlace(item) {
     const link = needsMeetingUrl(item.modality) && item.meetingUrl
     const direccion = needsAddress(item.modality) && item.address
+    // El alumno ve la dirección exacta recién cuando pagó: el backend no la
+    // manda antes. Hasta entonces, la localidad y el aviso.
+    const sinPagar = needsAddress(item.modality) && !item.address && item.locality
     const modalidad = <span className="day-agenda-modality">{modalityLabel(item.modality)}</span>
 
     // Sin link ni dirección (no debería pasar) queda al menos la modalidad.
-    if (!link && !direccion) {
+    if (!link && !direccion && !sinPagar) {
       const Icono = item.modality === 'in_person' ? PinIcon : VideoIcon
       return (
         <li>
@@ -152,9 +155,28 @@ class DayAgenda extends Component {
                 </>
               )}
               <span className="day-agenda-address-text">{item.address}</span>
-              {item.locality ? (
+              {/* La dirección armada ya trae la localidad; las clases
+                  reservadas antes de las direcciones guardadas, no. */}
+              {item.locality && !item.address.includes(item.locality) ? (
                 <span className="day-agenda-locality">{item.locality}</span>
               ) : null}
+            </span>
+          </li>
+        ) : null}
+        {sinPagar ? (
+          <li className="day-agenda-address">
+            <PinIcon />
+            <span>
+              {link ? null : (
+                <>
+                  {modalidad}
+                  {' · '}
+                </>
+              )}
+              <span className="day-agenda-address-text">{item.locality}</span>
+              <span className="day-agenda-locality">
+                La dirección exacta aparece cuando pagues la clase.
+              </span>
             </span>
           </li>
         ) : null}

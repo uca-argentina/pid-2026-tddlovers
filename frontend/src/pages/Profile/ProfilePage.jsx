@@ -11,6 +11,7 @@ import { approvalNotice } from '../../utils/approval.js'
 import { centsToInput, MAX_HOURLY_RATE_CENTS, parseMoney } from '../../utils/rates.js'
 import { MODALITIES } from '../../utils/windows.js'
 import { fetchSubjects, updateProfile } from '../../api/client.js'
+import AddressesSection from './AddressesSection.jsx'
 import './ProfilePage.css'
 
 /**
@@ -575,6 +576,11 @@ class ProfilePage extends Component {
               Guardar cambios
             </button>
           </div>
+
+          {/* Solo el docente, para sus clases presenciales. Cada acción se
+              guarda al momento, aparte de "Guardar cambios": por eso va
+              después de esos botones. */}
+          {esDocente ? <AddressesSection /> : null}
 
           {/* Un <Link> y no un <button>: así navega solo y de paso no corre
               riesgo de mandar el formulario. El onClick limpia la sesión en

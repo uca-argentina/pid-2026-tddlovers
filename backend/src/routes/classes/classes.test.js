@@ -781,6 +781,58 @@ describe('class states', () => {
     expect(res.statusCode).toBe(409);
   });
 
+  it('the student sees the exact address only once the class is paid', async () => {
+    const presencial = {
+      modality: 'in_person',
+      meetingUrl: null,
+      address: 'Honduras 4800 · CP 1414 · Palermo, CABA',
+      locality: 'Palermo',
+    };
+    const headers = await authedHeaders(app);
+    findClassesForUser.mockResolvedValue([
+      clase({ ...presencial, id: 'a', status: 'pendiente' }),
+      clase({ ...presencial, id: 'b', status: 'aceptada' }),
+      clase({ ...presencial, id: 'c', status: 'confirmada', paidAt: '2099-09-01T12:00:00Z' }),
+    ]);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/classes?from=2099-09-01&to=2099-09-30',
+      headers,
+    });
+
+    expect(res.json().map((c) => [c.id, c.address, c.locality])).toEqual([
+      ['a', null, 'Palermo'],
+      ['b', null, 'Palermo'],
+      ['c', presencial.address, 'Palermo'],
+    ]);
+  });
+
+  it('paying returns the class with the exact address', async () => {
+    const presencial = { modality: 'in_person', address: 'Honduras 4800', locality: 'Palermo' };
+    findClassById
+      .mockResolvedValueOnce(clase({ ...presencial, status: 'aceptada' }))
+      .mockResolvedValueOnce(
+        clase({ ...presencial, status: 'confirmada', paidAt: '2099-09-01T12:00:00Z' })
+      );
+
+    const res = await post('pay');
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().address).toBe('Honduras 4800');
+  });
+
+  it('the teacher always sees the address', async () => {
+    findClassById.mockResolvedValue(
+      comoDocente({ modality: 'in_person', address: 'Honduras 4800', status: 'pendiente' })
+    );
+    const headers = await authedHeaders(app, 'teacher');
+
+    const res = await app.inject({ method: 'GET', url: `/api/classes/${CLASE_ID}`, headers });
+
+    expect(res.json().address).toBe('Honduras 4800');
+  });
+
   it('the teacher takes attendance once the class started', async () => {
     findClassById.mockResolvedValue(comoDocente({ status: 'aceptada', date: PASADA }));
 

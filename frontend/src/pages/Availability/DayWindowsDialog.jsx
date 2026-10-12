@@ -100,7 +100,12 @@ class DayWindowsDialog extends Component {
     // presencial, no tiene sentido que el formulario abra en virtual.
     const [primera = 'virtual'] = this.getRateModalities()
     const modality = this.getRateModalities().includes('virtual') ? 'virtual' : primera
-    return emptyDraft({ date: this.props.iso, modality })
+    return emptyDraft({ date: this.props.iso, modality, defaultAddressId: this.defaultAddressId() })
+  }
+
+  /** Si pasa a presencial, ya viene elegida la dirección predeterminada. */
+  defaultAddressId() {
+    return this.props.addresses.find((address) => address.isDefault)?.id ?? null
   }
 
   getWindows() {
@@ -126,7 +131,7 @@ class DayWindowsDialog extends Component {
   handleEdit = (window) => () => {
     this.setState({
       editing: window.id,
-      draft: draftFromWindow(window),
+      draft: draftFromWindow(window, { defaultAddressId: this.defaultAddressId() }),
       original: window,
       showErrors: false,
       serverError: null,
@@ -266,6 +271,7 @@ class DayWindowsDialog extends Component {
           draft={draft}
           iso={this.props.iso}
           rates={this.props.rates}
+          addresses={this.props.addresses}
           isNew={isNew}
           originalRepeats={Boolean(original?.repeatsWeekly)}
           saving={saving}
@@ -383,6 +389,8 @@ class DayWindowsDialog extends Component {
 DayWindowsDialog.defaultProps = {
   windows: [],
   rates: [],
+  // Las direcciones guardadas del docente (TeacherAvailability las carga).
+  addresses: [],
   loading: false,
   focusId: null,
 }

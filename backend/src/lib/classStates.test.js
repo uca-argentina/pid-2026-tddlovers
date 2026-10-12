@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canSeeExactAddress,
   cancelReasonFor,
   checkAction,
+  forViewer,
   hasStarted,
   minutesUntilStart,
 } from './classStates.js';
@@ -138,5 +140,37 @@ describe('reprogramar', () => {
     expect(checkAction('reschedule', clase({ status: 'confirmada' }), alumno(NOW_24H))).toBeNull();
     expect(checkAction('reschedule', clase({ status: 'confirmada' }), alumno(NOW_CASI)).status).toBe(409);
     expect(checkAction('reschedule', clase({ status: 'aceptada' }), alumno(NOW_LEJOS)).status).toBe(409);
+  });
+});
+
+describe('canSeeExactAddress', () => {
+  const presencial = (over = {}) =>
+    clase({ modality: 'in_person', address: 'Honduras 4800', priceCents: 500000, ...over });
+
+  it('el docente la ve siempre', () => {
+    expect(canSeeExactAddress(presencial(), 'teacher')).toBe(true);
+  });
+
+  it('el alumno, recién cuando pagó', () => {
+    expect(canSeeExactAddress(presencial(), 'student')).toBe(false);
+    expect(canSeeExactAddress(presencial({ status: 'aceptada' }), 'student')).toBe(false);
+    const paga = presencial({ status: 'confirmada', paidAt: '2099-09-10T12:00:00Z' });
+    expect(canSeeExactAddress(paga, 'student')).toBe(true);
+    // Ya dada sin pagar: tampoco (se paga después).
+    expect(canSeeExactAddress(presencial({ status: 'realizada' }), 'student')).toBe(false);
+  });
+
+  it('una gratis la ve al aceptarse; una cancelada nunca', () => {
+    expect(canSeeExactAddress(presencial({ status: 'aceptada', priceCents: 0 }), 'student')).toBe(true);
+    expect(canSeeExactAddress(presencial({ priceCents: 0 }), 'student')).toBe(false);
+    expect(
+      canSeeExactAddress(presencial({ status: 'cancelada', paidAt: '2099-09-10T12:00:00Z' }), 'student')
+    ).toBe(false);
+  });
+
+  it('forViewer le saca solo la dirección', () => {
+    const vista = forViewer(presencial({ locality: 'Palermo' }), 'student');
+    expect(vista.address).toBeNull();
+    expect(vista.locality).toBe('Palermo');
   });
 });
