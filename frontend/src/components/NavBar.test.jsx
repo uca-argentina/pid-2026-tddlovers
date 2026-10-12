@@ -20,6 +20,14 @@ describe('NavBar', () => {
     expect(screen.getByLabelText('Mi calendario')).toHaveAttribute('href', '/')
   })
 
+  it('el logo y el nombre llevan al calendario, y el botón de tema queda afuera', () => {
+    renderAt('/perfil')
+    const marca = screen.getByRole('link', { name: 'Ir al calendario' })
+    expect(marca).toHaveAttribute('href', '/')
+    expect(marca).toHaveTextContent('BookIt')
+    expect(marca.querySelector('button')).toBeNull()
+  })
+
   it('marca el calendario como activo en la raíz', () => {
     renderAt('/')
     expect(screen.getByLabelText('Mi calendario')).toHaveAttribute('aria-current', 'page')

@@ -159,6 +159,30 @@ describe('ProfilePage', () => {
     expect(await screen.findByLabelText('Dejar de dar Matemática')).toBeInTheDocument()
   })
 
+  it('al recargar, las materias y tarifas aparecen cuando llega la sesión', async () => {
+    // Recargar la página monta el perfil antes de que App reciba /me: llega
+    // sin usuario (y como alumno, el rol por defecto) y después recibe al
+    // docente con sus materias, sin desmontarse.
+    const { rerender } = render(
+      <MemoryRouter>
+        <ProfilePage user={null} viewRole="student" />
+      </MemoryRouter>,
+    )
+
+    rerender(
+      <MemoryRouter>
+        <ProfilePage user={user} viewRole="teacher" />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByLabelText('Dejar de dar Matemática')).toBeInTheDocument()
+    expect(screen.getByLabelText('Dejar de dar Álgebra')).toBeInTheDocument()
+    expect(tarifa('Matemática', 'virtual')).toHaveValue('5000')
+    expect(telefonoInput()).toHaveValue('+54 11 5555-5555')
+    // Recién cargado no hay nada sin guardar.
+    expect(botonGuardar()).toBeDisabled()
+  })
+
   it('como docente hay un solo link a la disponibilidad, no uno por materia', async () => {
     renderProfile({ viewRole: 'teacher' })
     await screen.findByText('Matemática')

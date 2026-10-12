@@ -1,11 +1,11 @@
-/* El detalle de una clase (adentro de un Modal tall). Ancho de lectura: la
-   hoja es ancha, pero el texto en renglones de 960px se lee mal. */
+/* El detalle de una clase (adentro de un Modal tall). Ocupa todo el ancho
+   de la hoja: con un tope más angosto quedaba una franja vacía a la derecha
+   en la compu. */
 
 .class-detail {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  max-width: 720px;
   margin-top: 8px;
 }
 

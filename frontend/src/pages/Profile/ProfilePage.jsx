@@ -103,7 +103,14 @@ class ProfilePage extends Component {
    * materia.
    */
   componentDidUpdate(prevProps) {
-    if (prevProps.viewRole !== this.props.viewRole && this.needsSubjects()) {
+    // Al recargar la página, App monta las pantallas antes de que vuelva
+    // /api/auth/me: el perfil arranca sin usuario y el borrador (materias,
+    // tarifas, teléfono) queda vacío. Cuando llega el usuario —o cambia de
+    // cuenta— se vuelve a copiar. Guardar no lo dispara: vuelve el mismo id.
+    const otroUsuario = String(prevProps.user?.id) !== String(this.props.user?.id)
+    if (otroUsuario) this.resetDraft()
+
+    if ((otroUsuario || prevProps.viewRole !== this.props.viewRole) && this.needsSubjects()) {
       this.loadSubjects()
     }
   }
@@ -263,7 +270,10 @@ class ProfilePage extends Component {
     }))
   }
 
-  handleCancel = () => {
+  handleCancel = () => this.resetDraft()
+
+  /** El borrador vuelve a ser lo que tiene guardado el usuario. */
+  resetDraft() {
     const { user } = this.props
     this.setState({
       telefono: user?.telefono || '',
