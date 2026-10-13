@@ -25,7 +25,7 @@ describe('VacationRange.validate', () => {
 
   it('no se cargan vacaciones que ya terminaron, pero sí unas que siguen', () => {
     expect(VacationRange.validate({ startDate: '2099-09-01', endDate: '2099-09-09' }, { today: HOY }).message)
-      .toMatch(/ya terminaron/);
+      .toMatch(/ya terminó/);
     expect(VacationRange.validate({ startDate: '2099-09-01', endDate: HOY }, { today: HOY }).value).toBeTruthy();
   });
 

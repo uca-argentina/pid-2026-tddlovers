@@ -49,8 +49,13 @@ function minutesUntilStart(cls, now) {
   return toEpochMinutes(cls.date, cls.startTime) - toEpochMinutes(now.iso, now.time)
 }
 
-function hasStarted(cls, now) {
+export function hasStarted(cls, now = nowParts()) {
   return minutesUntilStart(cls, now) <= 0
+}
+
+/** Ya terminó: el fin llegó. Un fin "24:00" es la medianoche siguiente. */
+export function hasEnded(cls, now = nowParts()) {
+  return toEpochMinutes(cls.date, cls.endTime) <= toEpochMinutes(now.iso, now.time)
 }
 
 function withNotice(cls, now) {
@@ -89,6 +94,21 @@ export function owesPayment(cls) {
 }
 
 /**
+ * Si el alumno ya pagó, para el docente: "Pagó", "Sin pagar", o por qué no
+ * hay nada que pagar (lo cubre el paquete, o la tarifa es 0). Devuelve
+ * { label, tone } con los tonos de las pastillas.
+ */
+export function paymentStatus(cls) {
+  if (cls.paidAt) return { label: 'Pagó', tone: 'success' }
+  if (cls.priceCents === 0) {
+    return cls.packTokens > 0
+      ? { label: 'Con paquete', tone: 'info' }
+      : { label: 'Gratis', tone: 'info' }
+  }
+  return { label: 'Sin pagar', tone: 'warning' }
+}
+
+/**
  * Por qué está cancelada, dicho desde quien mira: "Cancelada por vos" no es
  * lo mismo que "Cancelada por el docente".
  */
@@ -98,8 +118,8 @@ export function cancelDescription(cls, role) {
   if (cls.cancelReason === 'reprogramada') return 'Reprogramada a otro horario.'
   if (cls.cancelReason === 'vacaciones') {
     return role === 'teacher'
-      ? 'Se canceló por tus vacaciones.'
-      : 'El docente está de vacaciones: se canceló la clase.'
+      ? 'Se canceló por tu licencia.'
+      : 'El docente está de licencia: se canceló la clase.'
   }
   const fuiYo = cls.cancelledBy === role
   if (cls.cancelReason === 'rechazada') {

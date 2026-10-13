@@ -1,0 +1,103 @@
+/* La tarjeta de una reserva (Mis reservas y sus listas). Toda la tarjeta
+   abre el detalle, así que el cursor y el hover lo anuncian. */
+
+.class-card {
+  padding: 14px 16px;
+  background: var(--color-surface-solid);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-panel);
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.class-card:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 45%, var(--color-border));
+}
+
+.class-card:active {
+  transform: scale(0.995);
+}
+
+.class-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+
+.class-card-date {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.class-card-time {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.class-card-badge {
+  margin-left: auto;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.class-card-badge.is-success {
+  color: var(--color-success);
+  background: var(--color-success-bg);
+}
+
+.class-card-badge.is-warning {
+  color: var(--color-warning);
+  background: var(--color-warning-bg);
+}
+
+/* La materia es el botón que abre el detalle con teclado: se ve como texto. */
+.class-card-subject {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.class-card-subject:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.class-card-material {
+  display: inline-flex;
+  color: var(--color-primary);
+}
+
+.class-card-material svg {
+  width: 15px;
+  height: 15px;
+}
+
+.class-card-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.class-card-meta {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}

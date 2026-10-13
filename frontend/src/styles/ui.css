@@ -98,6 +98,15 @@
   transform: none;
 }
 
+/* Los íconos de icons.jsx no traen tamaño: sin esto, el spinner de "guardando"
+   se estiraba a todo el ancho del botón. Las pantallas que quieren otro
+   tamaño lo pisan con su propia regla (p. ej. .vacations-form .btn svg). */
+.btn svg {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+}
+
 .btn-primary {
   background: var(--color-primary);
   color: #fff;
@@ -417,4 +426,203 @@
     border-radius: 20px;
     padding: 28px 20px;
   }
+}
+
+/* --- Teléfono (interfaz mobile, mismo corte que MOBILE_QUERY) -------------- */
+
+/* Título grande de pantalla, como los "large titles" de iOS. Lo usan las
+   pantallas que en escritorio no tienen título propio (el tablero de
+   reservar) y las demás lo copian en su propio CSS. */
+.large-title {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: var(--color-text);
+}
+
+@media (max-width: 700px) {
+  /* Safari de iOS hace zoom solo en cualquier campo con letra de menos de
+     16px al tocarlo, y no vuelve: 16px es el mínimo que lo evita. */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  /* El destello gris de iOS al tocar no va con los estados propios de la
+     app (los botones ya cambian de color). */
+  button,
+  a {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Botones de formulario más cómodos para el pulgar. Siguen siendo
+     pastillas: es el lenguaje de la app. */
+  .btn {
+    min-height: 50px;
+  }
+
+  .btn-row {
+    gap: 10px;
+  }
+
+  /* Login y registro: la marca arriba sobre lo oscuro y el formulario como
+     una hoja clara que sube desde abajo y ocupa todo el ancho, como las
+     pantallas de ingreso de iOS. */
+  .auth-hero {
+    padding: calc(28px + env(safe-area-inset-top)) 20px 22px;
+  }
+
+  .auth-brand-mark {
+    width: 44px;
+    height: 44px;
+    border-radius: 13px;
+  }
+
+  .auth-brand-mark svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  .auth-brand-name {
+    font-size: 22px;
+  }
+
+  .auth-back {
+    top: calc(30px + env(safe-area-inset-top));
+  }
+
+  .auth-panel {
+    align-items: stretch;
+    padding: 0;
+  }
+
+  .auth-card {
+    max-width: none;
+    border-radius: 28px 28px 0 0;
+    padding: 28px 20px calc(28px + env(safe-area-inset-bottom));
+    box-shadow: none;
+  }
+
+  .auth-title {
+    font-size: 30px;
+    font-weight: 800;
+  }
+}
+
+/* --- Filas agrupadas estilo Ajustes de iOS ---------------------------------- */
+
+/* Un grupo de filas en una tarjeta, separadas por una línea finita que
+   arranca después del ícono (como en iOS). Lo usa el Perfil del teléfono. */
+.ios-group {
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  background: var(--color-surface-solid);
+  overflow: hidden;
+}
+
+.ios-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 50px;
+  padding: 0 14px;
+  color: var(--color-text);
+  font-size: 16px;
+  text-decoration: none;
+  cursor: pointer;
+  position: relative;
+}
+
+.ios-row + .ios-row::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 14px;
+  right: 0;
+  height: 1px;
+  background: var(--color-border);
+}
+
+.ios-row:active {
+  background: color-mix(in srgb, var(--color-text-muted) 10%, transparent);
+}
+
+.ios-row-icon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  color: var(--color-primary);
+}
+
+.ios-row-icon.is-favorite {
+  color: var(--color-danger);
+}
+
+.ios-row-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.ios-row-chevron {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  color: var(--color-text-muted);
+}
+
+/* "Cerrar sesión": centrado y en rojo, como las acciones destructivas de iOS. */
+.ios-row.is-danger {
+  justify-content: center;
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
+.ios-row.is-danger .ios-row-label {
+  flex: none;
+}
+
+/* El interruptor de iOS hecho con un checkbox: el estado lo sigue llevando
+   el input (teclado, lector de pantalla), esto solo lo dibuja. */
+.ios-switch {
+  appearance: none;
+  -webkit-appearance: none;
+  flex-shrink: 0;
+  position: relative;
+  width: 51px;
+  height: 31px;
+  margin: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-text-muted) 30%, transparent);
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.ios-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 27px;
+  height: 27px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  transition: transform 0.2s ease;
+}
+
+.ios-switch:checked {
+  background: var(--color-success);
+}
+
+.ios-switch:checked::after {
+  transform: translateX(20px);
+}
+
+.ios-switch:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }

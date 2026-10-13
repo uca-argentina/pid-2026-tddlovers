@@ -20,6 +20,14 @@ describe('NavBar', () => {
     expect(screen.getByLabelText('Mi calendario')).toHaveAttribute('href', '/')
   })
 
+  it('el logo y el nombre llevan al calendario, y el botón de tema queda afuera', () => {
+    renderAt('/perfil')
+    const marca = screen.getByRole('link', { name: 'Ir al calendario' })
+    expect(marca).toHaveAttribute('href', '/')
+    expect(marca).toHaveTextContent('BookIt')
+    expect(marca.querySelector('button')).toBeNull()
+  })
+
   it('marca el calendario como activo en la raíz', () => {
     renderAt('/')
     expect(screen.getByLabelText('Mi calendario')).toHaveAttribute('aria-current', 'page')
@@ -61,5 +69,35 @@ describe('NavBar', () => {
   it('linkea a mis reservas', () => {
     renderAt('/')
     expect(screen.getByLabelText('Mis reservas')).toHaveAttribute('href', '/reservas')
+  })
+
+  describe('en el teléfono', () => {
+    it('son cinco pestañas, sin buscador ni favoritos', () => {
+      renderAt('/', { mobile: true, viewRole: 'student' })
+
+      const pestañas = screen.getAllByRole('link')
+      expect(pestañas.map((link) => link.textContent)).toEqual([
+        'Calendario',
+        'Reservar',
+        'Reservas',
+        'Paquetes',
+        'Perfil',
+      ])
+      expect(screen.queryByLabelText('Buscar docentes o materias')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Mis favoritos')).not.toBeInTheDocument()
+    })
+
+    it('el docente ve "Horarios" en vez de "Reservar"', () => {
+      renderAt('/', { mobile: true, viewRole: 'teacher' })
+      expect(screen.getByLabelText('Disponibilidad')).toHaveTextContent('Horarios')
+    })
+
+    it('el admin tiene Docentes y Perfil', () => {
+      renderAt('/admin', { mobile: true, viewRole: 'admin' })
+      expect(screen.getAllByRole('link').map((link) => link.textContent)).toEqual([
+        'Docentes',
+        'Perfil',
+      ])
+    })
   })
 })

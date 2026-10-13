@@ -16,6 +16,10 @@ import {
  *
  * Muestra el ícono de lo que se va a activar al tocarlo: si estamos en claro
  * muestra la luna, y al revés.
+ *
+ * Con `variant="switch"` es una fila "Modo oscuro" con el interruptor de iOS:
+ * así va en el Perfil del teléfono, donde la barra no tiene lugar para el
+ * botón de tema.
  */
 class ThemeToggle extends Component {
   state = {
@@ -44,6 +48,22 @@ class ThemeToggle extends Component {
   render() {
     const esOscuro = this.state.theme === THEME_DARK
 
+    if (this.props.variant === 'switch') {
+      return (
+        <label className="ios-row ios-switch-row">
+          {esOscuro ? <MoonIcon className="ios-row-icon" /> : <SunIcon className="ios-row-icon" />}
+          <span className="ios-row-label">Modo oscuro</span>
+          <input
+            type="checkbox"
+            role="switch"
+            className="ios-switch"
+            checked={esOscuro}
+            onChange={this.handleToggle}
+          />
+        </label>
+      )
+    }
+
     return (
       <button
         type="button"
@@ -55,6 +75,10 @@ class ThemeToggle extends Component {
       </button>
     )
   }
+}
+
+ThemeToggle.defaultProps = {
+  variant: 'button',
 }
 
 export default ThemeToggle

@@ -31,6 +31,11 @@
   flex-shrink: 0;
 }
 
+.booking-results > .banner {
+  flex-shrink: 0;
+  margin-bottom: 10px;
+}
+
 .booking-results-empty {
   display: flex;
   align-items: center;
@@ -109,6 +114,16 @@
 .booking-card-kind svg {
   width: 13px;
   height: 13px;
+}
+
+.booking-card-teacher-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  /* El corazón mide 32px: sin esto empujaría la tarjeta hacia abajo. */
+  min-height: 20px;
+  margin-block: -6px;
 }
 
 .booking-card-teacher {
@@ -234,5 +249,38 @@
 
   .booking-results-list {
     overflow-y: visible;
+  }
+}
+
+/* Teléfono: igual que el día del calendario, sin tarjeta alrededor. */
+@media (max-width: 700px) {
+  .booking-results {
+    height: auto;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .booking-results-title {
+    font-size: 17px;
+  }
+
+  .booking-results-list {
+    gap: 10px;
+    overflow-y: visible;
+  }
+
+  .booking-card {
+    padding: 14px 16px;
+    border-width: 1px;
+    border-radius: 16px;
+    box-shadow: var(--shadow-panel);
+  }
+
+  .booking-results-empty {
+    justify-content: center;
+    padding: 32px 0;
   }
 }

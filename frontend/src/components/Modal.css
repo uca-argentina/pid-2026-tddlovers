@@ -36,6 +36,34 @@
   padding: 26px 30px 28px;
 }
 
+/* Casi pantalla completa, pegado abajo. La franja de arriba deja ver la
+   página con más desenfoque que un modal común: es contexto, no contenido. */
+.modal-backdrop.is-tall {
+  align-items: flex-end;
+  padding: 64px 20px 0;
+  backdrop-filter: blur(8px);
+}
+
+/* Al cerrarse, el fondo se aclara mientras la hoja baja (Modal.jsx la
+   mueve). La opacidad no sirve: también se llevaría a la hoja, que es hija. */
+.modal-backdrop.is-tall {
+  transition: background-color 0.26s ease, backdrop-filter 0.26s ease;
+}
+
+.modal-backdrop.is-tall.is-closing {
+  background: transparent;
+  backdrop-filter: blur(0);
+}
+
+.modal-panel.is-tall {
+  max-width: 960px;
+  height: 100%;
+  border-bottom: none;
+  border-radius: 24px 24px 0 0;
+  padding: 24px 30px 32px;
+  animation: modal-sheet-up 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
 .modal-panel:focus-visible {
   outline: none;
 }
@@ -79,18 +107,133 @@
   height: 16px;
 }
 
-@media (max-width: 600px) {
+/* La manija solo existe en la hoja del teléfono. */
+.modal-grabber {
+  display: none;
+}
+
+/* --- Teléfono: hoja desde abajo (estilo iOS) ------------------------------- */
+
+@media (max-width: 700px) {
   .modal-backdrop {
-    padding: 12px;
-    /* En un teléfono el modal se pega abajo: queda más cerca del pulgar que
-       flotando en el medio. */
     align-items: flex-end;
+    padding: calc(24px + env(safe-area-inset-top)) 0 0;
+    backdrop-filter: none;
+    animation: modal-fade 0.25s ease;
   }
 
-  /* El ancho extra no trae relleno extra: en un teléfono se come la pantalla. */
   .modal-panel,
   .modal-panel.is-wide {
-    padding: 18px 16px 20px;
-    border-radius: 20px;
+    max-width: none;
+    max-height: 100%;
+    padding: 0 18px calc(20px + env(safe-area-inset-bottom));
+    border: none;
+    border-radius: 22px 22px 0 0;
+    box-shadow: 0 -10px 40px -12px rgba(0, 0, 0, 0.35);
+    /* La curva de las hojas de iOS: arranca rápido y frena suave. */
+    animation: modal-sheet-up 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+    transition: transform 0.25s cubic-bezier(0.32, 0.72, 0, 1);
+    overscroll-behavior: contain;
+  }
+
+  /* En el teléfono la hoja alta deja la misma franja que las demás, pero
+     con la página desenfocada atrás (las demás la oscurecen nomás). */
+  .modal-backdrop.is-tall {
+    padding: calc(40px + env(safe-area-inset-top)) 0 0;
+    backdrop-filter: blur(8px);
+  }
+
+  .modal-panel.is-tall {
+    height: 100%;
+    padding: 0 18px calc(20px + env(safe-area-inset-bottom));
+  }
+
+  /* La manija y el título se quedan arriba aunque la hoja scrollee: es de
+     donde se agarra para cerrarla. */
+  .modal-grabber {
+    display: block;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    height: 18px;
+    margin: 0 -18px;
+    background: var(--color-surface-solid);
+    touch-action: none;
+    cursor: grab;
+  }
+
+  .modal-grabber::before {
+    content: '';
+    display: block;
+    width: 36px;
+    height: 5px;
+    margin: 7px auto 0;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-text-muted) 40%, transparent);
+  }
+
+  .modal-head {
+    position: sticky;
+    top: 18px;
+    z-index: 2;
+    align-items: center;
+    margin: 0 -18px 8px;
+    padding: 2px 14px 10px;
+    background: var(--color-surface-solid);
+    border-bottom: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
+    touch-action: none;
+  }
+
+  /* Título centrado como en iOS: el ::before ocupa lo mismo que el botón de
+     cerrar del otro lado, así el centro es el de la hoja. */
+  .modal-head::before {
+    content: '';
+    width: 30px;
+    flex-shrink: 0;
+  }
+
+  .modal-title {
+    flex: 1;
+    min-width: 0;
+    font-size: 17px;
+    font-weight: 700;
+    text-align: center;
+  }
+
+  /* El círculo gris con la cruz de las hojas de iOS. */
+  .modal-close {
+    width: 30px;
+    height: 30px;
+    background: color-mix(in srgb, var(--color-text-muted) 16%, transparent);
+  }
+
+  .modal-close svg {
+    width: 13px;
+    height: 13px;
+  }
+}
+
+@keyframes modal-sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes modal-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-backdrop,
+  .modal-panel {
+    animation: none;
   }
 }

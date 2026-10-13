@@ -117,6 +117,15 @@
 }
 
 /* El chip del docente buscado, que llega desde el buscador de la barra. */
+.booking-filters-favorites {
+  padding: 0 6px 8px;
+}
+
+.booking-filters-favorites .subject-chip svg {
+  width: 14px;
+  height: 14px;
+}
+
 .booking-filters-foot {
   display: flex;
   flex-wrap: wrap;
@@ -151,4 +160,18 @@
     padding: 14px;
     border-radius: 14px;
   }
+}
+
+/* Adentro de la hoja "Filtros" del teléfono: sin tarjeta, la hoja ya lo es. */
+.booking-filters.is-sheet {
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.booking-filters.is-sheet .booking-filters-favorites,
+.booking-filters.is-sheet .booking-filters-foot {
+  padding-inline: 0;
 }

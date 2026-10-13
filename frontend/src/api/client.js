@@ -39,7 +39,11 @@ async function request(path, options = {}) {
   // El Content-Type va SOLO si hay body: Fastify rechaza con 400 un
   // 'application/json' vacío, que es lo que manda un DELETE (o el logout).
   const headers = { ...options.headers }
-  if (options.body !== undefined) headers['Content-Type'] = 'application/json'
+  // Con FormData (subir archivos) el Content-Type lo arma el navegador, con
+  // el boundary del multipart: si se fija acá, el backend no lo puede leer.
+  if (options.body !== undefined && !(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json'
+  }
 
   if (!SAFE_METHODS.has(method)) {
     headers['x-csrf-token'] = await fetchCsrfToken()
@@ -185,6 +189,18 @@ export function cancelLesson(id) {
   return request(`/api/classes/${id}/cancel`, { method: 'POST' })
 }
 
+/**
+ * Aceptar o cancelar la clase entera (en una grupal, todas las reservas del
+ * turno), todo o nada. Devuelve la lista de reservas actualizadas.
+ */
+export function acceptTurn(id) {
+  return request(`/api/classes/${id}/turn/accept`, { method: 'POST' })
+}
+
+export function cancelTurn(id) {
+  return request(`/api/classes/${id}/turn/cancel`, { method: 'POST' })
+}
+
 export function payLesson(id) {
   return request(`/api/classes/${id}/pay`, { method: 'POST' })
 }
@@ -194,6 +210,36 @@ export function markAttendance(id, attended) {
     method: 'POST',
     body: JSON.stringify({ attended }),
   })
+}
+
+// El material de una clase ya dada (resumen + archivos). Es del turno: en
+// una grupal, cualquier reserva lleva al mismo. Todas devuelven el material
+// entero, { summary, updatedAt, files: [{ id, name, mimeType, sizeBytes }] }.
+
+export function fetchClassMaterial(id) {
+  return request(`/api/classes/${id}/material`)
+}
+
+export function saveClassSummary(id, summary) {
+  return request(`/api/classes/${id}/material`, {
+    method: 'PUT',
+    body: JSON.stringify({ summary }),
+  })
+}
+
+export function uploadClassFiles(id, files) {
+  const body = new FormData()
+  for (const file of files) body.append('files', file, file.name)
+  return request(`/api/classes/${id}/material/files`, { method: 'POST', body })
+}
+
+export function deleteClassFile(id, fileId) {
+  return request(`/api/classes/${id}/material/files/${fileId}`, { method: 'DELETE' })
+}
+
+/** La URL de un archivo, para un link de descarga o un <img>: viaja con la cookie de sesión. */
+export function classFileUrl(id, fileId) {
+  return `/api/classes/${encodeURIComponent(id)}/material/files/${encodeURIComponent(fileId)}`
 }
 
 /**
@@ -348,4 +394,57 @@ export function createVacation({ startDate, endDate }) {
 /** Borrar un rango cargado por error. Las reservas canceladas no vuelven. */
 export function deleteVacation(id) {
   return request(`/api/teachers/me/vacations/${id}`, { method: 'DELETE' })
+}
+
+// --- Direcciones guardadas del docente --------------------------------------------
+
+/** Las guardadas, la predeterminada primero. */
+export function fetchMyAddresses() {
+  return request('/api/teachers/me/addresses')
+}
+
+/** { label, street, number, postalCode, locality, city, floor, apartment, notes, isDefault }. */
+export function createAddress(address) {
+  return request('/api/teachers/me/addresses', {
+    method: 'POST',
+    body: JSON.stringify(address),
+  })
+}
+
+/** Las ventanas que la usan cambian con ella; las clases ya reservadas no. */
+export function updateAddress(id, address) {
+  return request(`/api/teachers/me/addresses/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(address),
+  })
+}
+
+export function setDefaultAddress(id) {
+  return request(`/api/teachers/me/addresses/${id}/default`, { method: 'POST' })
+}
+
+/** 409 con el motivo si la usa alguna ventana. */
+export function deleteAddress(id) {
+  return request(`/api/teachers/me/addresses/${id}`, { method: 'DELETE' })
+}
+
+// --- Docentes favoritos del alumno ------------------------------------------------
+
+/**
+ * Los docentes favoritos del alumno logueado, con las materias que ofrecen
+ * ({ id, nombre, apellido, subjects }). Solo los aprobados: si a uno lo dan
+ * de baja, el favorito queda guardado pero no viene hasta que lo aprueben.
+ */
+export function fetchFavoriteTeachers() {
+  return request('/api/favorites')
+}
+
+/** Idempotente: marcarlo dos veces no hace nada. Sin body (204). */
+export function addFavoriteTeacher(teacherId) {
+  return request(`/api/favorites/${teacherId}`, { method: 'PUT' })
+}
+
+/** Idempotente: sacar uno que no estaba no hace nada. Sin body (204). */
+export function removeFavoriteTeacher(teacherId) {
+  return request(`/api/favorites/${teacherId}`, { method: 'DELETE' })
 }

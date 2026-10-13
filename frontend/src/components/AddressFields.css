@@ -1,0 +1,104 @@
+/* Los campos de una dirección en una grilla de 6 columnas: calle ancha y
+   número angosto, CP y localidad, ciudad con piso y depto., y el detalle a lo
+   ancho. Mismos inputs redondeados que el formulario de horarios. */
+
+.address-fields {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.address-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.address-field.is-label,
+.address-field.is-notes {
+  grid-column: span 6;
+}
+
+.address-field.is-street,
+.address-field.is-locality {
+  grid-column: span 4;
+}
+
+.address-field.is-number,
+.address-field.is-postalCode,
+.address-field.is-city,
+.address-field.is-floor,
+.address-field.is-apartment {
+  grid-column: span 2;
+}
+
+.address-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.address-optional {
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+
+.address-input {
+  width: 100%;
+  font: inherit;
+  font-size: 14.5px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1.5px solid var(--color-border);
+  background: var(--color-surface-solid);
+  color: var(--color-text);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.address-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 18%, transparent);
+}
+
+.address-input[aria-invalid='true'] {
+  border-color: var(--color-danger);
+}
+
+.address-input:disabled {
+  opacity: 0.6;
+}
+
+.address-error {
+  font-size: 12.5px;
+  color: var(--color-danger);
+}
+
+.address-hint {
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+}
+
+/* Teléfono: dos columnas. Calle, localidad, ciudad y detalle a lo ancho;
+   número con CP y piso con depto. de a pares. */
+@media (max-width: 700px) {
+  .address-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .address-field.is-label,
+  .address-field.is-notes,
+  .address-field.is-street,
+  .address-field.is-locality,
+  .address-field.is-city {
+    grid-column: span 2;
+  }
+
+  .address-field.is-number,
+  .address-field.is-postalCode,
+  .address-field.is-floor,
+  .address-field.is-apartment {
+    grid-column: span 1;
+  }
+}

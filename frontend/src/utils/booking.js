@@ -233,8 +233,12 @@ export function filterCards(cards, filters = {}) {
     fromTime = '',
     toTime = '',
     teacherQuery = '',
+    teacherIds = null,
   } = filters
   const docente = normalizeText(teacherQuery)
+  // null = sin filtro por docente; un array (aunque esté vacío) = solo esos.
+  // Vacío no muestra nada a propósito: "Solo favoritos" sin favoritos es eso.
+  const docentes = teacherIds ? new Set(teacherIds.map(String)) : null
 
   return cards.filter((card) => {
     if (dayKeys.length > 0 && !dayKeys.includes(card.dayKey)) return false
@@ -250,6 +254,7 @@ export function filterCards(cards, filters = {}) {
     if (modalities.length > 0 && !modalities.includes(card.modality)) return false
     if (kinds.length > 0 && !kinds.includes(cardKind(card))) return false
     if (docente && !normalizeText(card.teacherName).includes(docente)) return false
+    if (docentes && !docentes.has(String(card.teacherId))) return false
     if ((fromTime || toTime) && !offersStartBetween(card, fromTime, toTime)) return false
     return true
   })

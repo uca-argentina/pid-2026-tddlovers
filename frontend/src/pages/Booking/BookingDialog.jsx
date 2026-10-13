@@ -447,7 +447,7 @@ class BookingDialog extends Component {
         <p className="booking-dialog-pack-note">
           {vencenAntes
             ? 'Tu paquete con este docente vence antes de este día: esta clase se paga aparte.'
-            : 'Ya reservaste todas las clases de tu paquete con este docente: esta se paga aparte.'}
+            : ''}
         </p>
       )
     }

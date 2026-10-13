@@ -24,6 +24,16 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       NODE_ENV: development
+      # Los archivos del material de las clases van al MinIO local, NUNCA al
+      # bucket de Backblaze B2 de producción. El backend le habla por la red
+      # de compose; los links de descarga se firman para 127.0.0.1, que es
+      # donde lo ve el navegador.
+      S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: http://127.0.0.1:9000
+      S3_REGION: us-east-1
+      S3_BUCKET: pid-tddlovers-dev
+      S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
     volumes:
       - ./backend:/app
       - /app/node_modules
@@ -31,6 +41,7 @@ services:
       - "4000:4000"
     depends_on:
       - postgres
+      - minio
 
   frontend:
     build:
@@ -50,5 +61,40 @@ services:
     depends_on:
       - backend
 
+  # S3 local para los archivos del material de las clases (en producción es
+  # Backblaze B2). Es pgsty/minio, un fork comunitario de MinIO: MinIO dejó de
+  # publicar sus imágenes. API en :9000, consola web en :9001 (usuario y
+  # clave: MINIO_ROOT_USER / MINIO_ROOT_PASSWORD del .env).
+  minio:
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_dev:/data
+
+  # Crea el bucket privado la primera vez y termina. Si ya existe no hace
+  # nada, así que se puede levantar siempre.
+  minio-init:
+    image: pgsty/mc:RELEASE.2026-09-16T00-00-00Z
+    restart: "no"
+    depends_on:
+      - minio
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\"; do sleep 1; done &&
+      mc mb --ignore-existing local/pid-tddlovers-dev &&
+      mc anonymous set none local/pid-tddlovers-dev
+      "
+
 volumes:
   pgdata_dev:
+  minio_dev:

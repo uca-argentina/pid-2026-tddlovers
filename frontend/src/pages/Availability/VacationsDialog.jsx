@@ -98,8 +98,8 @@ class VacationsDialog extends Component {
           impact: null,
           notice:
             canceladas === 0
-              ? `Listo, cargaste tus vacaciones (${formatVacationRange(saved)}).`
-              : `Listo, cargaste tus vacaciones (${formatVacationRange(saved)}) y se ${
+              ? `Listo, cargaste tu licencia (${formatVacationRange(saved)}).`
+              : `Listo, cargaste tu licencia (${formatVacationRange(saved)}) y se ${
                   canceladas === 1 ? 'canceló 1 reserva' : `cancelaron ${canceladas} reservas`
                 } de esos días.`,
         })
@@ -108,7 +108,7 @@ class VacationsDialog extends Component {
       .catch((error) => {
         this.setState({
           saving: false,
-          error: error.message || 'No se pudieron guardar las vacaciones.',
+          error: error.message || 'No se pudo guardar la licencia.',
         })
       })
   }
@@ -120,14 +120,14 @@ class VacationsDialog extends Component {
       .then(() => {
         this.setState({
           removing: null,
-          notice: `Borraste tus vacaciones (${formatVacationRange(vacation)}).`,
+          notice: `Borraste tu licencia (${formatVacationRange(vacation)}).`,
         })
         this.props.onChanged()
       })
       .catch((error) => {
         this.setState({
           removing: null,
-          error: error.message || 'No se pudieron borrar las vacaciones.',
+          error: error.message || 'No se pudo borrar la licencia.',
         })
       })
   }
@@ -145,7 +145,7 @@ class VacationsDialog extends Component {
       )
     }
     if (vacations.length === 0) {
-      return <p className="vacations-empty">No tenés vacaciones cargadas.</p>
+      return <p className="vacations-empty">No tenés licencias cargadas.</p>
     }
 
     return (
@@ -163,7 +163,7 @@ class VacationsDialog extends Component {
                 className="vacation-item-remove"
                 onClick={this.handleRemove(vacation)}
                 disabled={Boolean(removing)}
-                aria-label={`Borrar las vacaciones: ${formatVacationRange(vacation)}`}
+                aria-label={`Borrar la licencia: ${formatVacationRange(vacation)}`}
               >
                 {removing === vacation.id ? <SpinnerIcon className="spin" /> : <TrashIcon />}
               </button>
@@ -191,8 +191,8 @@ class VacationsDialog extends Component {
     return (
       <Banner type="warning">
         {impact === 1
-          ? 'Tenés 1 reserva esos días: se va a cancelar y el alumno va a ver que estás de vacaciones.'
-          : `Tenés ${impact} reservas esos días: se van a cancelar y los alumnos van a ver que estás de vacaciones.`}
+          ? 'Tenés 1 reserva esos días: se va a cancelar y el alumno va a ver que estás de licencia.'
+          : `Tenés ${impact} reservas esos días: se van a cancelar y los alumnos van a ver que estás de licencia.`}
       </Banner>
     )
   }
@@ -203,24 +203,24 @@ class VacationsDialog extends Component {
     const listo = !this.getRangeError()
 
     return (
-      <Modal title="Vacaciones" onClose={onClose}>
+      <Modal title="Licencias" onClose={onClose}>
         <div className="vacations-dialog">
           <p className="vacations-hint">
-            Los días de vacaciones tus horarios no se pueden reservar: los alumnos los ven en gris y
-            les avisamos que estás de vacaciones.
+            Los días de licencia tus horarios no se pueden reservar: los alumnos los ven en gris y
+            les avisamos que estás de licencia.
           </p>
 
           {notice ? <Banner type="success">{notice}</Banner> : null}
 
           <section aria-labelledby="vacations-current">
             <h3 className="vacations-subtitle" id="vacations-current">
-              Tus vacaciones
+              Tus licencias
             </h3>
             {this.renderList()}
           </section>
 
           <form className="vacations-form" onSubmit={this.handleSave} noValidate>
-            <h3 className="vacations-subtitle">Agregar vacaciones</h3>
+            <h3 className="vacations-subtitle">Agregar licencia</h3>
             <div className="vacations-dates">
               <label className="vacations-date">
                 <span>Desde</span>
@@ -252,7 +252,7 @@ class VacationsDialog extends Component {
 
             <button type="submit" className="btn btn-primary" disabled={!listo || saving}>
               {saving ? <SpinnerIcon className="spin" /> : <PlusIcon />}
-              {impact > 0 ? 'Guardar y cancelar esas reservas' : 'Guardar vacaciones'}
+              {impact > 0 ? 'Guardar y cancelar esas reservas' : 'Guardar licencia'}
             </button>
           </form>
         </div>

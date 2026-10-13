@@ -6,6 +6,7 @@ import {
   formatMinutes,
   formatWeekTitle,
   modalityPlural,
+  NEW_ADDRESS,
   occursOn,
   repeatLabel,
   startOfWeek,
@@ -30,6 +31,35 @@ const ventana = (over = {}) => ({
   address: null,
   ...over,
 })
+
+// Una dirección como la manda la API colgada de la ventana.
+const direccion = (over = {}) => ({
+  id: 'a1',
+  label: 'Casa',
+  street: 'Av. Corrientes',
+  number: '1234',
+  postalCode: '1043',
+  locality: 'Balvanera',
+  city: 'CABA',
+  floor: null,
+  apartment: null,
+  notes: null,
+  saved: true,
+  isDefault: true,
+  ...over,
+})
+
+const nueva = {
+  label: '',
+  street: 'Honduras',
+  number: '4800',
+  postalCode: '1414',
+  locality: 'Palermo',
+  city: 'CABA',
+  floor: '',
+  apartment: '',
+  notes: '',
+}
 
 const borrador = (over = {}) => ({
   ...emptyDraft({ date: '2026-09-14' }),
@@ -106,10 +136,8 @@ describe('borrador <-> ventana', () => {
   it('la ventana no lleva materia, duración ni precio: los elige el alumno', () => {
     const payload = draftToPayload(draftFromWindow(ventana()))
     expect(Object.keys(payload).sort()).toEqual([
-      'address',
       'date',
       'end',
-      'locality',
       'maxStudents',
       'meetingUrl',
       'modality',
@@ -135,16 +163,43 @@ describe('borrador <-> ventana', () => {
 
   it('no manda la ubicación que la modalidad no usa', () => {
     const presencial = draftToPayload(
+      borrador({ modality: 'in_person', addressChoice: 'a1', meetingUrl: 'https://x.com' }),
+    )
+    expect(presencial).toMatchObject({ addressId: 'a1', meetingUrl: '' })
+    const virtual = draftToPayload(borrador({ addressChoice: 'a1' }))
+    expect(virtual).not.toHaveProperty('addressId')
+    expect(virtual).not.toHaveProperty('address')
+  })
+
+  it('una ventana nueva arranca con la dirección predeterminada, o cargando una', () => {
+    expect(emptyDraft({ date: '2026-09-14', defaultAddressId: 'a1' }).addressChoice).toBe('a1')
+    expect(emptyDraft({ date: '2026-09-14' }).addressChoice).toBe(NEW_ADDRESS)
+  })
+
+  it('una dirección nueva se manda entera, con si hay que guardarla', () => {
+    const payload = draftToPayload(
       borrador({
         modality: 'in_person',
-        locality: ' Palermo ',
-        address: ' Aula 3 ',
-        meetingUrl: 'https://x.com',
+        addressChoice: NEW_ADDRESS,
+        newAddress: { ...nueva, street: ' Honduras ', label: 'Escuela' },
+        saveAddress: true,
       }),
     )
-    expect(presencial).toMatchObject({ locality: 'Palermo', address: 'Aula 3', meetingUrl: '' })
-    const virtual = draftToPayload(borrador({ locality: 'Palermo', address: 'Aula 3' }))
-    expect(virtual).toMatchObject({ locality: '', address: '' })
+    expect(payload).toMatchObject({
+      saveAddress: true,
+      address: { street: 'Honduras', label: 'Escuela', postalCode: '1414' },
+    })
+    expect(payload).not.toHaveProperty('addressId')
+  })
+
+  it('al editar, una guardada se elige y una suelta vuelve con sus campos', () => {
+    const guardada = draftFromWindow(ventana({ modality: 'in_person', address: direccion() }))
+    expect(guardada.addressChoice).toBe('a1')
+    const suelta = draftFromWindow(
+      ventana({ modality: 'in_person', address: direccion({ saved: false, label: null, floor: '2' }) }),
+    )
+    expect(suelta.addressChoice).toBe(NEW_ADDRESS)
+    expect(suelta.newAddress).toMatchObject({ street: 'Av. Corrientes', floor: '2', label: '' })
   })
 })
 
@@ -156,9 +211,16 @@ describe('validateDraft', () => {
   it('pide link y dirección según la modalidad', () => {
     expect(validateDraft(borrador({ meetingUrl: '' }))).toHaveProperty('meetingUrl')
     expect(validateDraft(borrador({ meetingUrl: 'meet' }))).toHaveProperty('meetingUrl')
-    const hibrida = validateDraft(borrador({ modality: 'hybrid', address: '' }))
-    expect(hibrida).toHaveProperty('address')
-    expect(hibrida).toHaveProperty('locality')
+    const sinElegir = validateDraft(borrador({ modality: 'hybrid', addressChoice: '' }))
+    expect(sinElegir.addressId).toBe('Elegí una dirección.')
+    const incompleta = validateDraft(
+      borrador({ modality: 'hybrid', addressChoice: NEW_ADDRESS, newAddress: { ...nueva, city: '' } }),
+    )
+    expect(incompleta.address).toEqual({ city: 'Completalo.' })
+    const sinNombre = validateDraft(
+      borrador({ modality: 'in_person', addressChoice: NEW_ADDRESS, newAddress: nueva, saveAddress: true }),
+    )
+    expect(sinNombre.address).toHaveProperty('label')
   })
 
   it('una grupal necesita entre 2 y 50', () => {
@@ -170,7 +232,7 @@ describe('validateDraft', () => {
   it('no deja una modalidad en la que el docente no tiene tarifas', () => {
     const tarifas = { rateModalities: ['in_person'] }
     expect(validateDraft(borrador(), tarifas).modality).toBe('No tenés tarifas para clases virtuales.')
-    const presencial = borrador({ modality: 'in_person', locality: 'Palermo', address: 'Aula 3' })
+    const presencial = borrador({ modality: 'in_person', addressChoice: 'a1' })
     expect(validateDraft(presencial, tarifas)).toEqual({})
   })
 

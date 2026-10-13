@@ -81,6 +81,31 @@ export function ChevronRightIcon(props) {
   )
 }
 
+export function ChevronDownIcon(props) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M4.5 7.5L10 14l5.5-6.5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+/** Dos perillas: abrir los filtros. */
+export function FilterIcon(props) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" {...props}>
+      <path d="M3 6h8M15 6h2M3 14h2M9 14h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <circle cx="13" cy="6" r="2" stroke="currentColor" strokeWidth="1.8" />
+      <circle cx="7" cy="14" r="2" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  )
+}
+
 export function SearchIcon(props) {
   return (
     <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" {...props}>
@@ -240,6 +265,24 @@ export function UsersIcon(props) {
   )
 }
 
+/**
+ * Corazón: docente favorito. Con `filled` se pinta entero (ya es favorito);
+ * sin él, solo el contorno.
+ */
+export function HeartIcon({ filled = false, ...props }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M10 16.5s-6.5-3.9-6.5-8.6A3.4 3.4 0 0110 5.6a3.4 3.4 0 016.5 2.3c0 4.7-6.5 8.6-6.5 8.6z"
+        fill={filled ? 'currentColor' : 'none'}
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 /** Libro abierto: las materias que se pueden reservar. */
 export function BookIcon(props) {
   return (
@@ -292,6 +335,51 @@ export function PencilIcon(props) {
         d="M4 16l.7-3.3 8.6-8.6a1.6 1.6 0 012.3 2.3L7 15.3 4 16z"
         stroke="currentColor"
         strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+/** Clip: material adjunto. */
+export function PaperclipIcon(props) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M15.5 9.5l-5.7 5.7a3.5 3.5 0 01-5-5l6.2-6.2a2.3 2.3 0 013.3 3.3L8.2 13.4a1.2 1.2 0 01-1.7-1.7l5.3-5.3"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+/** Hoja con la punta doblada: un documento. */
+export function FileIcon(props) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M11.5 2.5H5.5a1 1 0 00-1 1v13a1 1 0 001 1h9a1 1 0 001-1V6.5l-4-4z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      <path d="M11.5 2.5v4h4" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+/** Flecha hacia la bandeja: descargar. */
+export function DownloadIcon(props) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M10 3.5v9M6 8.5l4 4 4-4M4 15.5h12"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
         strokeLinejoin="round"
       />
     </svg>

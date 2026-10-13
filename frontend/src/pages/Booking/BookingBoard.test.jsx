@@ -21,15 +21,26 @@ const { bookLesson, fetchAvailability, fetchClass, fetchMyLessons, fetchSubjects
 // ellos. Acá nadie tiene paquete.
 const fetchMyPacks = vi.hoisted(() => vi.fn(() => Promise.resolve([])))
 
+// Los docentes favoritos del alumno: el corazón de cada tarjeta y el filtro
+// "Solo favoritos". Salvo en sus tests, nadie es favorito.
+const { addFavoriteTeacher, fetchFavoriteTeachers, removeFavoriteTeacher } = vi.hoisted(() => ({
+  addFavoriteTeacher: vi.fn(),
+  fetchFavoriteTeachers: vi.fn(),
+  removeFavoriteTeacher: vi.fn(),
+}))
+
 // La fábrica reemplaza el módulo ENTERO: lo que no esté acá llega como
 // undefined. bookLesson lo usa BookingDialog, no el tablero.
 vi.mock('../../api/client.js', () => ({
+  addFavoriteTeacher,
   bookLesson,
   fetchAvailability,
   fetchClass,
+  fetchFavoriteTeachers,
   fetchMyLessons,
   fetchMyPacks,
   fetchSubjects,
+  removeFavoriteTeacher,
   rescheduleLesson,
 }))
 
@@ -128,6 +139,9 @@ describe('BookingBoard', () => {
     fetchSubjects.mockReset().mockResolvedValue(MATERIAS)
     fetchMyLessons.mockReset().mockResolvedValue([])
     fetchAvailability.mockReset().mockResolvedValue([slot()])
+    fetchFavoriteTeachers.mockReset().mockResolvedValue([])
+    addFavoriteTeacher.mockReset().mockResolvedValue(null)
+    removeFavoriteTeacher.mockReset().mockResolvedValue(null)
   })
 
   it('pide la disponibilidad del rango que abarca la grilla', async () => {
@@ -327,6 +341,108 @@ describe('BookingBoard', () => {
     await esperarCarga()
 
     expect(screen.queryByText('13:00 – 17:00')).not.toBeInTheDocument()
+  })
+
+  it('"Solo favoritos" deja solo los horarios de docentes favoritos', async () => {
+    fetchAvailability.mockResolvedValue([slot(), carla()])
+    fetchFavoriteTeachers.mockResolvedValue([
+      { id: 4, nombre: 'Carla', apellido: 'Benítez', subjects: [] },
+    ])
+    renderBoard()
+    await esperarCarga()
+    expect(screen.getByText('13:00 – 17:00')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Solo favoritos' }))
+
+    expect(screen.queryByText('13:00 – 17:00')).not.toBeInTheDocument()
+    expect(screen.getByText('09:00 – 11:00')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Sacar de favoritos a Carla Benítez' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  })
+
+  it('el corazón de la tarjeta agrega y saca al docente de favoritos', async () => {
+    renderBoard()
+    await esperarCarga()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Agregar a favoritos a Laura Gómez' }))
+    expect(addFavoriteTeacher).toHaveBeenCalledWith(2)
+    const corazon = await screen.findByRole('button', { name: 'Sacar de favoritos a Laura Gómez' })
+    expect(corazon).toHaveAttribute('aria-pressed', 'true')
+
+    await userEvent.click(corazon)
+    expect(removeFavoriteTeacher).toHaveBeenCalledWith(2)
+    expect(
+      await screen.findByRole('button', { name: 'Agregar a favoritos a Laura Gómez' }),
+    ).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('si no se puede marcar el favorito lo avisa y el corazón queda como estaba', async () => {
+    addFavoriteTeacher.mockRejectedValue(new Error('Ese docente no existe o no está disponible por ahora.'))
+    renderBoard()
+    await esperarCarga()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Agregar a favoritos a Laura Gómez' }))
+
+    expect(
+      await screen.findByText('Ese docente no existe o no está disponible por ahora.'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Agregar a favoritos a Laura Gómez' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+  })
+
+  it('un docente no ve corazones ni el filtro de favoritos', async () => {
+    renderBoard('/disponibilidad', { user: apiUser({ role: 'teacher' }) })
+    await esperarCarga()
+
+    expect(screen.queryByRole('button', { name: 'Solo favoritos' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /favoritos a Laura/ })).not.toBeInTheDocument()
+    expect(fetchFavoriteTeachers).not.toHaveBeenCalled()
+  })
+
+  describe('en el teléfono', () => {
+    it('tiene título, buscador, chips rápidos y la tira de semana', async () => {
+      renderBoard('/disponibilidad', { mobile: true })
+      await esperarCarga()
+
+      expect(screen.getByRole('heading', { name: 'Reservar' })).toBeInTheDocument()
+      expect(screen.getByLabelText('Buscar docentes o materias')).toBeInTheDocument()
+      expect(screen.getByRole('group', { name: 'Días de la semana' })).toBeInTheDocument()
+      expect(screen.getByText('13:00 – 17:00')).toBeInTheDocument()
+    })
+
+    it('un chip rápido filtra sin abrir la hoja', async () => {
+      fetchAvailability.mockResolvedValue([slot(), carla()])
+      renderBoard('/disponibilidad', { mobile: true })
+      await esperarCarga()
+
+      const rapidos = screen.getByRole('group', { name: 'Filtros rápidos' })
+      await userEvent.click(within(rapidos).getByRole('button', { name: 'Presencial' }))
+
+      expect(screen.queryByText('13:00 – 17:00')).not.toBeInTheDocument()
+      expect(screen.getByText('09:00 – 11:00')).toBeInTheDocument()
+      expect(within(rapidos).getByRole('button', { name: 'Filtros, 1 activos' })).toBeInTheDocument()
+    })
+
+    it('"Filtros" abre la hoja con todos los filtros, y "Limpiar" los saca', async () => {
+      renderBoard('/disponibilidad', { mobile: true })
+      await esperarCarga()
+
+      await userEvent.click(screen.getByRole('button', { name: 'Filtros' }))
+      const hoja = screen.getByRole('dialog', { name: 'Filtros' })
+      const otroDia = DIA_HOY === 'lunes' ? 'Martes' : 'Lunes'
+      await userEvent.click(within(hoja).getByRole('button', { name: otroDia }))
+      expect(screen.queryByText('13:00 – 17:00')).not.toBeInTheDocument()
+
+      await userEvent.click(within(hoja).getByRole('button', { name: 'Limpiar' }))
+      await userEvent.click(within(hoja).getByRole('button', { name: 'Listo' }))
+
+      expect(screen.queryByRole('dialog', { name: 'Filtros' })).not.toBeInTheDocument()
+      expect(screen.getByText('13:00 – 17:00')).toBeInTheDocument()
+    })
   })
 
   it('"Limpiar filtros" vuelve a mostrar todo', async () => {
@@ -636,7 +752,7 @@ describe('BookingBoard', () => {
       expect(await screen.findByText(/Reprogramando tu clase de/)).toHaveTextContent('Física')
       expect(fetchClass).toHaveBeenCalledWith('c9')
       expect(screen.getByRole('button', { name: RESERVAR_CARLA })).toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: /Laura Gómez/ })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /Reservar con Laura Gómez/ })).not.toBeInTheDocument()
 
       await userEvent.click(screen.getByRole('button', { name: RESERVAR_CARLA }))
       const modal = screen.getByRole('dialog', { name: 'Reprogramar clase' })
@@ -671,7 +787,7 @@ describe('BookingBoard', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Dejar de reprogramar' }))
 
       expect(screen.queryByText(/Reprogramando tu clase de/)).not.toBeInTheDocument()
-      expect(await screen.findByRole('button', { name: /Laura Gómez/ })).toBeInTheDocument()
+      expect(await screen.findByRole('button', { name: /Reservar con Laura Gómez/ })).toBeInTheDocument()
     })
   })
 })

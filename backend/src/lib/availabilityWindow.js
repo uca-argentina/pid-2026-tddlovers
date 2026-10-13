@@ -11,6 +11,7 @@
 // duración las elige el alumno, y el precio sale de la tarifa del docente
 // (ver lib/teacherRates.js).
 
+import { validateAddress } from './addresses.js';
 import { toMinutes } from './availabilityExpansion.js';
 
 export const MODALITIES = ['virtual', 'in_person', 'hybrid'];
@@ -23,8 +24,7 @@ const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // 'HH:MM' en :00 o :30. '24:00' vale solo como fin (ver CLAUDE.md).
 const TIME_RE = /^(?:[01]\d|2[0-3]):(?:00|30)$/;
 const MAX_URL_LENGTH = 500;
-const MAX_ADDRESS_LENGTH = 200;
-const MAX_LOCALITY_LENGTH = 100;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function isRealDate(iso) {
   if (!ISO_DATE_RE.test(iso ?? '')) return false;
@@ -105,22 +105,23 @@ export function validateWindow(body, { today, allowPastDate = false }) {
     }
   }
 
-  // Presencial: la localidad es lo que ve cualquier alumno; la dirección
-  // exacta, solo el que reservó. Las dos son obligatorias.
-  const locality = needsAddress ? String(body.locality ?? '').trim() : null;
-  const address = needsAddress ? String(body.address ?? '').trim() : null;
+  // Presencial o híbrida: la dirección es una de las guardadas del docente
+  // (`addressId`) o una nueva que se carga acá (`address`), que se guarda en
+  // el perfil si pidió `saveAddress`. Que el id sea suyo lo chequea
+  // db/availability.js, adentro de la transacción.
+  let addressId = null;
+  let newAddress = null;
+  let saveAddress = false;
   if (needsAddress) {
-    if (!locality) {
-      return { message: 'Falta la localidad de la clase presencial.', fields: { locality: 'required' } };
-    }
-    if (locality.length > MAX_LOCALITY_LENGTH) {
-      return fail('locality', `La localidad puede tener hasta ${MAX_LOCALITY_LENGTH} caracteres.`);
-    }
-    if (!address) {
-      return { message: 'Falta la dirección exacta de la clase presencial.', fields: { address: 'required' } };
-    }
-    if (address.length > MAX_ADDRESS_LENGTH) {
-      return fail('address', `La dirección puede tener hasta ${MAX_ADDRESS_LENGTH} caracteres.`);
+    if (body.address && typeof body.address === 'object') {
+      saveAddress = body.saveAddress === true;
+      const checked = validateAddress(body.address, { saving: saveAddress });
+      if (!checked.value) return checked;
+      newAddress = checked.value;
+    } else if (UUID_RE.test(body.addressId ?? '')) {
+      addressId = body.addressId;
+    } else {
+      return { message: 'Elegí o cargá la dirección de la clase.', fields: { addressId: 'required' } };
     }
   }
 
@@ -133,8 +134,9 @@ export function validateWindow(body, { today, allowPastDate = false }) {
       modality: body.modality,
       maxStudents,
       meetingUrl,
-      locality,
-      address,
+      addressId,
+      newAddress,
+      saveAddress,
     },
   };
 }

@@ -1,7 +1,9 @@
 import { Component } from 'react'
 import BookingCard from './BookingCard.jsx'
+import Banner from '../../components/Banner.jsx'
 import { SpinnerIcon } from '../../components/icons.jsx'
 import { formatDayLong } from '../../utils/calendar.js'
+import { isFavorite } from '../../utils/favorites.js'
 import { packSummaryWith } from '../../utils/packs.js'
 import './BookingResults.css'
 
@@ -38,6 +40,10 @@ class BookingResults extends Component {
           {reservables} {reservables === 1 ? 'clase para reservar' : 'clases para reservar'}
         </p>
 
+        {this.props.favoriteError ? (
+          <Banner type="danger">{this.props.favoriteError}</Banner>
+        ) : null}
+
         {loading ? (
           <p className="booking-results-empty">
             <SpinnerIcon className="spin" />
@@ -52,7 +58,11 @@ class BookingResults extends Component {
                 key={card.id}
                 card={card}
                 pack={packSummaryWith(this.props.packs, card.teacherId)}
+                favorite={isFavorite(this.props.favoriteIds, card.teacherId)}
+                showFavorite={Boolean(this.props.favoriteIds)}
                 onReservar={this.props.onReservar(card)}
+                onFavoriteChange={this.props.onFavoriteChange}
+                onFavoriteError={this.props.onFavoriteError}
               />
             ))}
           </ul>
@@ -67,6 +77,11 @@ BookingResults.defaultProps = {
   loading: false,
   filtered: false,
   packs: [],
+  // null = no hay corazones (no es alumno); un array = los ids favoritos.
+  favoriteIds: null,
+  favoriteError: null,
+  onFavoriteChange: () => {},
+  onFavoriteError: () => {},
   // Curried como todos los handlers por ítem de la app: onReservar(card)
   // devuelve el handler del botón de esa tarjeta.
   onReservar: () => () => {},

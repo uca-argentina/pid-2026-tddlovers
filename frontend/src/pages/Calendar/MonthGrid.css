@@ -248,7 +248,7 @@
   }
 }
 
-@media (max-width: 600px) {
+@media (max-width: 700px) {
   .month-grid-weeks {
     /* Acá cada clase es un puntito de 10px que además se acomoda en fila,
        así que "la altura de una línea" es mucho menor que en escritorio. Si

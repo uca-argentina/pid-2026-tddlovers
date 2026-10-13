@@ -5,9 +5,11 @@ vi.mock('../../db/classes.js', () => ({
   expireStartedPending: vi.fn().mockResolvedValue(undefined),
   findClassById: vi.fn(),
   findClassesForUser: vi.fn(),
+  findTurnClasses: vi.fn(),
   hasOverlappingClass: vi.fn(),
   rescheduleClass: vi.fn(),
   transitionClass: vi.fn(),
+  transitionClasses: vi.fn(),
 }));
 
 vi.mock('../../db/availability.js', () => ({
@@ -26,6 +28,23 @@ vi.mock('../../db/vacations.js', () => ({
   isTeacherOnVacation: vi.fn().mockResolvedValue(false),
 }));
 
+vi.mock('../../db/classMaterials.js', () => ({
+  addFiles: vi.fn(),
+  deleteFile: vi.fn(),
+  findFileMeta: vi.fn(),
+  findMaterial: vi.fn(),
+  saveSummary: vi.fn(),
+}));
+
+// El bucket (B2 en producción, MinIO en local) no se toca en los tests.
+vi.mock('../../storage/files.js', () => ({
+  deleteFiles: vi.fn(),
+  isConfigured: vi.fn(() => true),
+  newFileKey: vi.fn((turn, id) => `materials/${turn.teacherId}/${id}`),
+  putFile: vi.fn(),
+  signedDownloadUrl: vi.fn(),
+}));
+
 vi.mock('../../db/sessions.js', () => ({
   createSession: vi.fn(),
   findValidSession: vi.fn(),
@@ -38,14 +57,22 @@ const {
   expireStartedPending,
   findClassById,
   findClassesForUser,
+  findTurnClasses,
   hasOverlappingClass,
   rescheduleClass,
   transitionClass,
+  transitionClasses,
 } = await import('../../db/classes.js');
 const { findWindowById } = await import('../../db/availability.js');
 const { findRate } = await import('../../db/rates.js');
 const { listStudentPacks } = await import('../../db/packs.js');
 const { isTeacherOnVacation } = await import('../../db/vacations.js');
+const { addFiles, deleteFile, findFileMeta, findMaterial, saveSummary } = await import(
+  '../../db/classMaterials.js'
+);
+const { deleteFiles, isConfigured, putFile, signedDownloadUrl } = await import(
+  '../../storage/files.js'
+);
 const { findValidSession } = await import('../../db/sessions.js');
 const { buildApp } = await import('../../app.js');
 
@@ -123,6 +150,7 @@ const clase = (over = {}) => ({
   studentPackId: null,
   packTokens: 0,
   enrolled: 1,
+  hasMaterial: false,
   ...over,
 });
 
@@ -329,13 +357,13 @@ describe('POST /api/classes', () => {
     const res = await app.inject({ method: 'POST', url: '/api/classes', headers, payload: reserva() });
 
     expect(res.statusCode).toBe(409);
-    expect(res.json().message).toMatch(/vacaciones/);
+    expect(res.json().message).toMatch(/licencia/);
     expect(isTeacherOnVacation).toHaveBeenCalledWith(DOCENTE, '2099-09-14');
     expect(bookClass).not.toHaveBeenCalled();
   });
 
   it('passes on the conflict when the vacation was loaded meanwhile', async () => {
-    bookClass.mockResolvedValueOnce({ conflict: 'El docente está de vacaciones ese día.' });
+    bookClass.mockResolvedValueOnce({ conflict: 'El docente está de licencia ese día.' });
     const headers = await authedHeaders(app);
 
     const res = await app.inject({ method: 'POST', url: '/api/classes', headers, payload: reserva() });
@@ -753,6 +781,58 @@ describe('class states', () => {
     expect(res.statusCode).toBe(409);
   });
 
+  it('the student sees the exact address only once the class is paid', async () => {
+    const presencial = {
+      modality: 'in_person',
+      meetingUrl: null,
+      address: 'Honduras 4800 · CP 1414 · Palermo, CABA',
+      locality: 'Palermo',
+    };
+    const headers = await authedHeaders(app);
+    findClassesForUser.mockResolvedValue([
+      clase({ ...presencial, id: 'a', status: 'pendiente' }),
+      clase({ ...presencial, id: 'b', status: 'aceptada' }),
+      clase({ ...presencial, id: 'c', status: 'confirmada', paidAt: '2099-09-01T12:00:00Z' }),
+    ]);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/classes?from=2099-09-01&to=2099-09-30',
+      headers,
+    });
+
+    expect(res.json().map((c) => [c.id, c.address, c.locality])).toEqual([
+      ['a', null, 'Palermo'],
+      ['b', null, 'Palermo'],
+      ['c', presencial.address, 'Palermo'],
+    ]);
+  });
+
+  it('paying returns the class with the exact address', async () => {
+    const presencial = { modality: 'in_person', address: 'Honduras 4800', locality: 'Palermo' };
+    findClassById
+      .mockResolvedValueOnce(clase({ ...presencial, status: 'aceptada' }))
+      .mockResolvedValueOnce(
+        clase({ ...presencial, status: 'confirmada', paidAt: '2099-09-01T12:00:00Z' })
+      );
+
+    const res = await post('pay');
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().address).toBe('Honduras 4800');
+  });
+
+  it('the teacher always sees the address', async () => {
+    findClassById.mockResolvedValue(
+      comoDocente({ modality: 'in_person', address: 'Honduras 4800', status: 'pendiente' })
+    );
+    const headers = await authedHeaders(app, 'teacher');
+
+    const res = await app.inject({ method: 'GET', url: `/api/classes/${CLASE_ID}`, headers });
+
+    expect(res.json().address).toBe('Honduras 4800');
+  });
+
   it('the teacher takes attendance once the class started', async () => {
     findClassById.mockResolvedValue(comoDocente({ status: 'aceptada', date: PASADA }));
 
@@ -855,5 +935,217 @@ describe('class states', () => {
       expect(res.statusCode).toBe(409);
       expect(rescheduleClass).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('class material', () => {
+  let app;
+  const FILE_ID = '3c2b1a09-8f7e-4d6c-9b5a-4a3b2c1d0e0f';
+  const MATERIAL = { summary: 'Vimos límites', updatedAt: '2020-03-02T18:00:00.000Z', files: [] };
+  const TURNO = { teacherId: 'user-1', date: PASADA, startTime: '13:00' };
+  // La sesión es 'user-1': como docente de la clase, o como su alumno.
+  const delDocente = (over = {}) =>
+    clase({ teacherId: 'user-1', studentId: 'alumno-x', status: 'realizada', date: PASADA, ...over });
+  const delAlumno = (over = {}) => clase({ status: 'realizada', date: PASADA, ...over });
+
+  beforeEach(() => {
+    app = buildApp({ logger: false });
+    findMaterial.mockResolvedValue(MATERIAL);
+    addFiles.mockResolvedValue(null);
+  });
+
+  afterEach(async () => {
+    vi.clearAllMocks();
+    await app.close();
+  });
+
+  async function call(method, path, { role = 'teacher', payload, headers: extra } = {}) {
+    const headers = { ...(await authedHeaders(app, role)), ...extra };
+    return app.inject({ method, url: `/api/classes/${CLASE_ID}/${path}`, headers, payload });
+  }
+
+  function multipartBody(files) {
+    const boundary = 'limite123';
+    const parts = files.map(
+      ({ name, type, content }) =>
+        `--${boundary}\r\nContent-Disposition: form-data; name="files"; filename="${name}"\r\n` +
+        `Content-Type: ${type}\r\n\r\n${content}\r\n`
+    );
+    return {
+      payload: Buffer.from(`${parts.join('')}--${boundary}--\r\n`),
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+    };
+  }
+
+  it('the teacher and the student see the material of the turn once the class ended', async () => {
+    findClassById.mockResolvedValue(delDocente());
+    const comoDocente = await call('GET', 'material');
+    expect(comoDocente.statusCode).toBe(200);
+    expect(comoDocente.json()).toEqual(MATERIAL);
+    expect(findMaterial).toHaveBeenLastCalledWith(TURNO);
+
+    findClassById.mockResolvedValue(delAlumno({ status: 'no_presentada' }));
+    const comoAlumno = await call('GET', 'material', { role: 'student' });
+    expect(comoAlumno.statusCode).toBe(200);
+  });
+
+  it('before the class ends there is no material', async () => {
+    findClassById.mockResolvedValue(delAlumno({ status: 'confirmada', date: '2099-09-14' }));
+
+    const res = await call('GET', 'material', { role: 'student' });
+
+    expect(res.statusCode).toBe(409);
+    expect(findMaterial).not.toHaveBeenCalled();
+  });
+
+  it('a cancelled booking does not see the material, and someone else\'s class is a 404', async () => {
+    findClassById.mockResolvedValue(delAlumno({ status: 'cancelada' }));
+    expect((await call('GET', 'material', { role: 'student' })).statusCode).toBe(409);
+
+    findClassById.mockResolvedValue(clase({ teacherId: DOCENTE, studentId: 'otro', date: PASADA }));
+    expect((await call('GET', 'material', { role: 'student' })).statusCode).toBe(404);
+  });
+
+  it('the teacher saves the summary, trimmed', async () => {
+    findClassById.mockResolvedValue(delDocente());
+
+    const res = await call('PUT', 'material', { payload: { summary: '  Vimos límites  ' } });
+
+    expect(res.statusCode).toBe(200);
+    expect(saveSummary).toHaveBeenCalledWith(TURNO, 'Vimos límites');
+  });
+
+  it('the student cannot edit the material', async () => {
+    findClassById.mockResolvedValue(delAlumno());
+
+    const res = await call('PUT', 'material', { role: 'student', payload: { summary: 'hola' } });
+
+    expect(res.statusCode).toBe(403);
+    expect(saveSummary).not.toHaveBeenCalled();
+  });
+
+  it('a summary that is too long is a 400', async () => {
+    findClassById.mockResolvedValue(delDocente());
+
+    const res = await call('PUT', 'material', { payload: { summary: 'a'.repeat(5001) } });
+
+    expect(res.statusCode).toBe(400);
+    expect(saveSummary).not.toHaveBeenCalled();
+  });
+
+  it('the teacher uploads several files at once: to the bucket first, then to the database', async () => {
+    findClassById.mockResolvedValue(delDocente());
+    const body = multipartBody([
+      { name: 'apunte.pdf', type: 'application/pdf', content: '%PDF-1.4 hola' },
+      { name: 'ejercicio.py', type: 'text/x-python', content: 'print("hola")' },
+    ]);
+
+    const res = await call('POST', 'material/files', body);
+
+    expect(res.statusCode).toBe(201);
+    expect(putFile).toHaveBeenCalledTimes(2);
+    const [key, data, mime] = putFile.mock.calls[0];
+    expect(key).toMatch(/^materials\/user-1\//);
+    expect([data.toString(), mime]).toEqual(['%PDF-1.4 hola', 'application/pdf']);
+    const [turno, files] = addFiles.mock.calls[0];
+    expect(turno).toEqual(TURNO);
+    expect(files.map((f) => [f.name, f.mimeType, f.sizeBytes, f.storageKey])).toEqual([
+      ['apunte.pdf', 'application/pdf', 13, putFile.mock.calls[0][0]],
+      ['ejercicio.py', 'text/x-python', 13, putFile.mock.calls[1][0]],
+    ]);
+  });
+
+  it('uploading before the class ends is refused', async () => {
+    findClassById.mockResolvedValue(delDocente({ status: 'confirmada', date: '2099-09-14' }));
+    const body = multipartBody([{ name: 'a.pdf', type: 'application/pdf', content: 'x' }]);
+
+    const res = await call('POST', 'material/files', body);
+
+    expect(res.statusCode).toBe(409);
+    expect(putFile).not.toHaveBeenCalled();
+    expect(addFiles).not.toHaveBeenCalled();
+  });
+
+  it('if the turn is already full nothing goes to the bucket', async () => {
+    findClassById.mockResolvedValue(delDocente());
+    const lleno = Array.from({ length: 20 }, (_, i) => ({ id: `f${i}`, sizeBytes: 10 }));
+    findMaterial.mockResolvedValue({ ...MATERIAL, files: lleno });
+    const body = multipartBody([{ name: 'a.pdf', type: 'application/pdf', content: 'x' }]);
+
+    const res = await call('POST', 'material/files', body);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().message).toMatch(/20 archivos/);
+    expect(putFile).not.toHaveBeenCalled();
+  });
+
+  it('if the database refuses (another upload got there first), the uploaded objects are removed', async () => {
+    findClassById.mockResolvedValue(delDocente());
+    addFiles.mockResolvedValue({ error: 'Una clase puede tener hasta 20 archivos.' });
+    const body = multipartBody([{ name: 'a.pdf', type: 'application/pdf', content: 'x' }]);
+
+    const res = await call('POST', 'material/files', body);
+
+    expect(res.statusCode).toBe(400);
+    expect(deleteFiles).toHaveBeenCalledWith([putFile.mock.calls[0][0]], expect.anything());
+  });
+
+  it('without the bucket configured, files answer 503', async () => {
+    findClassById.mockResolvedValue(delDocente());
+    isConfigured.mockReturnValueOnce(false);
+    const body = multipartBody([{ name: 'a.pdf', type: 'application/pdf', content: 'x' }]);
+
+    const res = await call('POST', 'material/files', body);
+
+    expect(res.statusCode).toBe(503);
+    expect(putFile).not.toHaveBeenCalled();
+  });
+
+  it('the teacher deletes a file of the turn, also from the bucket', async () => {
+    findClassById.mockResolvedValue(delDocente());
+    deleteFile.mockResolvedValue('materials/user-1/abc');
+
+    const res = await call('DELETE', `material/files/${FILE_ID}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(deleteFile).toHaveBeenCalledWith(TURNO, FILE_ID);
+    expect(deleteFiles).toHaveBeenCalledWith(['materials/user-1/abc'], expect.anything());
+  });
+
+  it('deleting a file that is not there is a 404', async () => {
+    findClassById.mockResolvedValue(delDocente());
+    deleteFile.mockResolvedValue(null);
+
+    expect((await call('DELETE', `material/files/${FILE_ID}`)).statusCode).toBe(404);
+    expect(deleteFiles).not.toHaveBeenCalled();
+  });
+
+  it('downloading redirects to a short-lived signed link of the bucket', async () => {
+    findClassById.mockResolvedValue(delAlumno());
+    findFileMeta.mockResolvedValue({
+      name: 'página.html',
+      mimeType: 'text/html',
+      storageKey: 'materials/x/y',
+    });
+    signedDownloadUrl.mockResolvedValue('https://bucket.example.com/materials/x/y?firma=1');
+
+    const res = await call('GET', `material/files/${FILE_ID}`, { role: 'student' });
+
+    expect(res.statusCode).toBe(302);
+    expect(res.headers.location).toBe('https://bucket.example.com/materials/x/y?firma=1');
+    expect(res.headers['cache-control']).toBe('private, no-store');
+    expect(signedDownloadUrl).toHaveBeenCalledWith('materials/x/y', {
+      filename: 'página.html',
+      mimeType: 'text/html',
+    });
+  });
+
+  it('a student of another class gets no link', async () => {
+    findClassById.mockResolvedValue(clase({ teacherId: DOCENTE, studentId: 'otro', date: PASADA }));
+
+    const res = await call('GET', `material/files/${FILE_ID}`, { role: 'student' });
+
+    expect(res.statusCode).toBe(404);
+    expect(signedDownloadUrl).not.toHaveBeenCalled();
   });
 });

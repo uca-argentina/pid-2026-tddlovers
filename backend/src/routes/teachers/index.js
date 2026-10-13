@@ -4,6 +4,14 @@ import {
   findTeacherWindows,
   updateWindow,
 } from '../../db/availability.js';
+import {
+  createAddress,
+  deleteAddress,
+  listSavedAddresses,
+  setDefaultAddress,
+  updateAddress,
+} from '../../db/addresses.js';
+import { validateAddress } from '../../lib/addresses.js';
 import { teacherHasRateFor } from '../../db/rates.js';
 import { createOffer, deactivateOffer, listTeacherOffers } from '../../db/packs.js';
 import { validatePackOffer } from '../../lib/classPacks.js';
@@ -91,6 +99,7 @@ export default async function teachersRoutes(app) {
 
     const saved = await createWindow(request.user.id, checked.value);
     if (saved.conflict) return reply.code(409).send({ message: saved.conflict });
+    if (saved.invalid) return reply.code(400).send(saved.invalid);
     return reply.code(201).send(saved.window);
   });
 
@@ -107,6 +116,7 @@ export default async function teachersRoutes(app) {
     const saved = await updateWindow(request.user.id, id, checked.value);
     if (!saved) return reply.code(404).send({ message: 'Esa clase no existe.' });
     if (saved.conflict) return reply.code(409).send({ message: saved.conflict });
+    if (saved.invalid) return reply.code(400).send(saved.invalid);
     return reply.send(saved.window);
   });
 
@@ -172,7 +182,7 @@ export default async function teachersRoutes(app) {
     const saved = await createVacation(request.user.id, checked.value, now());
     if (saved.conflict) {
       return reply.code(409).send({
-        message: `Se pisa con tus vacaciones ${new VacationRange(saved.conflict).describe()}.`,
+        message: `Se pisa con tu licencia ${new VacationRange(saved.conflict).describe()}.`,
         fields: { startDate: 'invalid' },
       });
     }
@@ -183,7 +193,63 @@ export default async function teachersRoutes(app) {
   app.delete('/me/vacations/:id', write, async (request, reply) => {
     const { id } = request.params;
     const deleted = UUID_RE.test(id) && (await deleteVacation(request.user.id, id));
-    if (!deleted) return reply.code(404).send({ message: 'Esas vacaciones no existen.' });
+    if (!deleted) return reply.code(404).send({ message: 'Esa licencia no existe.' });
+    return reply.code(204).send();
+  });
+
+  // --- Direcciones ----------------------------------------------------------
+
+  const ADDRESS_NOT_FOUND = 'Esa dirección no existe.';
+
+  /** Las direcciones guardadas del docente: la predeterminada primero. */
+  app.get('/me/addresses', read, async (request, reply) => {
+    return reply.send(await listSavedAddresses(request.user.id));
+  });
+
+  /** Guardar una dirección. La primera queda predeterminada sola. */
+  app.post('/me/addresses', write, async (request, reply) => {
+    const checked = validateAddress(request.body, { saving: true });
+    if (!checked.value) return reply.code(400).send(checked);
+    const created = await createAddress(request.user.id, checked.value, {
+      isDefault: request.body.isDefault === true,
+    });
+    return reply.code(201).send(created);
+  });
+
+  /**
+   * Editar una guardada. Las ventanas que la usan cambian con ella; las
+   * clases ya reservadas no (tienen su copia).
+   */
+  app.put('/me/addresses/:id', write, async (request, reply) => {
+    const { id } = request.params;
+    if (!UUID_RE.test(id)) return reply.code(404).send({ message: ADDRESS_NOT_FOUND });
+    const checked = validateAddress(request.body, { saving: true });
+    if (!checked.value) return reply.code(400).send(checked);
+    const updated = await updateAddress(request.user.id, id, checked.value, {
+      isDefault: request.body.isDefault === true,
+    });
+    if (!updated) return reply.code(404).send({ message: ADDRESS_NOT_FOUND });
+    return reply.send(updated);
+  });
+
+  app.post('/me/addresses/:id/default', write, async (request, reply) => {
+    const { id } = request.params;
+    const updated = UUID_RE.test(id) && (await setDefaultAddress(request.user.id, id));
+    if (!updated) return reply.code(404).send({ message: ADDRESS_NOT_FOUND });
+    return reply.send(updated);
+  });
+
+  /** Borrar una guardada. Si la usa alguna ventana, no: hay que cambiarla primero. */
+  app.delete('/me/addresses/:id', write, async (request, reply) => {
+    const { id } = request.params;
+    const result = UUID_RE.test(id) ? await deleteAddress(request.user.id, id) : null;
+    if (!result) return reply.code(404).send({ message: ADDRESS_NOT_FOUND });
+    if (result.inUse) {
+      const horarios = result.inUse === 1 ? 'La usa 1 horario' : `La usan ${result.inUse} horarios`;
+      return reply.code(409).send({
+        message: `${horarios} de tu disponibilidad: cambiales la dirección antes de borrarla.`,
+      });
+    }
     return reply.code(204).send();
   });
 }

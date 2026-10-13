@@ -171,7 +171,9 @@ class ClassActions extends Component {
   render() {
     const { cls, viewRole, label } = this.props
     const now = this.props.now || nowParts()
-    const actions = allowedActions(cls, viewRole, now)
+    // `exclude` saca acciones que se hacen en otro lado: en las tarjetas,
+    // tomar lista va en el detalle de la clase (ClassDetailDialog).
+    const actions = allowedActions(cls, viewRole, now).filter((a) => !this.props.exclude.includes(a))
     const motivo = cancelDescription(cls, viewRole)
     const hint = viewRole === 'student' ? cancelDeadlineHint(cls, now) : null
     const tone = STATUS_TONES[cls.status] || 'muted'
@@ -213,6 +215,7 @@ class ClassActions extends Component {
 ClassActions.defaultProps = {
   viewRole: 'student',
   label: null,
+  exclude: [],
   // Inyectable para los tests; en la app es la hora real.
   now: null,
   onChange: () => {},

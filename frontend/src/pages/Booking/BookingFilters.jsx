@@ -1,5 +1,5 @@
 import { Component } from 'react'
-import { ChevronRightIcon, ErrorIcon } from '../../components/icons.jsx'
+import { ChevronRightIcon, ErrorIcon, HeartIcon } from '../../components/icons.jsx'
 import TimeRangeSlider from '../../components/TimeRangeSlider.jsx'
 import { DAY_KEYS, DAY_LABELS } from '../../utils/availability.js'
 import { WEEKDAY_LABELS } from '../../utils/calendar.js'
@@ -32,17 +32,21 @@ const KINDS = [
  * incómodas de recorrer para algo que en la práctica es "de tarde". Hacia
  * afuera el filtro no cambió — sigue siendo fromTime/toTime en "HH:MM", vacío
  * cuando no hay límite.
+ *
+ * Con `inSheet` vive adentro de la hoja "Filtros" del teléfono: sin título
+ * (lo pone la hoja), sin "Limpiar filtros" (va al pie de la hoja) y con todas
+ * las secciones abiertas, porque ahí sí hay lugar y plegar es un toque más.
  */
 class BookingFilters extends Component {
   // Qué secciones están abiertas. Se decide una sola vez, al montar, a partir
   // de lo que venga elegido; después manda el usuario.
   state = {
     abiertas: {
-      dias: this.props.dayKeys.length > 0,
-      materias: this.props.subjectIds.length > 0,
-      modalidad: this.props.modalities.length > 0,
-      tipo: this.props.kinds.length > 0,
-      horario: Boolean(this.props.fromTime || this.props.toTime),
+      dias: this.props.inSheet || this.props.dayKeys.length > 0,
+      materias: this.props.inSheet || this.props.subjectIds.length > 0,
+      modalidad: this.props.inSheet || this.props.modalities.length > 0,
+      tipo: this.props.inSheet || this.props.kinds.length > 0,
+      horario: this.props.inSheet || Boolean(this.props.fromTime || this.props.toTime),
     },
   }
 
@@ -194,12 +198,37 @@ class BookingFilters extends Component {
     )
   }
 
+  /**
+   * "Solo favoritos" no es una sección plegable: es un único sí/no, y
+   * plegado escondería un filtro activo detrás de un clic. Solo para el
+   * alumno (el único que tiene favoritos).
+   */
+  renderFavorites() {
+    const { showFavorites, onlyFavorites, onToggleFavorites } = this.props
+    if (!showFavorites) return null
+    return (
+      <div className="booking-filters-favorites">
+        <button
+          type="button"
+          className={`subject-chip ${onlyFavorites ? 'selected' : ''}`}
+          aria-pressed={onlyFavorites}
+          onClick={onToggleFavorites}
+        >
+          <HeartIcon filled={onlyFavorites} />
+          Solo favoritos
+        </button>
+      </div>
+    )
+  }
+
   render() {
-    const { teacherQuery, onClearTeacher, onClear, hasFilters } = this.props
+    const { teacherQuery, onClearTeacher, onClear, hasFilters, inSheet } = this.props
 
     return (
-      <div className="booking-filters">
-        <h2 className="booking-filters-title">Filtros</h2>
+      <div className={`booking-filters ${inSheet ? 'is-sheet' : ''}`}>
+        {inSheet ? null : <h2 className="booking-filters-title">Filtros</h2>}
+
+        {this.renderFavorites()}
 
         {this.renderDays()}
         {this.renderSubjects()}
@@ -229,7 +258,7 @@ class BookingFilters extends Component {
           </div>
         ) : null}
 
-        {hasFilters ? (
+        {hasFilters && !inSheet ? (
           <button type="button" className="btn btn-ghost booking-filters-clear" onClick={onClear}>
             Limpiar filtros
           </button>
@@ -248,6 +277,10 @@ BookingFilters.defaultProps = {
   fromTime: '',
   toTime: '',
   teacherQuery: '',
+  inSheet: false,
+  showFavorites: false,
+  onlyFavorites: false,
+  onToggleFavorites: () => {},
   hasFilters: false,
 }
 

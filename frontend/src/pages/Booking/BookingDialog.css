@@ -286,7 +286,7 @@
   flex-grow: 1.6;
 }
 
-@media (max-width: 600px) {
+@media (max-width: 700px) {
   .booking-dialog-actions {
     /* El principal arriba y más cerca del pulgar. */
     flex-direction: column-reverse;

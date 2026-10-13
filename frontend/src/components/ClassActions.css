@@ -147,7 +147,7 @@
 }
 
 /* En el teléfono los botones ocupan el ancho, más fáciles de tocar. */
-@media (max-width: 480px) {
+@media (max-width: 700px) {
   .class-actions-buttons .class-action {
     flex: 1 1 auto;
   }

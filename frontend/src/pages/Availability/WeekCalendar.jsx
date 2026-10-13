@@ -1,28 +1,35 @@
 import { Component } from 'react'
+import WeekStrip from '../../components/WeekStrip.jsx'
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
+  PinIcon,
+  PlusIcon,
   RepeatIcon,
   SpinnerIcon,
+  UsersIcon,
+  VideoIcon,
 } from '../../components/icons.jsx'
+import withViewport from '../../routes/withViewport.jsx'
 import { formatRangeLabel } from '../../utils/availability.js'
-import { formatDayLong, toISODate, WEEKDAY_LABELS } from '../../utils/calendar.js'
-import { matchesQuery, watchQuery } from '../../utils/media.js'
+import {
+  formatDayLong,
+  formatMonthName,
+  toISODate,
+  WEEKDAY_LABELS,
+} from '../../utils/calendar.js'
 import { isOnVacation } from '../../utils/vacations.js'
 import {
   capacityLabel,
   formatWeekTitle,
   modalityLabel,
+  needsAddress,
   toMinutes,
   visibleHours,
   weekDates,
   windowsOn,
 } from '../../utils/windows.js'
 import './WeekCalendar.css'
-
-// Abajo de esto la grilla de 7 columnas no entra: cada día se lee como una
-// lista, uno abajo del otro. Mismo corte que el resto de la app.
-const NARROW_QUERY = '(max-width: 600px)'
 
 // Alto de una hora en la grilla. Una clase de 30 min queda de 26px: alcanza
 // para la materia y la hora en una línea.
@@ -41,21 +48,16 @@ const HOUR_HEIGHT = 52
  *
  * Como no hay ventanas que se pisen en un mismo día (lo valida el backend),
  * los bloques nunca van lado a lado: cada uno ocupa el ancho de su columna.
+ *
+ * En el teléfono (`mobile`) la grilla de siete columnas no entra: va la misma
+ * tira de semana del calendario y, abajo, los horarios del día elegido como
+ * tarjetas. Al pasar de semana se queda el mismo día de la semana.
  */
 class WeekCalendar extends Component {
   state = {
-    isNarrow: false,
-  }
-
-  unwatchNarrow = null
-
-  componentDidMount() {
-    this.setState({ isNarrow: matchesQuery(NARROW_QUERY) })
-    this.unwatchNarrow = watchQuery(NARROW_QUERY, (isNarrow) => this.setState({ isNarrow }))
-  }
-
-  componentWillUnmount() {
-    this.unwatchNarrow?.()
+    // Solo en el teléfono: qué día de la semana (0 = lunes) está elegido.
+    // null = hoy si se ve esta semana, si no el lunes.
+    selectedIndex: null,
   }
 
   getDays() {
@@ -82,7 +84,7 @@ class WeekCalendar extends Component {
       capacityLabel(window.maxStudents).toLowerCase(),
     ]
     if (window.repeatsWeekly) partes.push('se repite todas las semanas')
-    if (day?.onVacation) partes.push('de vacaciones, no se puede reservar')
+    if (day?.onVacation) partes.push('de licencia, no se puede reservar')
     return partes.join(', ')
   }
 
@@ -169,11 +171,11 @@ class WeekCalendar extends Component {
             type="button"
             className={`week-cal-day-head ${day.isToday ? 'is-today' : ''} ${day.isPast ? 'is-past' : ''} ${day.onVacation ? 'is-vacation' : ''}`}
             onClick={() => this.props.onOpenDay(day.iso)}
-            aria-label={`Ver los horarios del ${formatDayLong(day.date).toLowerCase()}${day.onVacation ? ', de vacaciones' : ''}`}
+            aria-label={`Ver los horarios del ${formatDayLong(day.date).toLowerCase()}${day.onVacation ? ', de licencia' : ''}`}
           >
             <span className="week-cal-weekday">{WEEKDAY_LABELS[day.index]}</span>
             <span className="week-cal-daynum">{day.date.getDate()}</span>
-            {day.onVacation ? <span className="week-cal-vacation-tag">Vacaciones</span> : null}
+            {day.onVacation ? <span className="week-cal-vacation-tag">Licencia</span> : null}
           </button>
         ))}
 
@@ -201,67 +203,120 @@ class WeekCalendar extends Component {
     )
   }
 
-  /** En el teléfono: un día abajo del otro, cada ventana como un renglón. */
-  renderAgenda(days) {
+  getSelectedIndex(days) {
+    if (this.state.selectedIndex !== null) return this.state.selectedIndex
+    const hoy = days.findIndex((day) => day.isToday)
+    return hoy >= 0 ? hoy : 0
+  }
+
+  handleSelectDay = (iso) => {
+    const index = this.getDays().findIndex((day) => day.iso === iso)
+    if (index >= 0) this.setState({ selectedIndex: index })
+  }
+
+  handleToday = () => {
+    this.setState({ selectedIndex: null })
+    this.props.onToday()
+  }
+
+  /** Un horario del día, con el mismo lenguaje que las tarjetas de reservar. */
+  renderWindowCard(day, window) {
+    const grupal = window.maxStudents > 1
+    const Icono = window.modality === 'in_person' ? PinIcon : VideoIcon
     return (
-      <ol className="week-cal-agenda">
-        {days.map((day) => (
-          <li
-            key={day.iso}
-            className={`week-cal-agenda-day ${day.isToday ? 'is-today' : ''} ${day.isPast ? 'is-past' : ''} ${day.onVacation ? 'is-vacation' : ''}`}
+      <li key={window.id}>
+        <button
+          type="button"
+          className={`week-cal-window ${day.onVacation ? 'is-vacation' : ''}`}
+          onClick={() => this.props.onOpenWindow(day.iso, window.id)}
+          aria-label={this.describeWindow(window, day)}
+        >
+          <span className="week-cal-window-head">
+            <span className="week-cal-window-time">{formatRangeLabel(window.start, window.end)}</span>
+            <span className={`week-cal-window-kind ${grupal ? 'is-group' : ''}`}>
+              <UsersIcon />
+              {capacityLabel(window.maxStudents)}
+            </span>
+          </span>
+          <span className="week-cal-window-fact">
+            <Icono />
+            {modalityLabel(window.modality)}
+            {needsAddress(window.modality) && window.locality ? ` · ${window.locality}` : ''}
+          </span>
+          {window.repeatsWeekly ? (
+            <span className="week-cal-window-fact">
+              <RepeatIcon />
+              Se repite todas las semanas
+            </span>
+          ) : null}
+        </button>
+      </li>
+    )
+  }
+
+  renderMobile(days) {
+    const { loading, showingThisWeek, onPrev, onNext, onOpenDay } = this.props
+    const index = this.getSelectedIndex(days)
+    const day = days[index]
+
+    return (
+      <section className="week-cal is-mobile" aria-label="Tu semana">
+        <WeekStrip
+          title={formatMonthName(day.date)}
+          year={day.date.getFullYear()}
+          compact
+          loading={loading}
+          days={days.map((item) => ({
+            iso: item.iso,
+            date: item.date,
+            isToday: item.isToday,
+            marked: item.windows.length > 0,
+            muted: item.onVacation,
+          }))}
+          selectedIso={day.iso}
+          markedLabel="hay horarios"
+          mutedLabel="de licencia"
+          todayDisabled={showingThisWeek && day.isToday}
+          onSelect={this.handleSelectDay}
+          onPrev={onPrev}
+          onNext={onNext}
+          onToday={this.handleToday}
+        />
+
+        <div className={`week-cal-day ${day.isPast ? 'is-past' : ''}`}>
+          <div className="week-cal-day-title">
+            <h3>{formatDayLong(day.date)}</h3>
+            {day.onVacation ? <span className="week-cal-vacation-tag">Licencia</span> : null}
+          </div>
+          {day.windows.length === 0 ? (
+            <p className="week-cal-day-empty">No tenés horarios este día.</p>
+          ) : (
+            <ul className="week-cal-windows">
+              {day.windows.map((window) => this.renderWindowCard(day, window))}
+            </ul>
+          )}
+          <button
+            type="button"
+            className="week-cal-day-open"
+            onClick={() => onOpenDay(day.iso)}
+            aria-label={`Ver o agregar horarios del ${formatDayLong(day.date).toLowerCase()}`}
           >
-            <button
-              type="button"
-              className="week-cal-agenda-head"
-              onClick={() => this.props.onOpenDay(day.iso)}
-              aria-label={`Ver los horarios del ${formatDayLong(day.date).toLowerCase()}`}
-            >
-              <span>{formatDayLong(day.date)}</span>
-              {day.isToday ? <span className="week-cal-today-tag">Hoy</span> : null}
-              {day.onVacation ? <span className="week-cal-vacation-tag">Vacaciones</span> : null}
-            </button>
-            {day.windows.length === 0 ? (
-              <p className="week-cal-agenda-empty">Sin horarios</p>
-            ) : (
-              <ul className="week-cal-agenda-list">
-                {day.windows.map((window) => (
-                  <li key={window.id}>
-                    <button
-                      type="button"
-                      className={`week-cal-agenda-item ${window.maxStudents > 1 ? 'is-group' : ''} ${day.onVacation ? 'is-vacation' : ''}`}
-                      onClick={() => this.props.onOpenWindow(day.iso, window.id)}
-                      aria-label={this.describeWindow(window, day)}
-                    >
-                      <span className="week-cal-block-time">
-                        {formatRangeLabel(window.start, window.end)}
-                      </span>
-                      <span className="week-cal-block-subject">
-                        {window.repeatsWeekly ? (
-                          <RepeatIcon className="week-cal-block-repeat" />
-                        ) : null}
-                        {modalityLabel(window.modality)}
-                      </span>
-                      <span className="week-cal-block-meta">
-                        {capacityLabel(window.maxStudents)}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </li>
-        ))}
-      </ol>
+            <PlusIcon />
+            Agregar o cambiar horarios de este día
+          </button>
+        </div>
+      </section>
     )
   }
 
   render() {
     const days = this.getDays()
+    if (this.props.mobile) return this.renderMobile(days)
 
     return (
       <section className="week-cal" aria-label="Tu semana">
         {this.renderHead()}
-        {this.state.isNarrow ? this.renderAgenda(days) : this.renderGrid(days)}
+        {this.renderGrid(days)}
       </section>
     )
   }
@@ -272,6 +327,7 @@ WeekCalendar.defaultProps = {
   vacations: [],
   loading: false,
   showingThisWeek: false,
+  mobile: false,
 }
 
-export default WeekCalendar
+export default withViewport(WeekCalendar)

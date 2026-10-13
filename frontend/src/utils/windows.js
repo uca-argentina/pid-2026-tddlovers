@@ -13,6 +13,7 @@
 // Horas en minutos desde medianoche para comparar: '24:00' como texto ordena
 // bien de casualidad, pero restar strings no.
 
+import { addressErrors, addressToForm, addressToPayload, EMPTY_ADDRESS } from './addresses.js'
 import { dayLabel } from './availability.js'
 import { addDays, mondayIndex } from './calendar.js'
 import { dayKeyFromIso } from './booking.js'
@@ -158,12 +159,20 @@ export function visibleHours(windows) {
 
 // --- El formulario --------------------------------------------------------
 
+// En el selector de dirección: cargar una que no está guardada.
+export const NEW_ADDRESS = 'new'
+
 /**
  * Lo que el formulario edita. Se parece a la ventana pero separa "es grupal"
  * del cupo: así destildar grupal y volver a tildarlo no pierde el número que
  * se había escrito.
+ *
+ * La dirección es `addressChoice`: el id de una guardada, o NEW_ADDRESS para
+ * cargar una ahí mismo (`newAddress`, que se guarda en el perfil si
+ * `saveAddress`). Una ventana nueva arranca con la predeterminada; sin
+ * ninguna guardada, cargando una.
  */
-export function emptyDraft({ date, modality = 'virtual' }) {
+export function emptyDraft({ date, modality = 'virtual', defaultAddressId = null }) {
   return {
     id: null,
     date,
@@ -174,12 +183,24 @@ export function emptyDraft({ date, modality = 'virtual' }) {
     group: false,
     groupSize: String(MIN_GROUP_SIZE),
     meetingUrl: '',
-    locality: '',
-    address: '',
+    addressChoice: defaultAddressId || NEW_ADDRESS,
+    newAddress: { ...EMPTY_ADDRESS },
+    saveAddress: false,
   }
 }
 
-export function draftFromWindow(window) {
+/**
+ * Una dirección guardada se edita desde el perfil: acá solo se elige. Una
+ * suelta (que no se guardó) vuelve al formulario como "otra dirección" con
+ * sus campos completos.
+ */
+export function draftFromWindow(window, { defaultAddressId = null } = {}) {
+  const address = window.address
+  const suelta = address && !address.saved
+  // Una virtual que pasa a presencial arranca con la predeterminada, igual
+  // que una ventana nueva.
+  let addressChoice = defaultAddressId || NEW_ADDRESS
+  if (address) addressChoice = address.saved ? address.id : NEW_ADDRESS
   return {
     id: window.id,
     date: window.date,
@@ -190,8 +211,9 @@ export function draftFromWindow(window) {
     group: window.maxStudents > 1,
     groupSize: String(window.maxStudents > 1 ? window.maxStudents : MIN_GROUP_SIZE),
     meetingUrl: window.meetingUrl || '',
-    locality: window.locality || '',
-    address: window.address || '',
+    addressChoice,
+    newAddress: suelta ? addressToForm(address) : { ...EMPTY_ADDRESS },
+    saveAddress: false,
   }
 }
 
@@ -205,9 +227,14 @@ export function draftToPayload(draft) {
     modality: draft.modality,
     maxStudents: draft.group ? Number(draft.groupSize) : 1,
     meetingUrl: needsMeetingUrl(draft.modality) ? draft.meetingUrl.trim() : '',
-    locality: needsAddress(draft.modality) ? draft.locality.trim() : '',
-    address: needsAddress(draft.modality) ? draft.address.trim() : '',
+    ...addressPayload(draft),
   }
+}
+
+function addressPayload(draft) {
+  if (!needsAddress(draft.modality)) return {}
+  if (draft.addressChoice !== NEW_ADDRESS) return { addressId: draft.addressChoice }
+  return { address: addressToPayload(draft.newAddress), saveAddress: draft.saveAddress }
 }
 
 function isHttpUrl(text) {
@@ -255,11 +282,15 @@ export function validateDraft(draft, { rateModalities = null } = {}) {
     else if (!isHttpUrl(link)) errors.meetingUrl = 'Tiene que ser un link (https://...).'
   }
 
-  if (needsAddress(draft.modality) && !draft.locality.trim()) {
-    errors.locality = 'Escribí la zona, por ejemplo Palermo, CABA.'
-  }
-  if (needsAddress(draft.modality) && !draft.address.trim()) {
-    errors.address = 'Escribí la dirección exacta.'
+  if (needsAddress(draft.modality)) {
+    if (!draft.addressChoice) {
+      errors.addressId = 'Elegí una dirección.'
+    } else if (draft.addressChoice === NEW_ADDRESS) {
+      // Los de la dirección van juntos en `address`: AddressFields los recibe
+      // aparte y marca cada campo.
+      const deLaDireccion = addressErrors(draft.newAddress, { saving: draft.saveAddress })
+      if (Object.keys(deLaDireccion).length > 0) errors.address = deLaDireccion
+    }
   }
 
   return errors

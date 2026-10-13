@@ -107,7 +107,7 @@
   height: 16px;
 }
 
-@media (max-width: 600px) {
+@media (max-width: 700px) {
   .availability-editor-head {
     flex-direction: column;
   }
@@ -118,5 +118,36 @@
 
   .availability-add {
     flex: 1;
+  }
+}
+
+/* --- Teléfono --------------------------------------------------------------- */
+
+@media (max-width: 700px) {
+  /* Título grande como el resto de las pantallas (ver .large-title). */
+  .availability-title {
+    font-size: 30px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+
+  .teacher-availability .availability-hint {
+    font-size: 13px;
+  }
+
+  .availability-editor-head {
+    gap: 14px;
+    margin-bottom: 18px;
+  }
+
+  /* Los dos botones lado a lado, del alto cómodo del teléfono. */
+  .availability-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
+  }
+
+  .availability-add {
+    padding: 12px 14px;
   }
 }

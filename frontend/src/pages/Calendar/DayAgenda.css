@@ -42,78 +42,163 @@
 }
 
 /* La lista scrollea sola: el panel no crece más allá del alto del
-   calendario que tiene al lado. */
+   calendario que tiene al lado. Es position: relative para que el offsetTop
+   de cada día (ver scrollToSelected) se mida desde acá. */
 .day-agenda-list {
+  position: relative;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  min-height: 0;
+  /* El encabezado fijo de cada día no queda pegado al borde de arriba. */
+  scroll-padding-top: 0;
+}
+
+/* Un día de la lista: su encabezado y sus clases. */
+.day-agenda-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* El encabezado del día queda fijo arriba mientras se scrollean sus clases,
+   como en la vista de lista del Calendario de iOS. */
+.day-agenda-day {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 4px 0 6px;
+  background: var(--color-surface-solid);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+/* El día elegido en el calendario, en el color principal. */
+.day-agenda-group.is-selected .day-agenda-day {
+  color: var(--color-primary);
+}
+
+.day-agenda-today {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.day-agenda-day-empty {
+  margin: 0;
+  padding: 2px 0 4px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.day-agenda-items {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  overflow-y: auto;
-  min-height: 0;
 }
 
+/* Misma tarjeta que las de Reservar (BookingResults.css): mismas medidas,
+   mismo orden — la materia manda, abajo con quién, los datos con ícono y el
+   precio al pie. */
 .day-agenda-item {
   padding: 12px 14px;
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  background: var(--color-bg);
+  border: 1.5px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--color-surface-solid);
+  /* Tocarla abre el detalle de la clase. */
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.day-agenda-item:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 45%, var(--color-border));
 }
 
 .day-agenda-head {
   display: flex;
   align-items: center;
-  /* Con el horario completo ("10:00 – 11:30") la columna angosta no llega a
-     todo en un renglón: baja la etiqueta de modalidad, nunca se parte la hora. */
-  flex-wrap: wrap;
-  gap: 4px 8px;
-  margin-bottom: 6px;
-}
-
-.day-agenda-time {
-  white-space: nowrap;
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--color-primary);
-  font-variant-numeric: tabular-nums;
-}
-
-.day-agenda-duration {
-  white-space: nowrap;
-  font-size: 12px;
-  color: var(--color-text-muted);
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .day-agenda-subject {
-  font-size: 14.5px;
-  font-weight: 600;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
   color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.day-agenda-subject:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* Individual en azul, grupal en verde: igual que en Reservar. */
+.day-agenda-kind {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: var(--color-primary);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.day-agenda-kind.is-group {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.day-agenda-kind svg {
+  width: 13px;
+  height: 13px;
+}
+
+.day-agenda-person-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  /* El corazón mide 32px: sin esto empujaría el resto hacia abajo. */
+  min-height: 20px;
+  margin-block: -6px;
 }
 
 .day-agenda-person {
-  font-size: 12.5px;
-  color: var(--color-text);
-  margin-top: 2px;
-}
-
-.day-agenda-person-label {
+  min-width: 0;
+  margin-top: 1px;
+  font-size: 13px;
   color: var(--color-text-muted);
 }
 
 .day-agenda-person.is-empty {
-  color: var(--color-text-muted);
   font-style: italic;
-}
-
-.day-agenda-modality {
-  margin-left: auto;
-  padding: 1px 8px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
-  color: var(--color-primary);
-  font-size: 11px;
-  font-weight: 600;
 }
 
 .day-agenda-facts {
@@ -130,21 +215,34 @@
   align-items: flex-start;
   gap: 7px;
   min-width: 0;
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--color-text);
 }
 
 .day-agenda-facts svg {
   flex-shrink: 0;
-  width: 14px;
-  height: 14px;
-  margin-top: 2px;
+  width: 15px;
+  height: 15px;
+  margin-top: 1px;
   color: var(--color-text-muted);
 }
 
 .day-agenda-facts a {
   color: var(--color-primary);
   font-weight: 600;
+}
+
+/* El horario resalta como el rango libre de Reservar, pero en azul: es el
+   color de las clases propias en el calendario. */
+.day-agenda-time {
+  white-space: nowrap;
+  font-weight: 700;
+  color: var(--color-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.day-agenda-duration {
+  white-space: nowrap;
 }
 
 /* La localidad debajo de la dirección exacta, más chica: la dirección es lo
@@ -156,8 +254,8 @@
 }
 
 .day-agenda-price {
-  margin-top: 8px;
-  font-size: 13.5px;
+  margin-top: 10px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--color-text);
   font-variant-numeric: tabular-nums;
@@ -171,5 +269,57 @@
 
   .day-agenda-list {
     overflow-y: visible;
+  }
+}
+
+/* Teléfono: el panel deja de ser una tarjeta. Queda el día como encabezado
+   de sección y las clases como tarjetas sueltas sobre el fondo, debajo de la
+   tira de semana. */
+@media (max-width: 700px) {
+  .day-agenda {
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .day-agenda-title {
+    font-size: 17px;
+  }
+
+  /* Sobre el fondo de la pantalla, no sobre una tarjeta. */
+  .day-agenda-day {
+    background: var(--color-bg);
+    font-size: 15px;
+  }
+
+  .day-agenda-items {
+    gap: 10px;
+  }
+
+  .day-agenda-item {
+    padding: 14px 16px;
+    border-width: 1px;
+    border-radius: 16px;
+    box-shadow: var(--shadow-panel);
+  }
+
+  .day-agenda-empty {
+    justify-content: center;
+    padding: 32px 0;
+  }
+}
+
+@media (max-width: 700px) {
+  .day-agenda {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .day-agenda-list {
+    overflow-y: auto;
+    /* Que al final se pueda subir el último día hasta arriba de todo. */
+    padding-bottom: 40vh;
   }
 }

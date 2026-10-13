@@ -1,4 +1,5 @@
 import { getPool } from './pool.js';
+import { formatAddress } from '../lib/addresses.js';
 
 // La fila tal como la espera el front (ver CLAUDE.md en la raíz): fechas
 // 'YYYY-MM-DD' y horas 'HH:MM', sin zona horaria. Mandar un timestamp UTC
@@ -35,7 +36,21 @@ const CLASS_COLUMNS = `
     SELECT count(*)::int FROM classes o
     WHERE o.teacher_id = c.teacher_id AND o.class_date = c.class_date
       AND o.start_time = c.start_time AND o.status <> 'cancelada'
-  ) AS enrolled
+  ) AS enrolled,
+  (
+    -- Si el turno tiene material (resumen o archivos), para marcarlo en la
+    -- tarjeta. El material es del turno, no de la fila: ver migración 018.
+    EXISTS (
+      SELECT 1 FROM class_materials m
+      WHERE m.teacher_id = c.teacher_id AND m.class_date = c.class_date
+        AND m.start_time = c.start_time
+        AND (m.summary <> '' OR EXISTS (
+          SELECT 1 FROM class_material_files f
+          WHERE f.teacher_id = m.teacher_id AND f.class_date = m.class_date
+            AND f.start_time = m.start_time
+        ))
+    )
+  ) AS "hasMaterial"
 `;
 
 const CLASS_JOINS = `
@@ -208,7 +223,7 @@ async function insertClass(
      LIMIT 1`,
     [window.teacherId, date]
   );
-  if (vacation.rowCount > 0) return { conflict: 'El docente está de vacaciones ese día.' };
+  if (vacation.rowCount > 0) return { conflict: 'El docente está de licencia ese día.' };
 
   const existing = await client.query(
     `SELECT to_char(end_time, 'HH24:MI') AS "end", subject_id AS "subjectId",
@@ -252,8 +267,10 @@ async function insertClass(
       window.modality,
       window.maxStudents,
       window.meetingUrl,
-      window.address,
-      window.locality,
+      // La dirección se copia armada: si el docente la edita después, lo
+      // reservado no se mueve.
+      window.address ? formatAddress(window.address) : null,
+      window.address?.locality ?? null,
       priceCents,
       rescheduledFrom,
       studentPackId,
@@ -315,18 +332,62 @@ export async function expireStartedPending({ iso, time }) {
  * `paid` marca el pago, que va aparte del estado. `cancelledBy` y
  * `cancelReason` solo tienen sentido al pasar a cancelada.
  */
+const TRANSITION_SQL = `
+  UPDATE classes
+  SET status = $3::class_status,
+      paid_at = CASE WHEN $4 THEN now() ELSE paid_at END,
+      cancelled_at = CASE WHEN $3::class_status = 'cancelada' THEN now() ELSE cancelled_at END,
+      cancelled_by = COALESCE($5::user_role, cancelled_by),
+      cancel_reason = COALESCE($6, cancel_reason)
+  WHERE id = $1 AND status = $2::class_status AND (NOT $4 OR paid_at IS NULL)`;
+
 export async function transitionClass(id, { from, to, paid = false, cancelledBy = null, cancelReason = null }) {
-  const result = await getPool().query(
-    `UPDATE classes
-     SET status = $3::class_status,
-         paid_at = CASE WHEN $4 THEN now() ELSE paid_at END,
-         cancelled_at = CASE WHEN $3::class_status = 'cancelada' THEN now() ELSE cancelled_at END,
-         cancelled_by = COALESCE($5::user_role, cancelled_by),
-         cancel_reason = COALESCE($6, cancel_reason)
-     WHERE id = $1 AND status = $2::class_status AND (NOT $4 OR paid_at IS NULL)`,
-    [id, from, to, paid, cancelledBy, cancelReason]
-  );
+  const params = [id, from, to, paid, cancelledBy, cancelReason];
+  const result = await getPool().query(TRANSITION_SQL, params);
   return result.rowCount > 0;
+}
+
+/**
+ * Las reservas en pie de un turno (docente, fecha, inicio): en una grupal,
+ * una por alumno. Para las acciones sobre la clase entera.
+ */
+export async function findTurnClasses({ teacherId, date, startTime }) {
+  const result = await getPool().query(
+    `SELECT ${CLASS_COLUMNS} ${CLASS_JOINS}
+     WHERE c.teacher_id = $1 AND c.class_date = $2::date AND c.start_time = $3::time
+       AND c.status <> 'cancelada'
+     ORDER BY a.nombre, a.apellido`,
+    [teacherId, date, startTime]
+  );
+  return result.rows;
+}
+
+/**
+ * Varias transiciones como transitionClass, todo o nada: si alguna reserva
+ * ya no está en el estado en que la vio la ruta (otro la tocó en el medio),
+ * no se cambia ninguna. `changes` = [{ id, from, to, paid, cancelledBy,
+ * cancelReason }]. true si se aplicaron todas.
+ */
+export async function transitionClasses(changes) {
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    for (const { id, from, to, paid = false, cancelledBy = null, cancelReason = null } of changes) {
+      const params = [id, from, to, paid, cancelledBy, cancelReason];
+      const result = await client.query(TRANSITION_SQL, params);
+      if (result.rowCount === 0) {
+        await client.query('ROLLBACK');
+        return false;
+      }
+    }
+    await client.query('COMMIT');
+    return true;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 /**

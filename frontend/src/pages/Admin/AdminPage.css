@@ -188,3 +188,49 @@
 .admin-action.is-danger:hover:not(:disabled) {
   background: var(--color-danger-bg);
 }
+
+/* Teléfono: título grande como el resto de las pantallas (ver .large-title). */
+@media (max-width: 700px) {
+  .admin-title {
+    font-size: 30px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+
+  .admin-subtitle {
+    font-size: 13.5px;
+  }
+}
+
+/* Teléfono: las pestañas de estado son un control segmentado de iOS, las
+   cuatro del mismo ancho en una cápsula gris. */
+@media (max-width: 700px) {
+  .admin-tabs {
+    gap: 2px;
+    padding: 2px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--color-text-muted) 14%, transparent);
+    overflow: visible;
+  }
+
+  .admin-tab {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 32px;
+    padding: 4px 2px;
+    border: none;
+    border-radius: 8px;
+    color: var(--color-text);
+    /* 12px: "Rechazados" entra entero en un cuarto de 375px. */
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .admin-tab.is-active {
+    background: var(--color-surface-solid);
+    color: var(--color-text);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  }
+}

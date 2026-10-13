@@ -1,0 +1,42 @@
+/* Un corazón chico al lado del nombre del docente. El área táctil es más
+   grande que el ícono: en el teléfono se toca con el dedo. */
+.favorite-button {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.favorite-button svg {
+  width: 18px;
+  height: 18px;
+}
+
+.favorite-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
+  color: var(--color-danger);
+}
+
+.favorite-button.is-favorite {
+  color: var(--color-danger);
+}
+
+.favorite-button:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+/* Deshabilitado solo mientras guarda: el corazón ya muestra lo nuevo, así
+   que no se apaga (se vería como un error). */
+.favorite-button:disabled {
+  cursor: progress;
+}

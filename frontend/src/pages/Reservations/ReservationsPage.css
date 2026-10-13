@@ -5,6 +5,10 @@
   margin-inline: auto;
 }
 
+.reservations-page > .banner {
+  margin-bottom: 16px;
+}
+
 .reservations-title {
   font-size: 22px;
   font-weight: 700;
@@ -33,27 +37,13 @@
   height: 16px;
 }
 
-.reservations-section + .reservations-section {
-  margin-top: 24px;
-}
-
 .reservations-section-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.4px;
   text-transform: uppercase;
   color: var(--color-text-muted);
   margin: 0 0 10px;
-}
-
-.reservations-count {
-  font-size: 12px;
-  padding: 1px 8px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--color-text-muted) 14%, transparent);
 }
 
 .reservations-list {
@@ -65,41 +55,141 @@
   gap: 10px;
 }
 
-.reservation-item {
-  padding: 14px 16px;
-  background: var(--color-surface-solid);
-  border: 1px solid var(--color-border);
-  border-radius: 14px;
-  box-shadow: var(--shadow-panel);
+/* La próxima y la última, una al lado de la otra. */
+.reservations-highlights {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 26px;
 }
 
-.reservation-head {
+.reservations-highlight {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 10px;
+  flex-direction: column;
+  min-width: 0;
 }
 
-.reservation-date {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--color-text);
+.reservations-highlight .reservations-list,
+.reservations-highlight .class-card {
+  flex: 1;
 }
 
-.reservation-time {
-  font-size: 13px;
+.reservations-highlight-empty {
+  flex: 1;
+  margin: 0;
+  padding: 18px 16px;
+  border: 1px dashed var(--color-border);
+  border-radius: 14px;
+  font-size: 14px;
   color: var(--color-text-muted);
 }
 
-.reservation-subject {
-  margin: 4px 0 0;
+/* Las cinco categorías: botones grandes, como las filas de Ajustes de iOS
+   pero en grilla en la compu. */
+.reservations-categories {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+}
+
+.reservations-category {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 64px;
+  padding: 14px 16px;
+  border: 1px solid var(--color-border);
+  border-left-width: 4px;
+  border-radius: 14px;
+  background: var(--color-surface-solid);
+  box-shadow: var(--shadow-panel);
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.reservations-category:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 45%, var(--color-border));
+}
+
+.reservations-category:active {
+  transform: scale(0.99);
+}
+
+.reservations-category:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* El borde de color repite el tono de la pastilla de ese estado. */
+.reservations-category.is-pendiente {
+  border-left-color: var(--color-warning);
+}
+
+.reservations-category.is-aceptada {
+  border-left-color: var(--color-primary);
+}
+
+.reservations-category.is-confirmada,
+.reservations-category.is-finalizada {
+  border-left-color: var(--color-success);
+}
+
+.reservations-category.is-cancelada {
+  border-left-color: var(--color-text-muted);
+}
+
+.reservations-category-title {
+  flex: 1;
   font-size: 15px;
   font-weight: 600;
-  color: var(--color-text);
 }
 
-.reservation-meta {
-  margin: 2px 0 0;
+.reservations-category-count {
+  min-width: 28px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-text-muted) 14%, transparent);
   font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.reservations-category-chevron {
+  width: 16px;
+  height: 16px;
   color: var(--color-text-muted);
+}
+
+.reservations-dialog-list {
+  margin-top: 12px;
+}
+
+/* Teléfono: título grande como el resto de las pantallas (ver .large-title). */
+@media (max-width: 700px) {
+  .reservations-title {
+    font-size: 30px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+
+  .reservations-subtitle {
+    font-size: 13.5px;
+  }
+
+  .reservations-highlights {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Una debajo de la otra, como una lista agrupada de iOS. */
+  .reservations-categories {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
 }

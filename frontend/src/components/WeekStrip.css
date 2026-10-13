@@ -1,0 +1,195 @@
+/* La tira de semana del teléfono (estilo Calendario de iOS). Sin tarjeta
+   alrededor: va directo sobre el fondo, como un encabezado de pantalla. */
+
+.week-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.week-strip-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  /* En un teléfono muy angosto los botones bajan a un segundo renglón en
+     vez de pisar el título. */
+  gap: 6px 8px;
+}
+
+/* El mes hace de título grande de la pantalla, como en iOS. */
+.week-strip-title {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.week-strip-year {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--color-text-muted);
+}
+
+.week-strip.is-compact .week-strip-title {
+  font-size: 20px;
+}
+
+.week-strip.is-compact .week-strip-year {
+  font-size: 14px;
+}
+
+.week-strip-spinner {
+  align-self: center;
+  width: 16px;
+  height: 16px;
+  color: var(--color-text-muted);
+}
+
+.week-strip-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.week-strip-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 32px;
+  padding: 0 11px;
+  border: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--color-primary);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.week-strip-pill:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.week-strip-caret {
+  width: 13px;
+  height: 13px;
+  transition: transform 0.2s ease;
+}
+
+.week-strip-caret.is-open {
+  transform: rotate(180deg);
+}
+
+.week-strip-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-primary);
+  cursor: pointer;
+}
+
+.week-strip-arrow svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* --- Los siete días -------------------------------------------------------- */
+
+.week-strip-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  /* Deslizar de costado pasa de semana; el scroll vertical sigue siendo del
+     navegador. */
+  touch-action: pan-y;
+  user-select: none;
+}
+
+.week-strip-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 0 2px;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.week-strip-weekday {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+
+/* El número en un círculo de 36px: el área que se toca con el dedo. */
+.week-strip-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  font-size: 17px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.week-strip-day.is-today .week-strip-number {
+  color: var(--color-primary);
+}
+
+.week-strip-day.is-selected .week-strip-number {
+  background: var(--color-text);
+  color: var(--color-bg);
+}
+
+/* Hoy y elegido a la vez: el círculo lleno va en el color principal, como
+   en el Calendario de iOS. */
+.week-strip-day.is-today.is-selected .week-strip-number {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+/* Vacaciones del docente: el día se ve apagado. */
+.week-strip-day.is-muted .week-strip-number {
+  color: var(--color-text-muted);
+  text-decoration: line-through;
+}
+
+.week-strip-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.week-strip-dot.is-event {
+  background: var(--color-primary);
+}
+
+.week-strip-dot.is-free {
+  background: var(--color-success);
+}

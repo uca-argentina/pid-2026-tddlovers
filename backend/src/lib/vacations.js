@@ -49,9 +49,9 @@ export class VacationRange {
     if (endDate < startDate) {
       return fail('El último día no puede ser antes del primero.', 'endDate');
     }
-    if (endDate < today) return fail('Esas vacaciones ya terminaron.', 'endDate');
+    if (endDate < today) return fail('Esa licencia ya terminó.', 'endDate');
     if (daysBetween(startDate, endDate) + 1 > MAX_DAYS) {
-      return fail(`Las vacaciones pueden durar hasta ${MAX_DAYS} días.`, 'endDate');
+      return fail(`Una licencia puede durar hasta ${MAX_DAYS} días.`, 'endDate');
     }
     return { value: new VacationRange({ startDate, endDate }) };
   }
@@ -70,7 +70,7 @@ export class VacationRange {
     return daysBetween(this.startDate, this.endDate) + 1;
   }
 
-  /** "Ya tenés vacaciones del 01/01/2027 al 15/01/2027." */
+  /** "Ya tenés una licencia del 01/01/2027 al 15/01/2027." */
   describe() {
     return this.startDate === this.endDate
       ? `el ${formatDay(this.startDate)}`
@@ -95,4 +95,4 @@ export class VacationRange {
   }
 }
 
-export const VACATION_MESSAGE = 'El docente está de vacaciones ese día.';
+export const VACATION_MESSAGE = 'El docente está de licencia ese día.';

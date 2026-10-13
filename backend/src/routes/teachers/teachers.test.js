@@ -9,6 +9,14 @@ vi.mock('../../db/availability.js', () => ({
   updateWindow: vi.fn(),
 }));
 
+vi.mock('../../db/addresses.js', () => ({
+  createAddress: vi.fn(),
+  deleteAddress: vi.fn(),
+  listSavedAddresses: vi.fn(),
+  setDefaultAddress: vi.fn(),
+  updateAddress: vi.fn(),
+}));
+
 vi.mock('../../db/rates.js', () => ({
   teacherHasRateFor: vi.fn(),
 }));
@@ -41,6 +49,8 @@ const { createWindow, deleteWindow, findTeacherWindows, updateWindow } = await i
   '../../db/availability.js'
 );
 const { teacherHasRateFor } = await import('../../db/rates.js');
+const { createAddress, deleteAddress, listSavedAddresses, setDefaultAddress, updateAddress } =
+  await import('../../db/addresses.js');
 const { listTeachers } = await import('../../db/users.js');
 const { createOffer, deactivateOffer, listTeacherOffers } = await import('../../db/packs.js');
 const { countClassesToCancel, createVacation, deleteVacation, listTeacherVacations } = await import(
@@ -69,6 +79,7 @@ async function authedHeaders(app, role = 'teacher') {
 }
 
 const VENTANA_ID = '9f1c2d3e-4b5a-4c6d-8e7f-0a1b2c3d4e5f';
+const DIRECCION_ID = '2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d';
 
 // Una fecha que no pasa nunca, para no depender del reloj.
 const ventana = (over = {}) => ({
@@ -79,8 +90,8 @@ const ventana = (over = {}) => ({
   modality: 'in_person',
   maxStudents: 4,
   meetingUrl: '',
-  locality: 'Puerto Madero, CABA',
-  address: 'Av. Alicia Moreau de Justo 1300',
+  // Una de las direcciones guardadas del docente.
+  addressId: DIRECCION_ID,
   ...over,
 });
 
@@ -164,7 +175,13 @@ describe('teacher availability windows', () => {
     expect(teacherHasRateFor).toHaveBeenCalledWith('user-1', 'in_person');
     // Presencial: el link que haya quedado escrito no se guarda.
     const guardada = createWindow.mock.calls[0][1];
-    expect(guardada).toMatchObject({ modality: 'in_person', meetingUrl: null, maxStudents: 4 });
+    expect(guardada).toMatchObject({
+      modality: 'in_person',
+      meetingUrl: null,
+      maxStudents: 4,
+      addressId: DIRECCION_ID,
+      newAddress: null,
+    });
     // Materia, duración y precio los elige el alumno al reservar.
     expect(guardada).not.toHaveProperty('subjectId');
     expect(guardada).not.toHaveProperty('durationMinutes');
@@ -204,6 +221,49 @@ describe('teacher availability windows', () => {
     expect(res.statusCode).toBe(400);
     expect(teacherHasRateFor).toHaveBeenCalledWith('user-1', 'virtual');
     expect(updateWindow).not.toHaveBeenCalled();
+  });
+
+  it('POST with a new address passes it along to be saved in the profile', async () => {
+    const headers = await authedHeaders(app);
+    const nueva = {
+      label: 'Escuela',
+      street: 'Honduras',
+      number: '4800',
+      postalCode: '1414',
+      locality: 'Palermo',
+      city: 'CABA',
+    };
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/teachers/me/availability',
+      headers,
+      payload: ventana({ addressId: undefined, address: nueva, saveAddress: true }),
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(createWindow.mock.calls[0][1]).toMatchObject({
+      addressId: null,
+      saveAddress: true,
+      newAddress: { ...nueva, floor: null, apartment: null, notes: null },
+    });
+  });
+
+  it('POST says when the chosen address no longer exists', async () => {
+    createWindow.mockResolvedValueOnce({
+      invalid: { message: 'Esa dirección ya no existe. Elegí otra.', fields: { addressId: 'invalid' } },
+    });
+    const headers = await authedHeaders(app);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/teachers/me/availability',
+      headers,
+      payload: ventana(),
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().fields).toEqual({ addressId: 'invalid' });
   });
 
   it('POST reports an overlap with another window as a conflict', async () => {
@@ -516,7 +576,7 @@ describe('teacher vacations', () => {
     });
 
     expect(res.statusCode).toBe(409);
-    expect(res.json().message).toBe('Se pisa con tus vacaciones del 24/12/2099 al 31/12/2099.');
+    expect(res.json().message).toBe('Se pisa con tu licencia del 24/12/2099 al 31/12/2099.');
   });
 
   it('DELETE removes a range loaded by mistake', async () => {
@@ -557,5 +617,112 @@ describe('teacher vacations', () => {
 
     expect(res.statusCode).toBe(403);
     expect(createVacation).not.toHaveBeenCalled();
+  });
+});
+
+describe('teacher addresses', () => {
+  let app;
+  const casa = {
+    label: 'Casa',
+    street: 'Av. Corrientes',
+    number: '1234',
+    postalCode: '1043',
+    locality: 'Balvanera',
+    city: 'CABA',
+  };
+  const guardada = (over = {}) => ({
+    id: DIRECCION_ID,
+    ...casa,
+    floor: null,
+    apartment: null,
+    notes: null,
+    saved: true,
+    isDefault: true,
+    ...over,
+  });
+
+  beforeEach(() => {
+    app = buildApp({ logger: false });
+  });
+
+  afterEach(async () => {
+    vi.clearAllMocks();
+    await app.close();
+  });
+
+  async function call(method, url, { role = 'teacher', payload } = {}) {
+    const headers = await authedHeaders(app, role);
+    return app.inject({ method, url: `/api/teachers/me/addresses${url}`, headers, payload });
+  }
+
+  it('lists the saved addresses of the logged-in teacher', async () => {
+    listSavedAddresses.mockResolvedValue([guardada()]);
+
+    const res = await call('GET', '');
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([guardada()]);
+    expect(listSavedAddresses).toHaveBeenCalledWith('user-1');
+  });
+
+  it('students have no addresses', async () => {
+    expect((await call('GET', '', { role: 'student' })).statusCode).toBe(403);
+  });
+
+  it('saves a new address, normalized', async () => {
+    createAddress.mockResolvedValue(guardada());
+
+    const res = await call('POST', '', { payload: { ...casa, street: ' Av. Corrientes ', isDefault: true } });
+
+    expect(res.statusCode).toBe(201);
+    expect(createAddress).toHaveBeenCalledWith(
+      'user-1',
+      { ...casa, floor: null, apartment: null, notes: null },
+      { isDefault: true }
+    );
+  });
+
+  it('a saved address needs a name and the required fields', async () => {
+    expect((await call('POST', '', { payload: { ...casa, label: '' } })).json().fields).toEqual({
+      label: 'required',
+    });
+    expect((await call('POST', '', { payload: { ...casa, postalCode: '' } })).json().fields).toEqual({
+      postalCode: 'required',
+    });
+    expect(createAddress).not.toHaveBeenCalled();
+  });
+
+  it('edits an address, and 404 if it is not yours', async () => {
+    updateAddress.mockResolvedValueOnce(guardada({ floor: '3' }));
+    const ok = await call('PUT', `/${DIRECCION_ID}`, { payload: { ...casa, floor: '3' } });
+    expect(ok.statusCode).toBe(200);
+    expect(updateAddress.mock.calls[0][2]).toMatchObject({ floor: '3' });
+
+    updateAddress.mockResolvedValueOnce(null);
+    expect((await call('PUT', `/${DIRECCION_ID}`, { payload: casa })).statusCode).toBe(404);
+  });
+
+  it('picks the default address', async () => {
+    setDefaultAddress.mockResolvedValue(guardada());
+
+    const res = await call('POST', `/${DIRECCION_ID}/default`);
+
+    expect(res.statusCode).toBe(200);
+    expect(setDefaultAddress).toHaveBeenCalledWith('user-1', DIRECCION_ID);
+  });
+
+  it('an address in use cannot be deleted', async () => {
+    deleteAddress.mockResolvedValueOnce({ inUse: 2 });
+    const enUso = await call('DELETE', `/${DIRECCION_ID}`);
+    expect(enUso.statusCode).toBe(409);
+    expect(enUso.json().message).toBe(
+      'La usan 2 horarios de tu disponibilidad: cambiales la dirección antes de borrarla.'
+    );
+
+    deleteAddress.mockResolvedValueOnce({ deleted: true });
+    expect((await call('DELETE', `/${DIRECCION_ID}`)).statusCode).toBe(204);
+
+    deleteAddress.mockResolvedValueOnce(null);
+    expect((await call('DELETE', `/${DIRECCION_ID}`)).statusCode).toBe(404);
   });
 });

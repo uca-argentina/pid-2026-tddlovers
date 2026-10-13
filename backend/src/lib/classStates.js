@@ -117,3 +117,21 @@ export function checkAction(action, cls, ctx) {
 export function cancelReasonFor(cls, role) {
   return role === 'teacher' && cls.status === 'pendiente' ? 'rechazada' : 'cancelada';
 }
+
+/**
+ * Si quien mira puede ver la dirección exacta de la clase. El docente,
+ * siempre. El alumno, recién cuando la clase está paga (o no hay nada que
+ * pagar: gratis, o cubierta entera por un paquete, que ya queda paga al
+ * aceptarse); antes ve solo la localidad. Una pendiente o cancelada, nunca.
+ */
+export function canSeeExactAddress(cls, role) {
+  if (role === 'teacher') return true;
+  if (cls.status === 'pendiente' || cls.status === 'cancelada') return false;
+  return Boolean(cls.paidAt) || cls.priceCents === 0;
+}
+
+/** La clase como la tiene que recibir `role`: sin la dirección exacta si no le corresponde. */
+export function forViewer(cls, role) {
+  if (!cls || canSeeExactAddress(cls, role)) return cls;
+  return { ...cls, address: null };
+}

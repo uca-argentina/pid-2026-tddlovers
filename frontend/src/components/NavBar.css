@@ -36,6 +36,25 @@
   color: var(--color-sidebar-text-strong);
 }
 
+/* El logo y el nombre son un link al calendario, pero se ven igual que
+   antes: sin subrayado ni color de link. Se come el espacio que sobra en el
+   renglón y así empuja el botón de tema contra el borde derecho. */
+.navbar-brand-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin-right: auto;
+  border-radius: 10px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.navbar-brand-link:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
 .navbar-brand-mark {
   flex-shrink: 0;
   width: 30px;
@@ -58,9 +77,6 @@
   font-weight: 700;
   letter-spacing: -0.01em;
   white-space: nowrap;
-  /* Se come el espacio que sobra en el renglón y así empuja el botón de
-     tema —el último hijo de .navbar-brand— contra el borde derecho. */
-  margin-right: auto;
 }
 
 .navbar-nav {
@@ -300,5 +316,72 @@
 
   .navbar-item {
     padding: 9px 4px;
+  }
+}
+
+/* --- Teléfono: la barra de pestañas --------------------------------------- */
+
+/* Las cinco pestañas, estilo iOS pero en la cápsula flotante oscura de la
+   app: ícono arriba, etiqueta chica abajo, y la activa resaltada con una
+   pastilla. Pisa lo del bloque de 900px, que sigue valiendo para tablets. */
+@media (max-width: 700px) {
+  .navbar.is-mobile {
+    padding: 6px;
+    margin: 0 10px calc(10px + env(safe-area-inset-bottom));
+    border-radius: 22px;
+    /* El fondo un poco translúcido y desenfocado, como las barras de iOS. */
+    background: color-mix(in srgb, var(--color-sidebar-bg) 92%, transparent);
+    backdrop-filter: saturate(160%) blur(16px);
+    -webkit-backdrop-filter: saturate(160%) blur(16px);
+  }
+
+  .navbar.is-mobile .navbar-nav {
+    gap: 0;
+  }
+
+  .navbar.is-mobile .navbar-item {
+    min-width: 0;
+    gap: 4px;
+    padding: 7px 2px 6px;
+    border-radius: 16px;
+    font-size: 10.5px;
+    font-weight: 500;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Sin la barrita: la pestaña activa se marca con la pastilla de fondo. */
+  .navbar.is-mobile .navbar-item::before {
+    display: none;
+  }
+
+  .navbar.is-mobile .navbar-item.is-active {
+    color: #fff;
+    background: color-mix(in srgb, var(--color-primary) 85%, transparent);
+  }
+
+  .navbar.is-mobile .navbar-item svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  /* El avatar ocupa lo mismo que un ícono para que las cinco pestañas queden
+     alineadas. */
+  .navbar.is-mobile .navbar-avatar {
+    width: 22px;
+    height: 22px;
+    margin: 0;
+    font-size: 9.5px;
+  }
+
+  .navbar.is-mobile .navbar-item.is-active .navbar-avatar {
+    background: #fff;
+    color: var(--color-primary);
+  }
+
+  /* Las etiquetas se ven siempre: con cinco pestañas cortas entran hasta en
+     320px (el bloque de 380px las escondía para la barra de seis). */
+  .navbar.is-mobile .navbar-item-label {
+    display: block;
+    max-width: 100%;
   }
 }

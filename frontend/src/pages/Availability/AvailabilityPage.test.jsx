@@ -14,13 +14,16 @@ const {
   createWindow,
   deleteWindow,
   fetchAvailability,
+  fetchMyAddresses,
   fetchMyLessons,
   fetchMyWindows,
   fetchMyVacations,
+  fetchFavoriteTeachers,
   fetchMyPacks,
   fetchSubjects,
   updateWindow,
 } = vi.hoisted(() => ({
+  fetchMyAddresses: vi.fn(),
   createWindow: vi.fn(),
   deleteWindow: vi.fn(),
   fetchAvailability: vi.fn(),
@@ -29,6 +32,7 @@ const {
   // Nadie tiene vacaciones cargadas en estos tests.
   fetchMyVacations: vi.fn(() => Promise.resolve([])),
   fetchMyPacks: vi.fn(() => Promise.resolve([])),
+  fetchFavoriteTeachers: vi.fn(() => Promise.resolve([])),
   fetchSubjects: vi.fn(),
   updateWindow: vi.fn(),
 }))
@@ -37,10 +41,12 @@ vi.mock('../../api/client.js', () => ({
   createWindow,
   deleteWindow,
   fetchAvailability,
+  fetchMyAddresses,
   fetchMyLessons,
   fetchMyWindows,
   fetchMyVacations,
   fetchMyPacks,
+  fetchFavoriteTeachers,
   fetchSubjects,
   updateWindow,
 }))
@@ -69,6 +75,22 @@ const alumno = apiUser({
 })
 
 // Todo se arma sobre HOY: es la semana que la pantalla muestra al entrar.
+// La dirección guardada (y predeterminada) del docente, como la manda la API.
+const CASA = {
+  id: 'a1',
+  label: 'Casa',
+  street: 'Av. Corrientes',
+  number: '1234',
+  postalCode: '1043',
+  locality: 'Balvanera',
+  city: 'CABA',
+  floor: null,
+  apartment: null,
+  notes: null,
+  saved: true,
+  isDefault: true,
+}
+
 const HOY = toISODate(new Date())
 const LUNES = startOfWeek(new Date())
 
@@ -135,6 +157,7 @@ describe('AvailabilityPage — vista de docente', () => {
   beforeEach(() => {
     fetchSubjects.mockReset().mockResolvedValue(MATERIAS)
     fetchMyWindows.mockReset().mockResolvedValue([ventana()])
+    fetchMyAddresses.mockReset().mockResolvedValue([CASA])
     createWindow.mockReset().mockResolvedValue(ventana({ id: 'w2' }))
     updateWindow.mockReset().mockResolvedValue(ventana())
     deleteWindow.mockReset().mockResolvedValue(null)
@@ -220,7 +243,7 @@ describe('AvailabilityPage — vista de docente', () => {
 
   it('una ventana de una modalidad sin tarifas avisa que no se ofrece', async () => {
     fetchMyWindows.mockResolvedValue([
-      ventana({ modality: 'hybrid', locality: 'Palermo', address: 'Aula 3' }),
+      ventana({ modality: 'hybrid', locality: 'Balvanera', address: CASA }),
     ])
     await entrar()
     const modal = await abrirModalDelBloque()
@@ -267,10 +290,12 @@ describe('AvailabilityPage — vista de docente', () => {
     // En presencial solo tiene Álgebra.
     expect(within(modal).getByText(/Los alumnos eligen entre: Álgebra \(\$\s7\.500,50\/h\)\./))
       .toBeInTheDocument()
-    await userEvent.type(within(modal).getByLabelText('Localidad'), 'Palermo, CABA')
-    await userEvent.type(within(modal).getByLabelText('Dirección exacta'), 'Aula 3')
+    // Viene elegida la predeterminada, con lo que ven los alumnos.
+    expect(within(modal).getByLabelText('Dirección')).toHaveValue('a1')
+    expect(within(modal).getByText(/Antes de pagar, los alumnos ven solo «Balvanera»/))
+      .toBeInTheDocument()
     await userEvent.click(within(modal).getByRole('button', { name: 'Grupal' }))
-    await userEvent.click(within(modal).getByRole('checkbox'))
+    await userEvent.click(within(modal).getByRole('checkbox', { name: /Repetir/ }))
     const pedidosAntes = fetchMyWindows.mock.calls.length
     await userEvent.click(within(modal).getByRole('button', { name: 'Guardar' }))
 
@@ -283,8 +308,7 @@ describe('AvailabilityPage — vista de docente', () => {
       modality: 'in_person',
       maxStudents: 2,
       meetingUrl: '',
-      locality: 'Palermo, CABA',
-      address: 'Aula 3',
+      addressId: 'a1',
     })
     expect(await within(modal).findByText('Listo, agregamos el horario.')).toBeInTheDocument()
     // Una recarga de la semana después de guardar.
@@ -306,8 +330,6 @@ describe('AvailabilityPage — vista de docente', () => {
       '/perfil',
     )
     await userEvent.type(within(modal).getByLabelText('Link de la videollamada'), 'https://x.com/a')
-    await userEvent.type(within(modal).getByLabelText('Localidad'), 'Palermo, CABA')
-    await userEvent.type(within(modal).getByLabelText('Dirección exacta'), 'Aula 3')
     await userEvent.click(within(modal).getByRole('button', { name: 'Guardar' }))
 
     expect(createWindow).not.toHaveBeenCalled()
@@ -361,8 +383,6 @@ describe('AvailabilityPage — vista de docente', () => {
 
     await userEvent.click(within(modal).getByRole('button', { name: /^Editar el horario/ }))
     await userEvent.click(within(modal).getByRole('button', { name: 'Presencial' }))
-    await userEvent.type(within(modal).getByLabelText('Localidad'), 'Palermo, CABA')
-    await userEvent.type(within(modal).getByLabelText('Dirección exacta'), 'Aula 3')
     await userEvent.click(within(modal).getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() => expect(updateWindow).toHaveBeenCalledTimes(1))
@@ -374,22 +394,48 @@ describe('AvailabilityPage — vista de docente', () => {
       modality: 'in_person',
       maxStudents: 1,
       meetingUrl: '',
-      locality: 'Palermo, CABA',
-      address: 'Aula 3',
+      addressId: 'a1',
     })
   })
 
-  it('una presencial pide localidad y dirección exacta', async () => {
+  it('sin direcciones guardadas, una presencial pide cargar una y la puede guardar', async () => {
+    fetchMyAddresses.mockResolvedValue([])
     await entrar()
     await bloque()
     const modal = await abrirFormulario()
 
     await userEvent.click(within(modal).getByRole('button', { name: 'Presencial' }))
+    expect(within(modal).getByLabelText('Dirección')).toHaveValue('new')
+    await userEvent.click(within(modal).getByRole('button', { name: 'Guardar' }))
+    expect(within(modal).getAllByText('Completalo.')).toHaveLength(5)
+    expect(createWindow).not.toHaveBeenCalled()
+
+    await userEvent.type(within(modal).getByLabelText('Calle'), 'Honduras')
+    await userEvent.type(within(modal).getByLabelText('Número'), '4800')
+    await userEvent.type(within(modal).getByLabelText('Código postal'), '1414')
+    await userEvent.type(within(modal).getByLabelText('Localidad'), 'Palermo')
+    await userEvent.type(within(modal).getByLabelText('Ciudad'), 'CABA')
+    await userEvent.click(within(modal).getByRole('checkbox', { name: /Guardar esta dirección/ }))
+    await userEvent.type(within(modal).getByLabelText('Nombre de la dirección'), 'Escuela')
+    const pedidosAntes = fetchMyAddresses.mock.calls.length
     await userEvent.click(within(modal).getByRole('button', { name: 'Guardar' }))
 
-    expect(within(modal).getByText('Escribí la zona, por ejemplo Palermo, CABA.')).toBeInTheDocument()
-    expect(within(modal).getByText('Escribí la dirección exacta.')).toBeInTheDocument()
-    expect(createWindow).not.toHaveBeenCalled()
+    await waitFor(() => expect(createWindow).toHaveBeenCalledTimes(1))
+    expect(createWindow.mock.calls[0][0]).toMatchObject({
+      modality: 'in_person',
+      saveAddress: true,
+      address: {
+        label: 'Escuela',
+        street: 'Honduras',
+        number: '4800',
+        postalCode: '1414',
+        locality: 'Palermo',
+        city: 'CABA',
+        floor: '',
+      },
+    })
+    // Se guardó una nueva: se vuelven a pedir las direcciones.
+    await waitFor(() => expect(fetchMyAddresses).toHaveBeenCalledTimes(pedidosAntes + 1))
   })
 
   it('eliminar pide confirmación, y si se repite avisa que es de todas las semanas', async () => {
