@@ -270,6 +270,9 @@ class DayAgenda extends Component {
 
   listRef = createRef()
 
+  // El relleno del final de la lista (ver scrollToSelected).
+  spacerRef = createRef()
+
   // El grupo de cada día, para poder llevar la lista hasta él.
   groupRefs = {}
 
@@ -294,19 +297,29 @@ class DayAgenda extends Component {
   }
 
   /**
-   * Lleva la lista (y solo la lista, no la página) hasta el día elegido. La
-   * lista es position: relative, así que offsetTop ya es relativo a ella.
-   * En jsdom no hay scrollTo en los elementos: ahí no hace nada.
+   * Lleva la lista (y solo la lista, no la página) hasta el día elegido, que
+   * al entrar es hoy: lo pasado queda arriba, a un scroll. La lista es
+   * position: relative, así que offsetTop ya es relativo a ella. En jsdom no
+   * hay scrollTo en los elementos: ahí no hace nada.
    */
   scrollToSelected(smooth) {
     const list = this.listRef.current
+    const spacer = this.spacerRef.current
     const group = this.groupRefs[this.props.selectedIso]
-    if (!list || !group || typeof list.scrollTo !== 'function') return
+    if (!list || !spacer || !group || typeof list.scrollTo !== 'function') return
     const behavior = smooth ? 'smooth' : 'auto'
-    if (list.scrollHeight > list.clientHeight) {
+    // Se mira si la lista es la que scrollea y no si hoy le sobra contenido:
+    // con pocas clases no le sobra y aun así hoy tiene que quedar arriba.
+    if (getComputedStyle(list).overflowY !== 'visible') {
+      // Si después del día elegido hay poco (hoy suele ser el último, cuando
+      // todo lo cargado ya pasó), la lista no puede bajar tanto y lo pasado
+      // queda a la vista. El relleno del final completa lo que falte.
+      const despues = spacer.offsetTop - group.offsetTop
+      spacer.style.height = `${Math.max(0, list.clientHeight - despues)}px`
       list.scrollTo({ top: group.offsetTop, behavior })
       return
     }
+    spacer.style.height = '0px'
     // En tablets la lista no scrollea sola (la que scrollea es la página):
     // ahí se mueve la página, pero solo si el día lo eligió el usuario, no
     // al entrar.
@@ -371,6 +384,7 @@ class DayAgenda extends Component {
         ) : (
           <ol className="day-agenda-list" ref={this.listRef}>
             {this.getDays().map((iso) => this.renderDay(iso))}
+            <li className="day-agenda-spacer" ref={this.spacerRef} aria-hidden="true" />
           </ol>
         )}
         {this.renderDetail()}

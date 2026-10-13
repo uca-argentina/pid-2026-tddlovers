@@ -58,6 +58,14 @@
   scroll-padding-top: 0;
 }
 
+/* El relleno del final, para que el día elegido (hoy, al entrar) pueda subir
+   hasta arriba aunque después no haya clases. El alto lo pone
+   scrollToSelected; sin el flex-shrink, la lista lo aplastaría. */
+.day-agenda-spacer {
+  flex-shrink: 0;
+  margin-top: -14px;
+}
+
 /* Un día de la lista: su encabezado y sus clases. */
 .day-agenda-group {
   display: flex;
@@ -319,7 +327,5 @@
 
   .day-agenda-list {
     overflow-y: auto;
-    /* Que al final se pueda subir el último día hasta arriba de todo. */
-    padding-bottom: 40vh;
   }
 }

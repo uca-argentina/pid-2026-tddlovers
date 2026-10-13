@@ -55,21 +55,18 @@
   outline-offset: 3px;
 }
 
+/* La versión simplificada del logo (components/BrandLogo.jsx). La barra es
+   oscura en los dos temas: la insignia del tilde se recorta contra ella. */
 .navbar-brand-mark {
-  flex-shrink: 0;
   width: 30px;
   height: 30px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 9px;
-  background: var(--color-primary);
-  color: #fff;
+  --brand-cutout: var(--color-sidebar-bg);
 }
 
-.navbar-brand-mark svg {
-  width: 17px;
-  height: 17px;
+/* El borde gris de la hoja sirve sobre fondo claro; sobre la barra oscura
+   se lee como un contorno blanco alrededor del ícono. */
+.navbar-brand-mark .brand-page {
+  stroke: none;
 }
 
 .navbar-brand-name {
