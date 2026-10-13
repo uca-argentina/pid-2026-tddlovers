@@ -1,0 +1,55 @@
+/* Colores del logo. Son fijos (es la marca, no sigue a --color-primary) salvo
+   lo que depende de dónde está apoyado, que el contenedor pisa:
+   - --brand-cutout: el borde de la insignia del tilde, que tiene que ser del
+     color del fondo para que parezca recortada de la hoja.
+   - --brand-back / --brand-ring / --brand-header: sobre fondo oscuro la hoja
+     de atrás y las argollas se aclaran para no perderse (el login en
+     pantallas angostas, ver .auth-brand en styles/ui.css). */
+.brand-logo {
+  --brand-cutout: var(--color-bg);
+  --brand-back: #bfdbfe;
+  --brand-ring: #1e3a8a;
+  --brand-header: #2563eb;
+  display: block;
+  flex-shrink: 0;
+}
+
+.brand-back {
+  fill: var(--brand-back);
+}
+
+.brand-page {
+  fill: #ffffff;
+  stroke: #cbd5e1;
+  stroke-width: 1.5;
+}
+
+/* A 30px el borde de 1.5 se come la hoja. */
+.brand-mark .brand-page {
+  stroke-width: 1;
+}
+
+.brand-header,
+.brand-cell.is-booked {
+  fill: var(--brand-header);
+}
+
+.brand-ring {
+  fill: var(--brand-ring);
+}
+
+.brand-cell {
+  fill: #e2e8f0;
+}
+
+.brand-badge {
+  fill: #1d4ed8;
+  stroke: var(--brand-cutout);
+}
+
+.brand-check {
+  fill: none;
+  stroke: #ffffff;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}

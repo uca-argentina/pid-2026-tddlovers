@@ -228,30 +228,24 @@
 .auth-brand {
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 14px;
 }
 
-.auth-brand-mark {
-  width: 36px;
-  height: 36px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 11px;
-  background: var(--color-primary);
-  color: #fff;
-}
-
-.auth-brand-mark svg {
-  width: 20px;
-  height: 20px;
+/* La versión completa del logo (components/BrandLogo.jsx). */
+.auth-brand-logo {
+  width: 64px;
+  height: 64px;
 }
 
 .auth-brand-name {
-  font-size: 19px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
   color: var(--color-text);
+}
+
+.auth-brand-accent {
+  color: var(--color-primary);
 }
 
 .auth-tagline {
@@ -409,6 +403,19 @@
     color: var(--color-sidebar-text-strong);
   }
 
+  /* Acá la marca queda sobre lo oscuro: la hoja de atrás y las argollas se
+     aclaran y la insignia se recorta contra ese fondo. */
+  .auth-brand-logo {
+    --brand-cutout: var(--color-sidebar-bg);
+    --brand-back: #1e40af;
+    --brand-ring: #bfdbfe;
+    --brand-header: #3b82f6;
+  }
+
+  .auth-brand-accent {
+    color: #60a5fa;
+  }
+
   /* El "Volver" del registro sí queda absoluto, alineado con la marca. */
   .auth-back {
     top: 22px;
@@ -475,19 +482,13 @@
     padding: calc(28px + env(safe-area-inset-top)) 20px 22px;
   }
 
-  .auth-brand-mark {
-    width: 44px;
-    height: 44px;
-    border-radius: 13px;
-  }
-
-  .auth-brand-mark svg {
-    width: 24px;
-    height: 24px;
+  .auth-brand-logo {
+    width: 52px;
+    height: 52px;
   }
 
   .auth-brand-name {
-    font-size: 22px;
+    font-size: 26px;
   }
 
   .auth-back {

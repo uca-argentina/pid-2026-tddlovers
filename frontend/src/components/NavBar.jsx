@@ -1,5 +1,6 @@
 import { Component } from 'react'
 import { Link, NavLink } from 'react-router-dom'
+import { BrandMark } from './BrandLogo.jsx'
 import SearchBar from './SearchBar.jsx'
 import ThemeToggle from './ThemeToggle.jsx'
 import {
@@ -128,9 +129,7 @@ class NavBar extends Component {
               "/" lo manda a su revisión). El botón de tema queda afuera del
               link: tocarlo no tiene que navegar. */}
           <Link to="/" className="navbar-brand-link" aria-label="Ir al calendario">
-            <span className="navbar-brand-mark" aria-hidden="true">
-              <CalendarIcon />
-            </span>
+            <BrandMark className="navbar-brand-mark" />
             <span className="navbar-brand-name">BookIt</span>
           </Link>
           <ThemeToggle />
