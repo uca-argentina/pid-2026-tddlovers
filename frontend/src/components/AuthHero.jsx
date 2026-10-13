@@ -1,5 +1,6 @@
 import { Component } from 'react'
-import { CalendarIcon, ChevronLeftIcon } from './icons.jsx'
+import { BrandLogo } from './BrandLogo.jsx'
+import { ChevronLeftIcon } from './icons.jsx'
 
 /**
  * Panel de la izquierda de las pantallas de auth (Registro, Login): la
@@ -29,10 +30,10 @@ class AuthHero extends Component {
         ) : null}
 
         <div className="auth-brand">
-          <span className="auth-brand-mark" aria-hidden="true">
-            <CalendarIcon />
+          <BrandLogo className="auth-brand-logo" />
+          <span className="auth-brand-name">
+            Book<span className="auth-brand-accent">It</span>
           </span>
-          <span className="auth-brand-name">BookIt</span>
         </div>
 
         <p className="auth-tagline">Coordiná tus clases particulares en un solo lugar.</p>

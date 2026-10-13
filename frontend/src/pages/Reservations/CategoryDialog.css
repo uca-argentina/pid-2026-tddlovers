@@ -32,6 +32,31 @@
   font-weight: 400;
 }
 
+/* Sin esto Safari de iOS dibuja el select y las fechas a su manera (el select
+   gris, sin la cápsula) y les da a las fechas un ancho mínimo propio que
+   ignora width: 100%, así que se pisan con la columna de al lado. */
+.category-filter select,
+.category-filter input[type='date'] {
+  appearance: none;
+  -webkit-appearance: none;
+  min-width: 0;
+  display: block;
+}
+
+.category-filter input[type='date']::-webkit-date-and-time-value {
+  text-align: left;
+}
+
+/* El select pierde la flecha nativa: la misma que el selector de dirección. */
+.category-filter select {
+  padding-right: 38px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--color-text-muted) 50%),
+    linear-gradient(135deg, var(--color-text-muted) 50%, transparent 50%);
+  background-position: calc(100% - 20px) 50%, calc(100% - 15px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+
 .category-filter input:focus,
 .category-filter select:focus {
   outline: none;
