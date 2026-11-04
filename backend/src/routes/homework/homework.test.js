@@ -90,6 +90,11 @@ const acceso = (over = {}) => ({
   teacherId: DOCENTE,
   submittedAt: '2099-09-14T12:00:00.000Z',
   correctedAt: null,
+  isLate: false,
+  title: 'TP 1',
+  createdAt: '2099-09-01T12:00:00.000Z',
+  dueDate: '2099-09-20',
+  dueTime: '23:59',
   ...over,
 });
 
@@ -326,7 +331,41 @@ describe('/api/homework', () => {
       const res = await send('POST', url, headers, { feedback: ' Muy bien ' });
 
       expect(res.statusCode).toBe(200);
-      expect(db.saveFeedback).toHaveBeenCalledWith(ENTREGA, 'Muy bien');
+      expect(db.saveFeedback).toHaveBeenCalledWith(
+        ENTREGA,
+        'Muy bien',
+        expect.objectContaining({
+          // Antes del vencimiento da el máximo, pero 'Muy bien' es demasiado corta.
+          credits: { teacher: 0, student: 10 },
+          submission: expect.objectContaining({ id: ENTREGA }),
+        })
+      );
+    });
+
+    it('la primera devolución con contenido suma neuronas', async () => {
+      const headers = await authedHeaders(app, 'teacher', DOCENTE);
+      db.findSubmission.mockResolvedValue(acceso());
+      db.saveFeedback.mockResolvedValue(true);
+      db.findTeacherHomework.mockResolvedValue({ id: TAREA, submissions: [] });
+
+      await send('POST', url, headers, { feedback: 'Muy bien resuelto, revisá el punto 3.' });
+
+      expect(db.saveFeedback.mock.calls.at(-1)[2].credits).toEqual({ teacher: 10, student: 10 });
+    });
+
+    it('recorregir no vuelve a dar neuronas', async () => {
+      const headers = await authedHeaders(app, 'teacher', DOCENTE);
+      db.findSubmission.mockResolvedValue(acceso({ correctedAt: '2099-09-21T12:00:00.000Z' }));
+      db.saveFeedback.mockResolvedValue(true);
+      db.findTeacherHomework.mockResolvedValue({ id: TAREA, submissions: [] });
+
+      await send('POST', url, headers, { feedback: 'Muy bien resuelto, revisá el punto 3.' });
+
+      expect(db.saveFeedback).toHaveBeenCalledWith(
+        ENTREGA,
+        'Muy bien resuelto, revisá el punto 3.',
+        null
+      );
     });
 
     it('sin entregar no se corrige', async () => {

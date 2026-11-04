@@ -7,6 +7,7 @@ import {
   ChevronRightIcon,
   ClipboardIcon,
   HeartIcon,
+  NeuronIcon,
   PlusIcon,
   SpinnerIcon,
 } from '../../components/icons.jsx'
@@ -18,6 +19,7 @@ import { centsToInput, MAX_HOURLY_RATE_CENTS, parseMoney } from '../../utils/rat
 import { MODALITIES } from '../../utils/windows.js'
 import { fetchSubjects, updateProfile } from '../../api/client.js'
 import AddressesSection from './AddressesSection.jsx'
+import NeuronasSetting from './NeuronasSetting.jsx'
 import './ProfilePage.css'
 
 /**
@@ -130,6 +132,10 @@ class ProfilePage extends Component {
       !this.state.subjectsLoading &&
       this.state.subjects.length === 0
     )
+  }
+
+  handleAcceptsRewardsChange = (acceptsRewards) => {
+    this.props.onUserChange?.({ ...this.props.user, acceptsRewards })
   }
 
   esDocente() {
@@ -452,6 +458,13 @@ class ProfilePage extends Component {
               <ChevronRightIcon className="ios-row-chevron" />
             </Link>
           ) : null}
+          {esAlumno || esDocente ? (
+            <Link className="ios-row" to="/neuronas">
+              <NeuronIcon className="ios-row-icon" />
+              <span className="ios-row-label">Neuronas</span>
+              <ChevronRightIcon className="ios-row-chevron" />
+            </Link>
+          ) : null}
           {esAlumno ? (
             <Link className="ios-row" to="/favoritos">
               <HeartIcon className="ios-row-icon is-favorite" />
@@ -595,6 +608,12 @@ class ProfilePage extends Component {
               guarda al momento, aparte de "Guardar cambios": por eso va
               después de esos botones. */}
           {esDocente ? <AddressesSection /> : null}
+          {esDocente ? (
+            <NeuronasSetting
+              accepts={Boolean(this.props.user?.acceptsRewards)}
+              onChange={this.handleAcceptsRewardsChange}
+            />
+          ) : null}
 
           {/* Un <Link> y no un <button>: así navega solo y de paso no corre
               riesgo de mandar el formulario. El onClick limpia la sesión en

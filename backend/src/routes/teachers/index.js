@@ -22,7 +22,7 @@ import {
   listTeacherVacations,
 } from '../../db/vacations.js';
 import { VacationRange } from '../../lib/vacations.js';
-import { listTeachers } from '../../db/users.js';
+import { listTeachers, setAcceptsRewards } from '../../db/users.js';
 import { validateWindow } from '../../lib/availabilityWindow.js';
 import { now, todayIso } from '../../lib/clock.js';
 
@@ -132,6 +132,21 @@ export default async function teachersRoutes(app) {
    * también los puede armar (igual que su disponibilidad): no los ve nadie
    * hasta que lo aprueban.
    */
+  /**
+   * Va aparte del perfil a propósito: guardar el perfil le vuelve a pedir
+   * aprobación a un docente rechazado, y esto no cambia nada que se revise.
+   */
+  app.put('/me/accepts-rewards', write, async (request, reply) => {
+    const accepts = request.body?.accepts;
+    if (typeof accepts !== 'boolean') {
+      return reply
+        .code(400)
+        .send({ message: 'Falta indicar si aceptás canjes.', fields: { accepts: 'required' } });
+    }
+    await setAcceptsRewards(request.user.id, accepts);
+    return reply.send({ acceptsRewards: accepts });
+  });
+
   app.get('/me/packs', read, async (request, reply) => {
     return reply.send(await listTeacherOffers(request.user.id));
   });

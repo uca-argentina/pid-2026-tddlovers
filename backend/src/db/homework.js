@@ -1,4 +1,5 @@
 import { getPool } from './pool.js';
+import { creditCorrection, removeHomeworkOnTimeCredit } from './neuronas.js';
 
 // Las tareas, sus entregas y los mensajes de cada entrega. Quién puede hacer
 // qué lo decide la ruta con lib/homework.js; acá solo se lee y escribe.
@@ -170,7 +171,10 @@ export async function findSubmission(id) {
   const result = await getPool().query(
     `SELECT e.id, e.homework_id AS "homeworkId", e.student_id AS "studentId",
             h.teacher_id AS "teacherId", e.submitted_at AS "submittedAt",
-            e.corrected_at AS "correctedAt"
+            e.corrected_at AS "correctedAt", e.is_late AS "isLate",
+            h.title, h.created_at AS "createdAt",
+            to_char(h.due_date, 'YYYY-MM-DD') AS "dueDate",
+            to_char(h.due_time, 'HH24:MI') AS "dueTime"
      FROM homework_submissions e
      JOIN homeworks h ON h.id = e.homework_id
      WHERE e.id = $1`,
@@ -191,17 +195,42 @@ export async function saveSubmission(id, { text, linkUrl, isLate }) {
      WHERE id = $1 AND corrected_at IS NULL`,
     [id, text, linkUrl, isLate]
   );
+  if (result.rowCount > 0 && isLate) await removeHomeworkOnTimeCredit(id);
   return result.rowCount > 0;
 }
 
-export async function saveFeedback(id, feedback) {
-  const result = await getPool().query(
-    `UPDATE homework_submissions
-     SET feedback = $2, corrected_at = now()
-     WHERE id = $1 AND submitted_at IS NOT NULL`,
-    [id, feedback]
-  );
-  return result.rowCount > 0;
+const SAVE_FEEDBACK_SQL = `
+  UPDATE homework_submissions
+  SET feedback = $2, corrected_at = now()
+  WHERE id = $1 AND submitted_at IS NOT NULL`;
+
+/**
+ * Guarda la devolución. `award` ({ submission, credits, today }) viene solo en
+ * la primera corrección: la devolución y sus neuronas se guardan juntas.
+ */
+export async function saveFeedback(id, feedback, award = null) {
+  if (!award) {
+    const result = await getPool().query(SAVE_FEEDBACK_SQL, [id, feedback]);
+    return result.rowCount > 0;
+  }
+
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query(SAVE_FEEDBACK_SQL, [id, feedback]);
+    if (result.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return false;
+    }
+    await creditCorrection(client, award.submission, award.credits, award.today);
+    await client.query('COMMIT');
+    return true;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 const MESSAGE_COLUMNS = `

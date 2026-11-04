@@ -160,7 +160,11 @@ export function lowestRate(card) {
   return tarifas.length > 0 ? Math.min(...tarifas) : null
 }
 
-/** { [iso]: Card[] }, cada lista ordenada por hora y docente. */
+/**
+ * { [iso]: Card[] }, cada lista ordenada por hora y docente, con los destacados
+ * primero. Uno de licencia no va adelante: compró que lo vean para reservarlo,
+ * y ese día no se puede.
+ */
 export function groupCardsByDate(cards) {
   const porFecha = {}
 
@@ -170,7 +174,10 @@ export function groupCardsByDate(cards) {
   }
 
   for (const iso of Object.keys(porFecha)) {
+    const destacada = (card) => (card.teacherFeatured && !card.onVacation ? 0 : 1)
     porFecha[iso].sort((a, b) => {
+      const prioridad = destacada(a) - destacada(b)
+      if (prioridad !== 0) return prioridad
       const inicio = a.start.localeCompare(b.start)
       if (inicio !== 0) return inicio
       return a.teacherName.localeCompare(b.teacherName)

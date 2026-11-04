@@ -99,6 +99,9 @@ export function owesPayment(cls) {
  * { label, tone } con los tonos de las pastillas.
  */
 export function paymentStatus(cls) {
+  // Antes que paidAt: aceptar una clase cubierta por el canje ya la marca paga, y
+  // "Pagó" diría algo que el alumno no hizo.
+  if (cls.rewardType && cls.priceCents === 0) return { label: 'Con neuronas', tone: 'info' }
   if (cls.paidAt) return { label: 'Pagó', tone: 'success' }
   if (cls.priceCents === 0) {
     return cls.packTokens > 0

@@ -10,6 +10,7 @@ import {
   ClockIcon,
   HeartIcon,
   ListCheckIcon,
+  NeuronIcon,
   UserIcon,
   UsersIcon,
 } from './icons.jsx'
@@ -37,7 +38,7 @@ import './NavBar.css'
  * En el teléfono (`mobile`) es otra barra: la cápsula flotante de abajo con
  * cinco pestañas como en iOS, sin marca ni buscador (el buscador vive en la
  * pantalla de Reservar y el tema en el Perfil). Favoritos no entra en cinco:
- * se llega desde el Perfil, igual que a Tareas.
+ * se llega desde el Perfil, igual que a Tareas y a Neuronas.
  */
 class NavBar extends Component {
   getLinkClass = ({ isActive }) => `navbar-item ${isActive ? 'is-active' : ''}`
@@ -171,6 +172,10 @@ class NavBar extends Component {
             <NavLink to="/tareas" className={this.getLinkClass} aria-label="Tareas">
               <ClipboardIcon />
               <span className="navbar-item-label">Tareas</span>
+            </NavLink>
+            <NavLink to="/neuronas" className={this.getLinkClass} aria-label="Mis neuronas">
+              <NeuronIcon />
+              <span className="navbar-item-label">Neuronas</span>
             </NavLink>
             <NavLink to="/paquetes" className={this.getLinkClass} aria-label="Paquetes de clases">
               <BookIcon />

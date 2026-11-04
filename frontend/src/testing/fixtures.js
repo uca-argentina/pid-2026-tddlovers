@@ -33,6 +33,8 @@ export function apiClass(overrides = {}) {
     rescheduledFrom: null,
     studentPackId: null,
     packTokens: 0,
+    rewardType: null,
+    rewardNeuronas: 0,
     enrolled: 1,
     hasMaterial: false,
     ...overrides,
@@ -52,6 +54,7 @@ export function apiUser(overrides = {}) {
     apellido: 'Klos',
     telefono: null,
     approvalStatus: 'approved',
+    acceptsRewards: false,
     subjectIds: [],
     rates: [],
     ...overrides,
@@ -95,6 +98,34 @@ export function apiHomework(overrides = {}) {
     subjectName: null,
     teacherName: 'Laura Gómez',
     createdAt: '2099-09-01T12:00:00.000Z',
+    ...overrides,
+  }
+}
+
+// Lo que responde GET /api/neuronas a un alumno (routes/neuronas en el backend).
+export function apiNeuronas(overrides = {}) {
+  return {
+    balance: 250,
+    earned: 250,
+    level: { name: 'Sinapsis', min: 200, nextName: 'Red neuronal', nextMin: 600 },
+    movements: [],
+    badges: [
+      { key: 'first_class', label: 'Primera clase', earned: true },
+      { key: 'ten_classes', label: '10 clases', earned: false },
+      { key: 'five_homeworks', label: '5 tareas a tiempo', earned: false },
+    ],
+    ...overrides,
+  }
+}
+
+// Lo mismo para un docente: en vez de insignias trae el estado de Destacado.
+export function apiTeacherNeuronas(overrides = {}) {
+  return {
+    balance: 1200,
+    earned: 1200,
+    movements: [],
+    level: { name: 'Red neuronal', min: 600, nextName: 'Mente brillante', nextMin: 1500 },
+    featured: { activeUntil: null, slotsLeft: 5, cost: 1000, days: 7 },
     ...overrides,
   }
 }

@@ -24,6 +24,7 @@ import {
   validateMessage,
   validateSubmission,
 } from '../../lib/homework.js';
+import { correctionCredits } from '../../lib/neuronas.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const HOMEWORK_NOT_FOUND = 'Esa tarea no existe.';
@@ -163,7 +164,11 @@ export default async function homeworkRoutes(app) {
     return null;
   }
 
-  /** La devolución. Se puede corregir de nuevo, y reemplaza a la anterior. */
+  /**
+   * La devolución. Se puede corregir de nuevo, y reemplaza a la anterior. Solo
+   * la primera da neuronas: corrected_at se pisa al recorregir, y si contara,
+   * reescribir la devolución volvería a pagar.
+   */
   app.post(
     '/submissions/:id/feedback',
     { onRequest: [app.requireAuth, app.csrfProtection] },
@@ -180,7 +185,15 @@ export default async function homeworkRoutes(app) {
       const checked = validateFeedback(request.body?.feedback);
       if (checked.error) return reply.code(400).send(checked.error);
 
-      const saved = await saveFeedback(own.submission.id, checked.feedback);
+      const current = now();
+      const award = own.submission.correctedAt
+        ? null
+        : {
+            submission: own.submission,
+            credits: correctionCredits(own.submission, checked.feedback, current),
+            today: current.iso,
+          };
+      const saved = await saveFeedback(own.submission.id, checked.feedback, award);
       if (!saved) return reply.code(409).send({ message: CHANGED_MEANWHILE });
 
       return reply.send(await findTeacherHomework(own.submission.homeworkId, request.user.id));

@@ -84,7 +84,14 @@ export async function findPublishedWindows({ from, to }) {
   const result = await getPool().query(
     `SELECT ${WINDOW_COLUMNS},
             u.nombre || ' ' || u.apellido AS "teacherName",
-            ${WINDOW_SUBJECTS} AS subjects
+            ${WINDOW_SUBJECTS} AS subjects,
+            u.accepts_neurona_rewards AS "teacherAcceptsRewards",
+            EXISTS (
+              SELECT 1 FROM teacher_featured f
+              WHERE f.teacher_id = av.teacher_id
+                AND (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
+                    BETWEEN f.start_date AND f.end_date
+            ) AS "teacherFeatured"
      FROM ${WINDOW_FROM}
      JOIN users u ON u.id = av.teacher_id
      WHERE ${OCCURS_IN_RANGE('$1', '$2')}
@@ -110,7 +117,8 @@ export async function findWindowById(id) {
   const result = await getPool().query(
     `SELECT ${WINDOW_COLUMNS},
             u.nombre || ' ' || u.apellido AS "teacherName",
-            u.approval_status AS "teacherApprovalStatus"
+            u.approval_status AS "teacherApprovalStatus",
+            u.accepts_neurona_rewards AS "teacherAcceptsRewards"
      FROM ${WINDOW_FROM}
      JOIN users u ON u.id = av.teacher_id
      WHERE av.id = $1`,

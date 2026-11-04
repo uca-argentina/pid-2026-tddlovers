@@ -15,6 +15,9 @@ import { findRatesByTeacher } from '../db/rates.js';
  * `approvalStatus` ('pending' | 'approved' | 'rejected') va solo en los
  * docentes, null en el resto: el perfil le avisa al docente si todavía no lo
  * aprobaron y por eso no recibe reservas.
+ *
+ * `acceptsRewards` dice si el docente acepta canjes de neuronas; false en el
+ * resto, porque el alumno no recibe canjes.
  */
 export async function toPublicUser(user) {
   const esDocente = user.role === 'teacher';
@@ -29,6 +32,7 @@ export async function toPublicUser(user) {
     apellido: user.apellido,
     telefono: user.telefono,
     approvalStatus: esDocente ? user.approval_status : null,
+    acceptsRewards: esDocente ? Boolean(user.accepts_neurona_rewards) : false,
     subjectIds,
     rates,
   };

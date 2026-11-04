@@ -1,6 +1,7 @@
 import { getPool } from './pool.js';
 
-const PROFILE_COLUMNS = 'id, email, role, nombre, apellido, telefono, approval_status, created_at';
+const PROFILE_COLUMNS =
+  'id, email, role, nombre, apellido, telefono, approval_status, accepts_neurona_rewards, created_at';
 
 // Para los docentes, subjectIds vincula el usuario nuevo con el catálogo de
 // materias en la misma transacción que el insert: así una falla a medio camino
@@ -167,9 +168,18 @@ export async function updateUserProfile(userId, { telefono, subjectIds, rates, a
   }
 }
 
+/** Si el docente acepta canjes de neuronas. Lo ya reservado no cambia. */
+export async function setAcceptsRewards(teacherId, accepts) {
+  await getPool().query(`UPDATE users SET accepts_neurona_rewards = $2 WHERE id = $1`, [
+    teacherId,
+    accepts,
+  ]);
+}
+
 export async function findUserByEmail(email) {
   const result = await getPool().query(
-    `SELECT id, email, password_hash, role, nombre, apellido, telefono, approval_status, created_at
+    `SELECT id, email, password_hash, role, nombre, apellido, telefono, approval_status,
+            accepts_neurona_rewards, created_at
      FROM users
      WHERE email = $1`,
     [email]

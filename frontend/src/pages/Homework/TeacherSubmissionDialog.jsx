@@ -3,6 +3,7 @@ import Banner from '../../components/Banner.jsx'
 import Modal from '../../components/Modal.jsx'
 import { SpinnerIcon } from '../../components/icons.jsx'
 import { saveHomeworkFeedback } from '../../api/client.js'
+import { MIN_FEEDBACK_LENGTH, homeworkEarns } from '../../utils/neuronas.js'
 import { MAX_TEXT_LENGTH } from '../../utils/homework.js'
 import HomeworkChat from './HomeworkChat.jsx'
 import SubmissionContent from './SubmissionContent.jsx'
@@ -35,6 +36,26 @@ class TeacherSubmissionDialog extends Component {
       })
   }
 
+  /** Solo la primera corrección da neuronas: después no hay nada que avisar. */
+  renderNeuronasHint() {
+    const { submission, homework } = this.props
+    if (submission.correctedAt) return null
+    if (!homeworkEarns(homework)) {
+      return (
+        <p className="homework-hint">
+          Esta tarea se asignó con menos de 24 h de plazo: corregirla no suma neuronas.
+        </p>
+      )
+    }
+    const largo = this.state.feedback.trim().length
+    if (largo === 0 || largo >= MIN_FEEDBACK_LENGTH) return null
+    return (
+      <p className="homework-hint">
+        Con al menos {MIN_FEEDBACK_LENGTH} caracteres, esta devolución suma neuronas.
+      </p>
+    )
+  }
+
   render() {
     const { submission, onClose } = this.props
     const { feedback, saving, error, notice } = this.state
@@ -58,6 +79,7 @@ class TeacherSubmissionDialog extends Component {
               placeholder="Qué estuvo bien, qué hay que revisar..."
               onChange={this.handleFeedbackChange}
             />
+            {this.renderNeuronasHint()}
             <div className="homework-actions">
               <button
                 type="submit"

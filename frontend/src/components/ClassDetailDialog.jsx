@@ -13,6 +13,7 @@ import { allowedActions, hasStarted, nowParts, paymentStatus } from '../utils/cl
 import { formatMoney } from '../utils/rates.js'
 import { turnRows } from '../utils/reservations.js'
 import { capacityLabel, modalityLabel, needsAddress, needsMeetingUrl } from '../utils/windows.js'
+import { rewardLabel } from '../utils/neuronas.js'
 import './ClassDetailDialog.css'
 
 /**
@@ -270,6 +271,12 @@ class ClassDetailDialog extends Component {
               <span className="class-detail-muted">
                 {' · '}
                 {cls.packTokens === 1 ? '1 clase' : `${cls.packTokens} clases`} del paquete
+              </span>
+            ) : null}
+            {cls.rewardType ? (
+              <span className="class-detail-muted">
+                {' · '}
+                {rewardLabel(cls.rewardType)} con neuronas
               </span>
             ) : null}
           </p>

@@ -191,6 +191,7 @@ describe('auth routes', () => {
         apellido: 'Lovelace',
         telefono: null,
         approvalStatus: null,
+        acceptsRewards: false,
         subjectIds: [],
         rates: [],
       });
@@ -305,6 +306,7 @@ describe('auth routes', () => {
         telefono: null,
         // Un docente recién registrado espera aprobación: el front lo avisa.
         approvalStatus: 'pending',
+        acceptsRewards: false,
         subjectIds: [],
         rates: [],
       });
@@ -371,6 +373,7 @@ describe('auth routes', () => {
         apellido: 'Lovelace',
         telefono: null,
         approvalStatus: null,
+        acceptsRewards: false,
         subjectIds: [],
         rates: [],
       });

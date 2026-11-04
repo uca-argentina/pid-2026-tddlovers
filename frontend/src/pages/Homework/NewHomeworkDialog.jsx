@@ -6,6 +6,7 @@ import { createHomework, fetchHomeworkTargets } from '../../api/client.js'
 import { formatDayLong, fromISODate } from '../../utils/calendar.js'
 import { nowParts } from '../../utils/classStates.js'
 import { MAX_TEXT_LENGTH, MAX_TITLE_LENGTH } from '../../utils/homework.js'
+import { homeworkEarns } from '../../utils/neuronas.js'
 
 /**
  * Asignar una tarea a un alumno o a una clase grupal. Solo se ofrecen los
@@ -74,6 +75,14 @@ class NewHomeworkDialog extends Component {
         if (!this.alive) return
         this.setState({ saving: false, error: error.message || 'No se pudo asignar la tarea.' })
       })
+  }
+
+  /** Se avisa antes de asignar, que es cuando todavía se puede cambiar el plazo. */
+  earnsNoNeuronas() {
+    const { dueDate, dueTime } = this.state
+    if (!dueDate || !dueTime) return false
+    const { iso, time } = this.props.now || nowParts()
+    return !homeworkEarns({ createdAt: `${iso}T${time}:00-03:00`, dueDate, dueTime })
   }
 
   groupLabel(group) {
@@ -187,6 +196,9 @@ class NewHomeworkDialog extends Component {
             />
           </label>
         </div>
+        {this.earnsNoNeuronas() ? (
+          <p className="homework-hint">Con menos de 24 h de plazo, esta tarea no suma neuronas.</p>
+        ) : null}
         <div className="homework-actions">
           <button type="submit" className="class-action is-primary" disabled={!this.canSave()}>
             {saving ? <SpinnerIcon className="spin" /> : null}
