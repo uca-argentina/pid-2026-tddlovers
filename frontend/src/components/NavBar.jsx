@@ -6,6 +6,7 @@ import ThemeToggle from './ThemeToggle.jsx'
 import {
   BookIcon,
   CalendarIcon,
+  ClipboardIcon,
   ClockIcon,
   HeartIcon,
   ListCheckIcon,
@@ -36,7 +37,7 @@ import './NavBar.css'
  * En el teléfono (`mobile`) es otra barra: la cápsula flotante de abajo con
  * cinco pestañas como en iOS, sin marca ni buscador (el buscador vive en la
  * pantalla de Reservar y el tema en el Perfil). Favoritos no entra en cinco:
- * se llega desde el Perfil.
+ * se llega desde el Perfil, igual que a Tareas.
  */
 class NavBar extends Component {
   getLinkClass = ({ isActive }) => `navbar-item ${isActive ? 'is-active' : ''}`
@@ -166,6 +167,10 @@ class NavBar extends Component {
             <NavLink to="/reservas" className={this.getLinkClass} aria-label="Mis reservas">
               <ListCheckIcon />
               <span className="navbar-item-label">Reservas</span>
+            </NavLink>
+            <NavLink to="/tareas" className={this.getLinkClass} aria-label="Tareas">
+              <ClipboardIcon />
+              <span className="navbar-item-label">Tareas</span>
             </NavLink>
             <NavLink to="/paquetes" className={this.getLinkClass} aria-label="Paquetes de clases">
               <BookIcon />

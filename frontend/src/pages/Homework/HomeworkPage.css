@@ -1,0 +1,368 @@
+/* Lista angosta, como favoritos y reservas: .app-main es ancho por el
+   calendario. */
+.homework-page {
+  width: 100%;
+  max-width: 720px;
+  margin-inline: auto;
+}
+
+.homework-page > .banner {
+  margin-bottom: 16px;
+}
+
+.homework-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.homework-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+}
+
+.homework-subtitle {
+  margin: 4px 0 0;
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+.homework-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 12px 0;
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+.homework-empty svg {
+  width: 16px;
+  height: 16px;
+}
+
+.homework-list,
+.homework-rows,
+.homework-messages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.homework-list {
+  gap: 10px;
+}
+
+/* Misma tarjeta que favoritos y paquetes, pero se toca entera. */
+.homework-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--color-surface-solid);
+  box-shadow: var(--shadow-panel);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.homework-card:hover {
+  border-color: var(--color-primary);
+}
+
+.homework-card:focus-visible,
+.homework-row.is-button:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.homework-card-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.homework-card-meta {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.homework-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+/* El detalle, adentro de un Modal alto. */
+.homework-dialog,
+.homework-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.homework-dialog {
+  gap: 18px;
+}
+
+.homework-section {
+  gap: 8px;
+}
+
+.homework-dialog .banner {
+  margin-bottom: 0;
+  font-size: 13px;
+}
+
+/* Mismo título de sección que el detalle de una clase. */
+.homework-section-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.homework-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+/* Respeta los saltos de línea de quien lo escribió. */
+.homework-text {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-text-muted) 8%, transparent);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.homework-link {
+  font-size: 14px;
+  color: var(--color-primary);
+  overflow-wrap: anywhere;
+}
+
+.homework-submitted-at {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.homework-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+/* 16px en la letra: con menos, iOS hace zoom al enfocar. */
+.homework-input {
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface-solid);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+textarea.homework-input {
+  resize: vertical;
+}
+
+.homework-input:focus {
+  outline: 2px solid color-mix(in srgb, var(--color-primary) 50%, transparent);
+  border-color: var(--color-primary);
+}
+
+.homework-input[aria-invalid='true'] {
+  border-color: var(--color-danger);
+}
+
+.homework-hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.homework-actions,
+.homework-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.homework-actions {
+  justify-content: flex-end;
+}
+
+.homework-due {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 10px;
+}
+
+.homework-rows {
+  gap: 6px;
+}
+
+.homework-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  width: 100%;
+  min-height: 46px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.homework-row.is-button {
+  cursor: pointer;
+}
+
+.homework-row.is-button:hover {
+  border-color: var(--color-primary);
+}
+
+.homework-row-name {
+  flex: 1 1 140px;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.homework-row-chevron {
+  width: 16px;
+  height: 16px;
+  color: var(--color-text-muted);
+}
+
+/* El chat. */
+.homework-messages {
+  gap: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 4px 2px;
+}
+
+.homework-message {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  max-width: 85%;
+}
+
+.homework-message.is-mine {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.homework-message-author,
+.homework-message-time {
+  font-size: 11.5px;
+  color: var(--color-text-muted);
+}
+
+.homework-message-body {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 14px 14px 14px 4px;
+  background: color-mix(in srgb, var(--color-text-muted) 12%, transparent);
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--color-text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.homework-message.is-mine .homework-message-body {
+  border-radius: 14px 14px 4px 14px;
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.homework-chat-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.homework-chat-input {
+  flex: 1;
+  max-height: 120px;
+}
+
+/* Teléfono: título grande como el resto de las pantallas (ver .large-title). */
+@media (max-width: 700px) {
+  .homework-title {
+    font-size: 30px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+
+  .homework-subtitle {
+    font-size: 13.5px;
+  }
+
+  .homework-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+/* El "‹ Perfil" del teléfono, como el botón de volver de iOS. */
+.homework-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin: 0 0 6px -6px;
+  padding: 6px 6px 6px 0;
+  color: var(--color-primary);
+  font-size: 16px;
+  text-decoration: none;
+}
+
+.homework-back svg {
+  width: 20px;
+  height: 20px;
+}
