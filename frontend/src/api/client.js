@@ -428,6 +428,56 @@ export function deleteAddress(id) {
   return request(`/api/teachers/me/addresses/${id}`, { method: 'DELETE' })
 }
 
+// --- Tareas ---------------------------------------------------------------------
+
+/**
+ * Las tareas del usuario logueado. El docente las recibe con `submissions`,
+ * una por alumno; el alumno, con `submission`, solo la suya.
+ */
+export function fetchHomeworks() {
+  return request('/api/homework')
+}
+
+/** A quién puede asignar el docente: { students, groups }. */
+export function fetchHomeworkTargets() {
+  return request('/api/homework/targets')
+}
+
+/** { title, description, dueDate, dueTime } y `studentId` o `classId`. Devuelve la tarea. */
+export function createHomework(homework) {
+  return request('/api/homework', {
+    method: 'POST',
+    body: JSON.stringify(homework),
+  })
+}
+
+/** Entregar o cambiar la entrega. Devuelve la tarea actualizada. */
+export function submitHomework(id, { text, linkUrl }) {
+  return request(`/api/homework/${id}/submission`, {
+    method: 'PUT',
+    body: JSON.stringify({ text, linkUrl }),
+  })
+}
+
+/** Corregir una entrega. Devuelve la tarea actualizada, con todas sus entregas. */
+export function saveHomeworkFeedback(submissionId, feedback) {
+  return request(`/api/homework/submissions/${submissionId}/feedback`, {
+    method: 'POST',
+    body: JSON.stringify({ feedback }),
+  })
+}
+
+export function fetchHomeworkMessages(submissionId) {
+  return request(`/api/homework/submissions/${submissionId}/messages`)
+}
+
+export function sendHomeworkMessage(submissionId, body) {
+  return request(`/api/homework/submissions/${submissionId}/messages`, {
+    method: 'POST',
+    body: JSON.stringify({ body }),
+  })
+}
+
 // --- Docentes favoritos del alumno ------------------------------------------------
 
 /**

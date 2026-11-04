@@ -63,3 +63,38 @@ export function apiUser(overrides = {}) {
 export function updatedUser(user, payload) {
   return apiUser({ ...user, ...payload })
 }
+
+// Una entrega tal como viene adentro de una tarea (SUBMISSION_JSON en
+// backend/src/db/homework.js). Por defecto, sin entregar.
+export function apiSubmission(overrides = {}) {
+  return {
+    id: 'e1',
+    studentId: 'a1',
+    studentName: 'Sofía Ramírez',
+    text: '',
+    linkUrl: '',
+    submittedAt: null,
+    isLate: false,
+    feedback: '',
+    correctedAt: null,
+    ...overrides,
+  }
+}
+
+// Una tarea como la devuelve GET /api/homework. Sin `submissions`/`submission`:
+// el docente recibe una lista y el alumno la suya, y cada test pasa la que usa.
+export function apiHomework(overrides = {}) {
+  return {
+    id: 'h1',
+    title: 'TP 1',
+    description: 'Resolver la guía',
+    dueDate: '2099-09-20',
+    dueTime: '23:59',
+    classDate: null,
+    classStartTime: null,
+    subjectName: null,
+    teacherName: 'Laura Gómez',
+    createdAt: '2099-09-01T12:00:00.000Z',
+    ...overrides,
+  }
+}
