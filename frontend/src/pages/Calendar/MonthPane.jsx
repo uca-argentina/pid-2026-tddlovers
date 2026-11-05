@@ -52,7 +52,12 @@ const FALLBACK_LINE_HEIGHT = 19
  */
 class MonthPane extends Component {
   state = {
-    viewDate: startOfMonth(new Date().getFullYear(), new Date().getMonth()),
+    // Arranca en el mes del día elegido, no en el de hoy: si no, la tira puede
+    // mostrar una semana fuera del rango pedido.
+    viewDate: (() => {
+      const date = this.props.selectedIso ? fromISODate(this.props.selectedIso) : new Date()
+      return startOfMonth(date.getFullYear(), date.getMonth())
+    })(),
     direction: 1,
     maxVisibleEvents: DEFAULT_VISIBLE_EVENTS,
     // Solo en el teléfono: si la grilla del mes está desplegada.
