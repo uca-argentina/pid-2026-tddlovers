@@ -22,6 +22,7 @@ vi.mock('../../db/rates.js', () => ({
 }));
 
 vi.mock('../../db/users.js', () => ({
+  setAcceptsRewards: vi.fn(),
   listTeachers: vi.fn(),
 }));
 
@@ -51,7 +52,7 @@ const { createWindow, deleteWindow, findTeacherWindows, updateWindow } = await i
 const { teacherHasRateFor } = await import('../../db/rates.js');
 const { createAddress, deleteAddress, listSavedAddresses, setDefaultAddress, updateAddress } =
   await import('../../db/addresses.js');
-const { listTeachers } = await import('../../db/users.js');
+const { listTeachers, setAcceptsRewards } = await import('../../db/users.js');
 const { createOffer, deactivateOffer, listTeacherOffers } = await import('../../db/packs.js');
 const { countClassesToCancel, createVacation, deleteVacation, listTeacherVacations } = await import(
   '../../db/vacations.js'

@@ -11,6 +11,8 @@ import availabilityRoutes from './routes/availability/index.js';
 import adminRoutes from './routes/admin/index.js';
 import packsRoutes from './routes/packs/index.js';
 import favoritesRoutes from './routes/favorites/index.js';
+import homeworkRoutes from './routes/homework/index.js';
+import neuronasRoutes from './routes/neuronas/index.js';
 
 /**
  * Arma la app de Fastify, pero no la levanta. Está separado de `index.js`
@@ -87,6 +89,8 @@ export function buildApp(opts = {}) {
   app.register(adminRoutes, { prefix: '/api/admin' });
   app.register(packsRoutes, { prefix: '/api/packs' });
   app.register(favoritesRoutes, { prefix: '/api/favorites' });
+  app.register(homeworkRoutes, { prefix: '/api/homework' });
+  app.register(neuronasRoutes, { prefix: '/api/neuronas' });
 
   return app;
 }

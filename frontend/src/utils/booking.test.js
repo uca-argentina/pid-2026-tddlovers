@@ -199,6 +199,19 @@ describe('groupCardsByDate', () => {
     ])
     expect(porFecha['2026-09-14'].map((card) => card.id)).toEqual(['c', 'a', 'b'])
   })
+
+  it('pone primero a los destacados, salvo si están de licencia', () => {
+    const porFecha = groupCardsByDate([
+      tarjeta({ id: 'temprano', start: '09:00' }),
+      tarjeta({ id: 'licencia', start: '08:00', teacherFeatured: true, onVacation: true }),
+      tarjeta({ id: 'destacado', start: '18:00', teacherFeatured: true }),
+    ])
+    expect(porFecha['2026-09-14'].map((card) => card.id)).toEqual([
+      'destacado',
+      'licencia',
+      'temprano',
+    ])
+  })
 })
 
 describe('offersStartBetween', () => {

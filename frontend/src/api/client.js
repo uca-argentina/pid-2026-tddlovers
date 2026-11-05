@@ -247,10 +247,13 @@ export function classFileUrl(id, fileId) {
  * vieja). Devuelve la reserva nueva, que nace pendiente. Puede usar clases
  * de un paquete igual que una reserva (las de la vieja se liberan).
  */
-export function rescheduleLesson(id, { windowId, date, startTime, durationMinutes, packId, packTokens }) {
+export function rescheduleLesson(
+  id,
+  { windowId, date, startTime, durationMinutes, packId, packTokens, rewardType },
+) {
   return request(`/api/classes/${id}/reschedule`, {
     method: 'POST',
-    body: JSON.stringify({ windowId, date, startTime, durationMinutes, packId, packTokens }),
+    body: JSON.stringify({ windowId, date, startTime, durationMinutes, packId, packTokens, rewardType }),
   })
 }
 
@@ -264,6 +267,9 @@ export function rescheduleLesson(id, { windowId, date, startTime, durationMinute
  * `packId` + `packTokens` usan esa cantidad de clases de un paquete del
  * alumno con ese docente: lo que cubren no se paga, lo que se pasa sí. Cuando
  * el docente marca la asistencia, se descuentan del paquete.
+ *
+ * `rewardType` canjea neuronas en esta clase, si el docente acepta canjes. No se
+ * combina con un paquete.
  */
 export function bookLesson({
   windowId,
@@ -273,6 +279,7 @@ export function bookLesson({
   durationMinutes,
   packId,
   packTokens,
+  rewardType,
 }) {
   return request('/api/classes', {
     method: 'POST',
@@ -284,6 +291,7 @@ export function bookLesson({
       durationMinutes,
       packId,
       packTokens,
+      rewardType,
     }),
   })
 }
@@ -428,6 +436,56 @@ export function deleteAddress(id) {
   return request(`/api/teachers/me/addresses/${id}`, { method: 'DELETE' })
 }
 
+// --- Tareas ---------------------------------------------------------------------
+
+/**
+ * Las tareas del usuario logueado. El docente las recibe con `submissions`,
+ * una por alumno; el alumno, con `submission`, solo la suya.
+ */
+export function fetchHomeworks() {
+  return request('/api/homework')
+}
+
+/** A quién puede asignar el docente: { students, groups }. */
+export function fetchHomeworkTargets() {
+  return request('/api/homework/targets')
+}
+
+/** { title, description, dueDate, dueTime } y `studentId` o `classId`. Devuelve la tarea. */
+export function createHomework(homework) {
+  return request('/api/homework', {
+    method: 'POST',
+    body: JSON.stringify(homework),
+  })
+}
+
+/** Entregar o cambiar la entrega. Devuelve la tarea actualizada. */
+export function submitHomework(id, { text, linkUrl }) {
+  return request(`/api/homework/${id}/submission`, {
+    method: 'PUT',
+    body: JSON.stringify({ text, linkUrl }),
+  })
+}
+
+/** Corregir una entrega. Devuelve la tarea actualizada, con todas sus entregas. */
+export function saveHomeworkFeedback(submissionId, feedback) {
+  return request(`/api/homework/submissions/${submissionId}/feedback`, {
+    method: 'POST',
+    body: JSON.stringify({ feedback }),
+  })
+}
+
+export function fetchHomeworkMessages(submissionId) {
+  return request(`/api/homework/submissions/${submissionId}/messages`)
+}
+
+export function sendHomeworkMessage(submissionId, body) {
+  return request(`/api/homework/submissions/${submissionId}/messages`, {
+    method: 'POST',
+    body: JSON.stringify({ body }),
+  })
+}
+
 // --- Docentes favoritos del alumno ------------------------------------------------
 
 /**
@@ -435,6 +493,27 @@ export function deleteAddress(id) {
  * ({ id, nombre, apellido, subjects }). Solo los aprobados: si a uno lo dan
  * de baja, el favorito queda guardado pero no viene hasta que lo aprueben.
  */
+/**
+ * Saldo, nivel e historial del usuario logueado. El alumno recibe además
+ * `badges`, y el docente `featured`: lo decide el rol de la sesión.
+ */
+export function fetchNeuronas() {
+  return request('/api/neuronas')
+}
+
+/** Compra 7 días de Destacado. Devuelve { endDate }. */
+export function buyFeatured() {
+  return request('/api/neuronas/featured', { method: 'POST' })
+}
+
+/** Si el docente acepta canjes de neuronas. Devuelve { acceptsRewards }. */
+export function setAcceptsRewards(accepts) {
+  return request('/api/teachers/me/accepts-rewards', {
+    method: 'PUT',
+    body: JSON.stringify({ accepts }),
+  })
+}
+
 export function fetchFavoriteTeachers() {
   return request('/api/favorites')
 }

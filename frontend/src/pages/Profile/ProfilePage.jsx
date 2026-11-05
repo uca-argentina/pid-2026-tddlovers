@@ -3,7 +3,14 @@ import { Link } from 'react-router-dom'
 import Banner from '../../components/Banner.jsx'
 import FormField from '../../components/FormField.jsx'
 import ThemeToggle from '../../components/ThemeToggle.jsx'
-import { ChevronRightIcon, HeartIcon, PlusIcon, SpinnerIcon } from '../../components/icons.jsx'
+import {
+  ChevronRightIcon,
+  ClipboardIcon,
+  HeartIcon,
+  NeuronIcon,
+  PlusIcon,
+  SpinnerIcon,
+} from '../../components/icons.jsx'
 import withViewport from '../../routes/withViewport.jsx'
 import { isValidPhone } from '../../utils/validation.js'
 import { getInitials } from '../../utils/user.js'
@@ -12,6 +19,7 @@ import { centsToInput, MAX_HOURLY_RATE_CENTS, parseMoney } from '../../utils/rat
 import { MODALITIES } from '../../utils/windows.js'
 import { fetchSubjects, updateProfile } from '../../api/client.js'
 import AddressesSection from './AddressesSection.jsx'
+import NeuronasSetting from './NeuronasSetting.jsx'
 import './ProfilePage.css'
 
 /**
@@ -124,6 +132,10 @@ class ProfilePage extends Component {
       !this.state.subjectsLoading &&
       this.state.subjects.length === 0
     )
+  }
+
+  handleAcceptsRewardsChange = (acceptsRewards) => {
+    this.props.onUserChange?.({ ...this.props.user, acceptsRewards })
   }
 
   esDocente() {
@@ -434,10 +446,25 @@ class ProfilePage extends Component {
   /** El grupo de abajo del perfil en el teléfono, como las filas de Ajustes. */
   renderMobileSettings() {
     const esAlumno = this.props.viewRole === 'student'
+    const esDocente = this.props.viewRole === 'teacher'
     return (
       <div className="profile-section profile-settings">
         <h2 className="profile-section-title">General</h2>
         <div className="ios-group">
+          {esAlumno || esDocente ? (
+            <Link className="ios-row" to="/tareas">
+              <ClipboardIcon className="ios-row-icon" />
+              <span className="ios-row-label">Tareas</span>
+              <ChevronRightIcon className="ios-row-chevron" />
+            </Link>
+          ) : null}
+          {esAlumno || esDocente ? (
+            <Link className="ios-row" to="/neuronas">
+              <NeuronIcon className="ios-row-icon" />
+              <span className="ios-row-label">Neuronas</span>
+              <ChevronRightIcon className="ios-row-chevron" />
+            </Link>
+          ) : null}
           {esAlumno ? (
             <Link className="ios-row" to="/favoritos">
               <HeartIcon className="ios-row-icon is-favorite" />
@@ -581,6 +608,12 @@ class ProfilePage extends Component {
               guarda al momento, aparte de "Guardar cambios": por eso va
               después de esos botones. */}
           {esDocente ? <AddressesSection /> : null}
+          {esDocente ? (
+            <NeuronasSetting
+              accepts={Boolean(this.props.user?.acceptsRewards)}
+              onChange={this.handleAcceptsRewardsChange}
+            />
+          ) : null}
 
           {/* Un <Link> y no un <button>: así navega solo y de paso no corre
               riesgo de mandar el formulario. El onClick limpia la sesión en

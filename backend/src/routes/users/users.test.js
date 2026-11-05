@@ -158,6 +158,7 @@ describe('PATCH /api/users/me', () => {
       apellido: 'Lovelace',
       telefono: '+54 11 5555-5555',
       approvalStatus: 'approved',
+      acceptsRewards: false,
       subjectIds: [MATE, FISICA],
       rates: [],
     });

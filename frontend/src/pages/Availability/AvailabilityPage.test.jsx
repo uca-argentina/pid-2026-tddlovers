@@ -20,6 +20,7 @@ const {
   fetchMyVacations,
   fetchFavoriteTeachers,
   fetchMyPacks,
+  fetchNeuronas,
   fetchSubjects,
   updateWindow,
 } = vi.hoisted(() => ({
@@ -32,6 +33,7 @@ const {
   // Nadie tiene vacaciones cargadas en estos tests.
   fetchMyVacations: vi.fn(() => Promise.resolve([])),
   fetchMyPacks: vi.fn(() => Promise.resolve([])),
+  fetchNeuronas: vi.fn(() => Promise.resolve({ balance: 0 })),
   fetchFavoriteTeachers: vi.fn(() => Promise.resolve([])),
   fetchSubjects: vi.fn(),
   updateWindow: vi.fn(),
@@ -46,6 +48,7 @@ vi.mock('../../api/client.js', () => ({
   fetchMyWindows,
   fetchMyVacations,
   fetchMyPacks,
+  fetchNeuronas,
   fetchFavoriteTeachers,
   fetchSubjects,
   updateWindow,

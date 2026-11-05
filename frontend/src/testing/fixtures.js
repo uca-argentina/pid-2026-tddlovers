@@ -33,6 +33,8 @@ export function apiClass(overrides = {}) {
     rescheduledFrom: null,
     studentPackId: null,
     packTokens: 0,
+    rewardType: null,
+    rewardNeuronas: 0,
     enrolled: 1,
     hasMaterial: false,
     ...overrides,
@@ -52,6 +54,7 @@ export function apiUser(overrides = {}) {
     apellido: 'Klos',
     telefono: null,
     approvalStatus: 'approved',
+    acceptsRewards: false,
     subjectIds: [],
     rates: [],
     ...overrides,
@@ -62,4 +65,67 @@ export function apiUser(overrides = {}) {
 // solo lo que se mandó.
 export function updatedUser(user, payload) {
   return apiUser({ ...user, ...payload })
+}
+
+// Una entrega tal como viene adentro de una tarea (SUBMISSION_JSON en
+// backend/src/db/homework.js). Por defecto, sin entregar.
+export function apiSubmission(overrides = {}) {
+  return {
+    id: 'e1',
+    studentId: 'a1',
+    studentName: 'Sofía Ramírez',
+    text: '',
+    linkUrl: '',
+    submittedAt: null,
+    isLate: false,
+    feedback: '',
+    correctedAt: null,
+    ...overrides,
+  }
+}
+
+// Una tarea como la devuelve GET /api/homework. Sin `submissions`/`submission`:
+// el docente recibe una lista y el alumno la suya, y cada test pasa la que usa.
+export function apiHomework(overrides = {}) {
+  return {
+    id: 'h1',
+    title: 'TP 1',
+    description: 'Resolver la guía',
+    dueDate: '2099-09-20',
+    dueTime: '23:59',
+    classDate: null,
+    classStartTime: null,
+    subjectName: null,
+    teacherName: 'Laura Gómez',
+    createdAt: '2099-09-01T12:00:00.000Z',
+    ...overrides,
+  }
+}
+
+// Lo que responde GET /api/neuronas a un alumno (routes/neuronas en el backend).
+export function apiNeuronas(overrides = {}) {
+  return {
+    balance: 250,
+    earned: 250,
+    level: { name: 'Sinapsis', min: 200, nextName: 'Red neuronal', nextMin: 600 },
+    movements: [],
+    badges: [
+      { key: 'first_class', label: 'Primera clase', earned: true },
+      { key: 'ten_classes', label: '10 clases', earned: false },
+      { key: 'five_homeworks', label: '5 tareas a tiempo', earned: false },
+    ],
+    ...overrides,
+  }
+}
+
+// Lo mismo para un docente: en vez de insignias trae el estado de Destacado.
+export function apiTeacherNeuronas(overrides = {}) {
+  return {
+    balance: 1200,
+    earned: 1200,
+    movements: [],
+    level: { name: 'Red neuronal', min: 600, nextName: 'Mente brillante', nextMin: 1500 },
+    featured: { activeUntil: null, slotsLeft: 5, cost: 1000, days: 7 },
+    ...overrides,
+  }
 }

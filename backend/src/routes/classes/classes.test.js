@@ -24,6 +24,11 @@ vi.mock('../../db/packs.js', () => ({
   listStudentPacks: vi.fn(),
 }));
 
+vi.mock('../../db/neuronas.js', () => ({
+  findBalance: vi.fn(),
+  settleHomeworkCredits: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('../../db/vacations.js', () => ({
   isTeacherOnVacation: vi.fn().mockResolvedValue(false),
 }));
@@ -67,6 +72,7 @@ const { findWindowById } = await import('../../db/availability.js');
 const { findRate } = await import('../../db/rates.js');
 const { listStudentPacks } = await import('../../db/packs.js');
 const { isTeacherOnVacation } = await import('../../db/vacations.js');
+const { findBalance } = await import('../../db/neuronas.js');
 const { addFiles, deleteFile, findFileMeta, findMaterial, saveSummary } = await import(
   '../../db/classMaterials.js'
 );
@@ -115,6 +121,7 @@ const ventana = (over = {}) => ({
   address: null,
   teacherName: 'Laura Gómez',
   teacherApprovalStatus: 'approved',
+  teacherAcceptsRewards: false,
   ...over,
 });
 
@@ -149,6 +156,8 @@ const clase = (over = {}) => ({
   rescheduledFrom: null,
   studentPackId: null,
   packTokens: 0,
+  rewardType: null,
+  rewardNeuronas: 0,
   enrolled: 1,
   hasMaterial: false,
   ...over,
@@ -204,6 +213,8 @@ describe('POST /api/classes', () => {
       priceCents: 750000,
       studentPackId: null,
       packTokens: 0,
+      rewardType: null,
+      rewardNeuronas: 0,
     });
   });
 
@@ -1147,5 +1158,100 @@ describe('class material', () => {
 
     expect(res.statusCode).toBe(404);
     expect(signedDownloadUrl).not.toHaveBeenCalled();
+  });
+});
+
+describe('canjear neuronas al reservar', () => {
+  let app;
+  const canje = { rewardType: 'free_60', durationMinutes: 90 };
+
+  const reservar = async (body) => {
+    const headers = await authedHeaders(app);
+    return app.inject({ method: 'POST', url: '/api/classes', headers, payload: reserva(body) });
+  };
+
+  beforeEach(() => {
+    app = buildApp({ logger: false });
+    vi.clearAllMocks();
+    findWindowById.mockResolvedValue(ventana({ teacherAcceptsRewards: true }));
+    findRate.mockResolvedValue(500000);
+    hasOverlappingClass.mockResolvedValue(false);
+    isTeacherOnVacation.mockResolvedValue(false);
+    findBalance.mockResolvedValue({ balance: 1000, earned: 1000 });
+    bookClass.mockResolvedValue({ id: CLASE_ID });
+    findClassById.mockResolvedValue(clase());
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  it('cubre lo canjeado y cobra solo el resto', async () => {
+    const res = await reservar(canje);
+
+    expect(res.statusCode).toBe(201);
+    expect(bookClass).toHaveBeenCalledWith(
+      expect.objectContaining({
+        // Quedan 30 min de 1 h 30 a $ 5.000/h.
+        priceCents: 250000,
+        rewardType: 'free_60',
+        rewardNeuronas: 1000,
+      })
+    );
+  });
+
+  it('el descuento se aplica solo sobre los primeros 60 minutos', async () => {
+    await reservar({ rewardType: 'discount_20', durationMinutes: 90 });
+
+    // $ 7.500 menos el 20% de $ 5.000.
+    expect(bookClass).toHaveBeenCalledWith(expect.objectContaining({ priceCents: 650000 }));
+  });
+
+  it('rechaza si no alcanzan las neuronas', async () => {
+    findBalance.mockResolvedValue({ balance: 999, earned: 999 });
+
+    const res = await reservar(canje);
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json().message).toBe('No te alcanzan las neuronas.');
+    expect(bookClass).not.toHaveBeenCalled();
+  });
+
+  it('rechaza si el docente no acepta canjes', async () => {
+    findWindowById.mockResolvedValue(ventana({ teacherAcceptsRewards: false }));
+
+    expect((await reservar(canje)).statusCode).toBe(409);
+    expect(bookClass).not.toHaveBeenCalled();
+  });
+
+  it('rechaza un canje que cubre más de lo que dura la clase', async () => {
+    expect((await reservar({ rewardType: 'free_60', durationMinutes: 30 })).statusCode).toBe(409);
+  });
+
+  it('rechaza un tipo de canje que no existe, también los heredados de Object', async () => {
+    expect((await reservar({ rewardType: 'free_999', durationMinutes: 60 })).statusCode).toBe(400);
+    expect((await reservar({ rewardType: 'toString', durationMinutes: 60 })).statusCode).toBe(400);
+  });
+
+  it('no combina canje y paquete', async () => {
+    const res = await reservar({ ...canje, packId: CLASE_ID, packTokens: 1 });
+
+    expect(res.statusCode).toBe(400);
+    expect(bookClass).not.toHaveBeenCalled();
+  });
+
+  it('aceptar una clase cubierta por el canje la confirma paga', async () => {
+    findClassById.mockResolvedValue(
+      clase({ teacherId: 'user-1', studentId: ALUMNO + '-otro', priceCents: 0, rewardType: 'free_60', rewardNeuronas: 1000 })
+    );
+    transitionClass.mockResolvedValue(true);
+    const headers = await authedHeaders(app, 'teacher');
+
+    await app.inject({ method: 'POST', url: `/api/classes/${CLASE_ID}/accept`, headers });
+
+    expect(transitionClass).toHaveBeenCalledWith(
+      CLASE_ID,
+      expect.objectContaining({ to: 'confirmada', paid: true })
+    );
   });
 });

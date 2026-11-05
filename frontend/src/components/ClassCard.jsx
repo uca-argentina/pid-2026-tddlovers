@@ -8,6 +8,7 @@ import { formatDayLong, fromISODate } from '../utils/calendar.js'
 import { isFavorite } from '../utils/favorites.js'
 import { formatMoney } from '../utils/rates.js'
 import { capacityLabel, modalityLabel } from '../utils/windows.js'
+import { rewardLabel } from '../utils/neuronas.js'
 import './ClassCard.css'
 
 // Lo que se puede tocar adentro de la tarjeta sin abrirla.
@@ -92,6 +93,7 @@ class ClassCard extends Component {
             {cls.packTokens > 0
               ? ` · ${cls.packTokens === 1 ? '1 clase' : `${cls.packTokens} clases`} del paquete`
               : ''}
+            {cls.rewardType ? ` · ${rewardLabel(cls.rewardType)} con neuronas` : ''}
           </p>
           {viewRole === 'student' && favoriteIds ? (
             <FavoriteButton

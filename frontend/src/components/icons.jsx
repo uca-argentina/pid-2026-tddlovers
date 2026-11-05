@@ -313,6 +313,35 @@ export function ListCheckIcon(props) {
   )
 }
 
+/** Portapapeles: tareas. */
+export function NeuronIcon(props) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M10 2.5l1.8 4.7 4.7 1.8-4.7 1.8L10 15.5l-1.8-4.7-4.7-1.8 4.7-1.8L10 2.5zM15.5 14l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7.7-1.8z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+export function ClipboardIcon(props) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M7 3.5H5.5A1.5 1.5 0 004 5v11a1.5 1.5 0 001.5 1.5h9A1.5 1.5 0 0016 16V5a1.5 1.5 0 00-1.5-1.5H13M7 3.5A1 1 0 018 2.5h4a1 1 0 011 1 1 1 0 01-1 1H8a1 1 0 01-1-1zM7 10h6M7 13.5h4"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 export function TrashIcon(props) {
   return (
     <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" {...props}>

@@ -4,6 +4,7 @@ import {
   cancelDescription,
   owesPayment,
   statusLabel,
+  paymentStatus,
 } from './classStates.js'
 import { apiClass } from '../testing/fixtures.js'
 
@@ -79,5 +80,20 @@ describe('textos', () => {
     )
     expect(cancelDeadlineHint(clase({ status: 'confirmada' }), CASI)).toMatch(/menos de 24 h/)
     expect(cancelDeadlineHint(clase(), LEJOS)).toBeNull()
+  })
+})
+
+describe('paymentStatus con neuronas', () => {
+  it('una clase cubierta por el canje dice "Con neuronas", también ya confirmada', () => {
+    const canjeada = { priceCents: 0, rewardType: 'free_60', paidAt: null, packTokens: 0 }
+    expect(paymentStatus(canjeada).label).toBe('Con neuronas')
+    expect(paymentStatus({ ...canjeada, paidAt: '2099-09-14T12:00:00.000Z' }).label).toBe(
+      'Con neuronas',
+    )
+  })
+
+  it('con un resto por pagar sigue el camino de siempre', () => {
+    const conResto = { priceCents: 250000, rewardType: 'free_60', paidAt: null, packTokens: 0 }
+    expect(paymentStatus(conResto).label).toBe('Sin pagar')
   })
 })

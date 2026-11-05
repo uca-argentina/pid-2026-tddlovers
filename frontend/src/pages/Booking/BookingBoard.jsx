@@ -14,6 +14,7 @@ import {
   fetchFavoriteTeachers,
   fetchMyLessons,
   fetchMyPacks,
+  fetchNeuronas,
   fetchSubjects,
 } from '../../api/client.js'
 import { formatDayLong, fromISODate, toISODate } from '../../utils/calendar.js'
@@ -80,6 +81,7 @@ class BookingBoard extends Component {
     // Los paquetes que compró el alumno: cada tarjeta dice cuántas clases le
     // quedan con ese docente, y el modal ofrece reservar con el paquete.
     packs: [],
+    neuronasBalance: 0,
     // Los ids (string) de los docentes favoritos del alumno: el corazón de
     // cada tarjeta y el filtro "Solo favoritos".
     favoriteIds: [],
@@ -109,6 +111,7 @@ class BookingBoard extends Component {
   rescheduleToken = 0
 
   packsToken = 0
+  neuronasToken = 0
 
   favoritesToken = 0
 
@@ -123,6 +126,7 @@ class BookingBoard extends Component {
     this.applyQuery()
     this.loadReschedule()
     this.loadPacks()
+    this.loadNeuronas()
     this.loadFavorites()
   }
 
@@ -132,6 +136,7 @@ class BookingBoard extends Component {
     // favoritos.
     if (prevProps.user !== this.props.user) {
       this.loadPacks()
+      this.loadNeuronas()
       this.loadFavorites()
     }
     if (prevProps.router.location.search !== this.props.router.location.search) {
@@ -147,6 +152,7 @@ class BookingBoard extends Component {
     this.subjectsToken += 1
     this.rescheduleToken += 1
     this.packsToken += 1
+    this.neuronasToken += 1
     this.favoritesToken += 1
   }
 
@@ -190,6 +196,22 @@ class BookingBoard extends Component {
       })
       .catch(() => {
         if (token === this.packsToken) this.setState({ packs: [] })
+      })
+  }
+
+  /** Igual que los paquetes: si falla, el tablero sigue andando sin ofrecer canjes. */
+  loadNeuronas() {
+    const token = ++this.neuronasToken
+    if (!this.isStudent()) {
+      this.setState({ neuronasBalance: 0 })
+      return
+    }
+    fetchNeuronas()
+      .then(({ balance }) => {
+        if (token === this.neuronasToken) this.setState({ neuronasBalance: balance })
+      })
+      .catch(() => {
+        if (token === this.neuronasToken) this.setState({ neuronasBalance: 0 })
       })
   }
 
@@ -548,6 +570,7 @@ class BookingBoard extends Component {
     if (from && to) this.loadRange(from, to)
     // Una clase con paquete aparta un lugar del paquete.
     if (booked.usedPack) this.loadPacks()
+    if (booked.usedReward) this.loadNeuronas()
   }
 
   handleStopReschedule = () => {
@@ -644,6 +667,7 @@ class BookingBoard extends Component {
         card={booking}
         rescheduleOf={this.state.rescheduling}
         packs={this.state.packs}
+        neuronasBalance={this.state.neuronasBalance}
         onClose={this.handleCloseDialog}
         onBooked={this.handleBooked}
       />

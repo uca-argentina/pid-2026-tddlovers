@@ -198,6 +198,8 @@ export function expandAvailability({ windows, taken, vacations = [], from, to, n
         dayKey: dayKeyFromIso(iso),
         teacherId: window.teacherId,
         teacherName: window.teacherName,
+        teacherAcceptsRewards: Boolean(window.teacherAcceptsRewards),
+        teacherFeatured: Boolean(window.teacherFeatured),
         start: window.start,
         end: window.end,
         modality: window.modality,
