@@ -1,5 +1,6 @@
 import { getPool } from './pool.js';
 import { formatAddress } from '../lib/addresses.js';
+import { hasBalanceFor, syncTurnCredits } from './neuronas.js';
 
 // La fila tal como la espera el front (ver CLAUDE.md en la raíz): fechas
 // 'YYYY-MM-DD' y horas 'HH:MM', sin zona horaria. Mandar un timestamp UTC
@@ -29,6 +30,8 @@ const CLASS_COLUMNS = `
   c.rescheduled_from AS "rescheduledFrom",
   c.student_pack_id AS "studentPackId",
   c.pack_tokens AS "packTokens",
+  c.reward_type AS "rewardType",
+  c.reward_neuronas AS "rewardNeuronas",
   (
     -- Cuántos hay anotados en ese turno (una grupal son varias filas con el
     -- mismo docente, fecha e inicio). Un número y no nombres: el alumno ve
@@ -203,11 +206,20 @@ async function insertClass(
     rescheduledFrom = null,
     studentPackId = null,
     packTokens = 0,
+    rewardType = null,
+    rewardNeuronas = 0,
   }
 ) {
   if (studentPackId) {
     const packConflict = await reservePackSlot(client, studentPackId, date, packTokens);
     if (packConflict) return { conflict: packConflict };
+  }
+
+  // La ruta ya miró el saldo, pero el alumno puede estar gastando lo mismo en
+  // otra pestaña. Al reprogramar la clase vieja ya se canceló, así que su canje
+  // ya volvió al saldo.
+  if (rewardType && !(await hasBalanceFor(client, studentId, rewardNeuronas))) {
+    return { conflict: 'No te alcanzan las neuronas.' };
   }
 
   await client.query(`SELECT pg_advisory_xact_lock(hashtext('classes:' || $1 || $2))`, [
@@ -251,10 +263,10 @@ async function insertClass(
     `INSERT INTO classes (
        teacher_id, student_id, subject_id, class_date, start_time, end_time,
        availability_id, modality, max_students, meeting_url, address, locality, price_cents,
-       rescheduled_from, student_pack_id, pack_tokens
+       rescheduled_from, student_pack_id, pack_tokens, reward_type, reward_neuronas
      )
      VALUES ($1, $2, $3, $4::date, $5::time, $6::time, $7, $8::class_modality, $9, $10, $11, $12, $13, $14,
-             $15, $16)
+             $15, $16, $17, $18)
      RETURNING id`,
     [
       window.teacherId,
@@ -275,6 +287,8 @@ async function insertClass(
       rescheduledFrom,
       studentPackId,
       packTokens,
+      rewardType,
+      rewardNeuronas,
     ]
   );
   return { id: result.rows[0].id };
@@ -339,12 +353,38 @@ const TRANSITION_SQL = `
       cancelled_at = CASE WHEN $3::class_status = 'cancelada' THEN now() ELSE cancelled_at END,
       cancelled_by = COALESCE($5::user_role, cancelled_by),
       cancel_reason = COALESCE($6, cancel_reason)
-  WHERE id = $1 AND status = $2::class_status AND (NOT $4 OR paid_at IS NULL)`;
+  WHERE id = $1 AND status = $2::class_status AND (NOT $4 OR paid_at IS NULL)
+  RETURNING teacher_id AS "teacherId",
+            to_char(class_date, 'YYYY-MM-DD') AS date,
+            to_char(start_time, 'HH24:MI') AS "startTime"`;
 
 export async function transitionClass(id, { from, to, paid = false, cancelledBy = null, cancelReason = null }) {
   const params = [id, from, to, paid, cancelledBy, cancelReason];
-  const result = await getPool().query(TRANSITION_SQL, params);
-  return result.rowCount > 0;
+  // Solo tomar lista y pagar pueden cambiar quién gana neuronas. Se hace en la
+  // misma transacción: si no, una falla dejaría una asistencia sin sus neuronas.
+  const affectsNeuronas = paid || to === 'realizada' || to === 'no_presentada';
+  if (!affectsNeuronas) {
+    const result = await getPool().query(TRANSITION_SQL, params);
+    return result.rowCount > 0;
+  }
+
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query(TRANSITION_SQL, params);
+    if (result.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return false;
+    }
+    await syncTurnCredits(client, result.rows[0]);
+    await client.query('COMMIT');
+    return true;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 /**

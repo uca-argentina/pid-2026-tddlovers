@@ -8,6 +8,7 @@ import CalendarPage from './pages/Calendar/CalendarPage.jsx'
 import FavoritesPage from './pages/Favorites/FavoritesPage.jsx'
 import HomeworkPage from './pages/Homework/HomeworkPage.jsx'
 import LoginPage from './pages/Login/LoginPage.jsx'
+import NeuronasPage from './pages/Neuronas/NeuronasPage.jsx'
 import ProfilePage from './pages/Profile/ProfilePage.jsx'
 import RegisterPage from './pages/Register/RegisterPage.jsx'
 import ReservationsPage from './pages/Reservations/ReservationsPage.jsx'
@@ -141,6 +142,7 @@ class App extends Component {
             />
             <Route path="/reservas" element={<ReservationsPage viewRole={viewRole} />} />
             <Route path="/tareas" element={<HomeworkPage viewRole={viewRole} />} />
+            <Route path="/neuronas" element={<NeuronasPage viewRole={viewRole} user={user} />} />
             <Route path="/paquetes" element={<PacksPage viewRole={viewRole} user={user} />} />
             <Route path="/favoritos" element={<FavoritesPage viewRole={viewRole} />} />
             <Route

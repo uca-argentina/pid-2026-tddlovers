@@ -138,3 +138,22 @@ describe('BookingCard', () => {
     expect(onReservar).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('BookingCard — neuronas', () => {
+  it('muestra las etiquetas de Destacado y de canjes', () => {
+    renderCard({ teacherFeatured: true, teacherAcceptsRewards: true })
+    expect(screen.getByText('Destacado')).toBeInTheDocument()
+    expect(screen.getByText('Acepta neuronas')).toBeInTheDocument()
+  })
+
+  it('sin nada de eso no muestra etiquetas', () => {
+    renderCard({})
+    expect(screen.queryByText('Destacado')).not.toBeInTheDocument()
+    expect(screen.queryByText('Acepta neuronas')).not.toBeInTheDocument()
+  })
+
+  it('de licencia no se muestra como destacado', () => {
+    renderCard({ teacherFeatured: true, onVacation: true, bookable: false })
+    expect(screen.queryByText('Destacado')).not.toBeInTheDocument()
+  })
+})

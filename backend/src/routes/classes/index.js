@@ -31,6 +31,8 @@ import {
 import { findRate } from '../../db/rates.js';
 import { listStudentPacks } from '../../db/packs.js';
 import { StudentPack } from '../../lib/classPacks.js';
+import { findBalance, settleHomeworkCredits } from '../../db/neuronas.js';
+import { REWARDS, rewardPriceCents, rewardProblem } from '../../lib/neuronas.js';
 import { isTeacherOnVacation } from '../../db/vacations.js';
 import { VACATION_MESSAGE } from '../../lib/vacations.js';
 import { occursOn, toMinutes, toTime } from '../../lib/availabilityExpansion.js';
@@ -78,12 +80,16 @@ const fail = (status, message, fields) => ({ error: { status, body: fields ? { m
  * materia. Su asistencia descuenta esas clases del paquete. Al reprogramar
  * vale lo mismo: la vieja libera las suyas en la misma transacción.
  *
+ * `rewardType` canjea neuronas por la clase o parte de ella, si el docente acepta
+ * canjes. No se combina con un paquete. Al reprogramar, el canje de la clase
+ * vieja vuelve al saldo en la misma transacción, así que se puede volver a usar.
+ *
  * Devuelve { booking } listo para bookClass/rescheduleClass, o { error }.
  */
 async function validateBooking(body, user, fixed = null) {
   const { windowId, date, startTime, durationMinutes } = body ?? {};
   const subjectId = fixed ? fixed.subjectId : body?.subjectId;
-  const { packId = null, packTokens = 0 } = body ?? {};
+  const { packId = null, packTokens = 0, rewardType = null } = body ?? {};
 
   if (!ISO_DATE_RE.test(date ?? '')) return fail(400, 'Fecha inválida', { date: 'invalid' });
   if (!TIME_RE.test(startTime ?? '')) {
@@ -98,6 +104,12 @@ async function validateBooking(body, user, fixed = null) {
   }
   if (packTokens !== 0 && packId === null) {
     return fail(400, 'Elegí de qué paquete usás las clases.', { packId: 'required' });
+  }
+  if (rewardType !== null && !Object.hasOwn(REWARDS, rewardType)) {
+    return fail(400, 'Canje inválido', { rewardType: 'invalid' });
+  }
+  if (rewardType !== null && packId !== null) {
+    return fail(400, 'Usá un paquete o neuronas, no los dos.', { rewardType: 'invalid' });
   }
   if (!isValidClassMinutes(durationMinutes)) {
     return fail(400, `La clase dura como mínimo ${MIN_CLASS_MINUTES} minutos, de a 5.`, {
@@ -178,6 +190,22 @@ async function validateBooking(body, user, fixed = null) {
     extraMinutes = pack.extraMinutes({ tokens, minutes: durationMinutes });
   }
 
+  let priceCents = classPriceCents(hourlyRateCents, extraMinutes);
+  let rewardNeuronas = 0;
+  if (rewardType) {
+    if (!window.teacherAcceptsRewards) return fail(409, 'Este docente no acepta canjes de neuronas.');
+    const pricing = { hourlyRateCents, minutes: durationMinutes };
+    const problem = rewardProblem(rewardType, pricing);
+    if (problem) return fail(409, problem, { rewardType: 'invalid' });
+
+    rewardNeuronas = REWARDS[rewardType].cost;
+    await settleHomeworkCredits(user.id, { iso, time });
+    const { balance } = await findBalance(user.id);
+    const freed = fixed ? fixed.rewardNeuronas : 0;
+    if (balance + freed < rewardNeuronas) return fail(409, 'No te alcanzan las neuronas.');
+    priceCents = rewardPriceCents(rewardType, pricing);
+  }
+
   return {
     booking: {
       window,
@@ -188,9 +216,11 @@ async function validateBooking(body, user, fixed = null) {
       subjectId,
       // Lo cubierto por el paquete ya se pagó al comprarlo: el precio de la
       // clase es solo lo que se pasa (0 si el paquete la cubre entera).
-      priceCents: classPriceCents(hourlyRateCents, extraMinutes),
+      priceCents,
       studentPackId: packId || null,
       packTokens: packId ? packTokens : 0,
+      rewardType,
+      rewardNeuronas,
     },
   };
 }
@@ -281,11 +311,11 @@ export default async function classesRoutes(app) {
     );
   }
 
-  // Una clase que el paquete cubre entera ya está paga: aceptarla la confirma
-  // directo, sin pasar por "aceptada, falta pagar". Si se pasa del paquete,
-  // ese resto se paga como cualquier clase.
+  // Una clase que el paquete o el canje cubren entera ya está paga: aceptarla la
+  // confirma directo, sin pasar por "aceptada, falta pagar". Si se pasa de lo
+  // cubierto, ese resto se paga como cualquier clase.
   const applyAccept = ({ cls }) =>
-    cls.studentPackId && cls.priceCents === 0
+    (cls.studentPackId || cls.rewardType) && cls.priceCents === 0
       ? { to: 'confirmada', paid: true }
       : { to: 'aceptada' };
 

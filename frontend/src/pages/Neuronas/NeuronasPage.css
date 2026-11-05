@@ -1,0 +1,231 @@
+/* Lista angosta, como favoritos y paquetes: .app-main es ancho por el calendario. */
+.neuronas-page {
+  width: 100%;
+  max-width: 720px;
+  margin-inline: auto;
+}
+
+.neuronas-page > .banner {
+  margin-bottom: 16px;
+}
+
+.neuronas-title {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.neuronas-subtitle {
+  margin: 4px 0 20px;
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+.neuronas-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 24px 0;
+  margin: 0;
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+.neuronas-loading svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Misma tarjeta que los paquetes y las reservas. */
+.neuronas-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 14px 16px;
+  background: var(--color-surface-solid);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-panel);
+}
+
+.neuronas-balance-label {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.neuronas-balance {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--color-primary);
+}
+
+.neuronas-level {
+  width: 100%;
+  margin-top: 4px;
+}
+
+.neuronas-level-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.neuronas-level-head strong {
+  color: var(--color-text);
+}
+
+.neuronas-level-bar {
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+}
+
+.neuronas-level-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-primary);
+}
+
+.neuronas-section {
+  margin-top: 24px;
+}
+
+.neuronas-section-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.neuronas-note {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.neuronas-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: var(--color-surface-solid);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.neuronas-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 16px;
+  font-size: 14px;
+  color: var(--color-text);
+}
+
+.neuronas-row + .neuronas-row {
+  border-top: 1px solid var(--color-border);
+}
+
+.neuronas-row strong {
+  flex-shrink: 0;
+  max-width: 55%;
+  font-weight: 600;
+  text-align: right;
+}
+
+.neuronas-row strong.is-earned {
+  color: var(--color-primary);
+}
+
+.neuronas-row strong.is-spent {
+  color: var(--color-text-muted);
+}
+
+.neuronas-row-detail {
+  display: block;
+  margin-top: 1px;
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+}
+
+.neuronas-badges {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+}
+
+/* La pendiente se distingue por el borde punteado, no solo por el color. */
+.neuronas-badge {
+  padding: 6px 12px;
+  border: 1px dashed var(--color-border);
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.neuronas-badge.is-earned {
+  border: 1px solid var(--color-primary);
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+}
+
+.neuronas-featured-text,
+.neuronas-featured-active {
+  margin: 0;
+  font-size: 14px;
+  color: var(--color-text);
+}
+
+.neuronas-featured-active {
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+/* Teléfono: título grande como el resto de las pantallas (ver .large-title). */
+@media (max-width: 700px) {
+  .neuronas-title {
+    font-size: 30px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+
+  .neuronas-subtitle {
+    font-size: 13.5px;
+  }
+}
+
+/* El "‹ Perfil" del teléfono, como el botón de volver de iOS. */
+.neuronas-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin: 0 0 6px -6px;
+  padding: 6px 6px 6px 0;
+  color: var(--color-primary);
+  font-size: 16px;
+  text-decoration: none;
+}
+
+.neuronas-back svg {
+  width: 20px;
+  height: 20px;
+}

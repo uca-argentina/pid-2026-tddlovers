@@ -20,7 +20,7 @@ export const CLASS_STATUSES = [
 
 // Minutos desde el "epoch" tratando fecha y hora como hora local sin zona:
 // alcanza para restar dos momentos, que es lo único que se hace con esto.
-function toEpochMinutes(iso, time) {
+export function toEpochMinutes(iso, time) {
   const [y, m, d] = iso.split('-').map(Number);
   const [hh, mm] = time.split(':').map(Number);
   return Date.UTC(y, m - 1, d, hh, mm) / 60000;

@@ -20,6 +20,7 @@ const { bookLesson, fetchAvailability, fetchClass, fetchMyLessons, fetchSubjects
 // Los paquetes del alumno: el tablero los pide para ofrecer reservar con
 // ellos. Acá nadie tiene paquete.
 const fetchMyPacks = vi.hoisted(() => vi.fn(() => Promise.resolve([])))
+const fetchNeuronas = vi.hoisted(() => vi.fn(() => Promise.resolve({ balance: 0 })))
 
 // Los docentes favoritos del alumno: el corazón de cada tarjeta y el filtro
 // "Solo favoritos". Salvo en sus tests, nadie es favorito.
@@ -39,6 +40,7 @@ vi.mock('../../api/client.js', () => ({
   fetchFavoriteTeachers,
   fetchMyLessons,
   fetchMyPacks,
+  fetchNeuronas,
   fetchSubjects,
   removeFavoriteTeacher,
   rescheduleLesson,
@@ -488,6 +490,74 @@ describe('BookingBoard', () => {
     const modal = screen.getByRole('dialog')
     expect(modal).toHaveTextContent('Matemática')
     expect(modal).toHaveTextContent('Laura Gómez')
+  })
+
+  describe('canjear neuronas', () => {
+    const abrir = async (saldo) => {
+      fetchNeuronas.mockResolvedValue({ balance: saldo })
+      fetchAvailability.mockResolvedValue([slot({ teacherAcceptsRewards: true })])
+      renderBoard()
+      await esperarCarga()
+      await waitFor(() => expect(fetchNeuronas).toHaveBeenCalled())
+      await userEvent.click(await screen.findByRole('button', { name: /^Reservar / }))
+      const modal = screen.getByRole('dialog')
+      await userEvent.click(within(modal).getByRole('button', { name: '14:00' }))
+      return modal
+    }
+
+    afterEach(() => {
+      fetchNeuronas.mockReset().mockResolvedValue({ balance: 0 })
+    })
+
+    it('manda el canje y muestra que la clase queda cubierta', async () => {
+      const modal = await abrir(1000)
+
+      await userEvent.click(within(modal).getByRole('button', { name: /1 h gratis/ }))
+      expect(within(modal).getByText('Cubierta con neuronas')).toBeInTheDocument()
+
+      await userEvent.click(within(modal).getByRole('button', { name: 'Confirmar reserva' }))
+      await waitFor(() =>
+        expect(bookLesson).toHaveBeenCalledWith(expect.objectContaining({ rewardType: 'free_60' })),
+      )
+    })
+
+    it('el descuento muestra lo que queda por pagar', async () => {
+      const modal = await abrir(1000)
+
+      await userEvent.click(within(modal).getByRole('button', { name: /20% de descuento/ }))
+      // $ 5.000/h por 1 h, menos el 20%.
+      expect(within(modal).getByText(/\$\s4\.000/)).toBeInTheDocument()
+    })
+
+    it('deshabilita lo que no alcanza', async () => {
+      const modal = await abrir(600)
+
+      expect(within(modal).getByRole('button', { name: /1 h gratis/ })).toBeDisabled()
+      expect(within(modal).getByRole('button', { name: /30 min gratis/ })).toBeEnabled()
+    })
+
+    it('si la clase se acorta, deja de aplicar un canje que ya no entra', async () => {
+      const modal = await abrir(1000)
+
+      await userEvent.click(within(modal).getByRole('button', { name: /1 h gratis/ }))
+      fireEvent.change(within(modal).getByLabelText('¿Cuánto dura?'), { target: { value: '30' } })
+
+      expect(within(modal).queryByText('Cubierta con neuronas')).not.toBeInTheDocument()
+      await userEvent.click(within(modal).getByRole('button', { name: 'Confirmar reserva' }))
+      await waitFor(() => expect(bookLesson).toHaveBeenCalled())
+      expect(bookLesson.mock.calls.at(-1)[0].rewardType).toBeUndefined()
+    })
+
+    it('sin canjes activos no se ofrece', async () => {
+      fetchNeuronas.mockResolvedValue({ balance: 5000 })
+      renderBoard()
+      await esperarCarga()
+      await userEvent.click(await screen.findByRole('button', { name: /^Reservar / }))
+      const modal = screen.getByRole('dialog')
+      await userEvent.click(within(modal).getByRole('button', { name: '14:00' }))
+
+      expect(within(modal).queryByText('Usar neuronas')).not.toBeInTheDocument()
+    })
   })
 
   it('arma la clase: hora, duración y precio calculado, y recarga el mes', async () => {

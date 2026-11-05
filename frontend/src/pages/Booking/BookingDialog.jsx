@@ -30,6 +30,12 @@ import {
   packClassesLabel,
   usablePackFor,
 } from '../../utils/packs.js'
+import {
+  REWARDS,
+  formatNeuronas,
+  rewardFits,
+  rewardPriceCents,
+} from '../../utils/neuronas.js'
 import './BookingDialog.css'
 
 // La duración con la que arranca el selector al elegir un horario: una hora
@@ -55,6 +61,10 @@ const DEFAULT_MINUTES = 60
  * paga aparte con la tarifa ("1 clase de 1 h + 30 min a pagar"). Materia,
  * horario y duración se eligen igual, y al reprogramar también.
  *
+ * Si el docente acepta canjes, puede usar neuronas en vez del paquete: las dos
+ * cosas juntas no van. Un canje que deja de entrar porque se acortó la clase
+ * se deja de aplicar solo.
+ *
  * Acá NO se vuelve a calcular qué está libre: la tarjeta ya trae los inicios
  * posibles con su duración máxima (del backend, recortados por las clases
  * propias en annotateClashes). Una segunda cuenta sería una segunda verdad.
@@ -76,6 +86,7 @@ class BookingDialog extends Component {
       // Cuántas clases del paquete usa. null = "todas las que entran", que
       // es lo que conviene de entrada y se acomoda solo si cambia la duración.
       packTokens: null,
+      rewardType: null,
       saving: false,
       error: null,
     }
@@ -93,6 +104,7 @@ class BookingDialog extends Component {
 
   /** Cuántas usa: lo que eligió, recortado a lo que entra ahora. */
   getTokens(selection = this.getSelection()) {
+    if (this.getReward(selection)) return 0
     const max = this.getMaxTokens(selection)
     const { packTokens } = this.state
     return packTokens === null ? max : Math.min(packTokens, max)
@@ -103,6 +115,19 @@ class BookingDialog extends Component {
     const pack = this.getUsablePack()
     const cubiertos = pack ? this.getTokens(selection) * pack.classMinutes : 0
     return Math.max(selection.minutes - cubiertos, 0)
+  }
+
+  /** El canje elegido, si todavía entra en la clase armada. */
+  getReward(selection = this.getSelection()) {
+    const { rewardType } = this.state
+    if (!rewardType || !selection || !rewardFits(rewardType, selection.minutes)) return null
+    return rewardType
+  }
+
+  /** Cuántas neuronas tiene para gastar. Al reprogramar, el canje de la vieja le vuelve. */
+  getNeuronas() {
+    const { neuronasBalance, rescheduleOf } = this.props
+    return neuronasBalance + (rescheduleOf?.rewardNeuronas ?? 0)
   }
 
   getSubject(subjectId = this.state.subjectId) {
@@ -150,6 +175,13 @@ class BookingDialog extends Component {
   getPriceCents(selection) {
     const subject = selection && this.getSubject(selection.subjectId)
     if (!subject) return null
+    const reward = this.getReward(selection)
+    if (reward) {
+      return rewardPriceCents(reward, {
+        hourlyRateCents: subject.hourlyRateCents,
+        minutes: selection.minutes,
+      })
+    }
     return classPriceCents(subject.hourlyRateCents, this.getExtraMinutes(selection))
   }
 
@@ -190,6 +222,13 @@ class BookingDialog extends Component {
     this.setState({ packTokens: Math.max(0, Math.min(actual + delta, max)), error: null })
   }
 
+  handleReward = (rewardType) => () => {
+    this.setState((prev) => ({
+      rewardType: prev.rewardType === rewardType ? null : rewardType,
+      error: null,
+    }))
+  }
+
   handleConfirm = () => {
     const { card, onBooked } = this.props
     const { saving } = this.state
@@ -215,6 +254,8 @@ class BookingDialog extends Component {
       pedido.packId = this.getUsablePack().id
       pedido.packTokens = tokens
     }
+    const reward = this.getReward(selection)
+    if (reward) pedido.rewardType = reward
     const guardar = rescheduleOf ? rescheduleLesson(rescheduleOf.id, pedido) : bookLesson(pedido)
 
     guardar
@@ -224,6 +265,7 @@ class BookingDialog extends Component {
           teacherName: card.teacherName,
           rescheduled: Boolean(rescheduleOf),
           usedPack,
+          usedReward: Boolean(reward),
         }),
       )
       .catch((error) => {
@@ -413,6 +455,13 @@ class BookingDialog extends Component {
         </p>
         {this.getTokens(selection) > 0 && this.getExtraMinutes(selection) === 0 ? (
           <p className="booking-dialog-price">Incluida en tu paquete</p>
+        ) : this.getReward(selection) && this.getPriceCents(selection) === 0 ? (
+          <p className="booking-dialog-price">
+            Cubierta con neuronas
+            <span className="booking-dialog-duration">
+              {` · usás ${formatNeuronas(REWARDS[this.getReward(selection)].cost)}`}
+            </span>
+          </p>
         ) : (
           <p className="booking-dialog-price">
             {formatMoney(this.getPriceCents(selection))}
@@ -422,6 +471,11 @@ class BookingDialog extends Component {
             {this.getTokens(selection) > 0 ? (
               <span className="booking-dialog-duration">
                 {` + ${classesLabel(this.getTokens(selection))} del paquete`}
+              </span>
+            ) : null}
+            {this.getReward(selection) ? (
+              <span className="booking-dialog-duration">
+                {` + ${formatNeuronas(REWARDS[this.getReward(selection)].cost)}`}
               </span>
             ) : null}
           </p>
@@ -515,6 +569,52 @@ class BookingDialog extends Component {
     )
   }
 
+  /**
+   * Los canjes posibles. Se muestran también los que no alcanzan, deshabilitados:
+   * así el alumno ve a cuánto está. Si la clase es gratis no hay nada que canjear.
+   */
+  renderRewards() {
+    const { card } = this.props
+    const selection = this.getSelection()
+    const subject = selection && this.getSubject(selection.subjectId)
+    if (!card.teacherAcceptsRewards || !subject || subject.hourlyRateCents === 0) return null
+
+    const neuronas = this.getNeuronas()
+    const elegida = this.getReward(selection)
+    return (
+      <div className="booking-dialog-pack booking-dialog-rewards">
+        <span className="booking-dialog-pack-text">
+          Usar neuronas
+          <span className="booking-dialog-pack-detail">
+            Tenés {formatNeuronas(neuronas)}. No se combinan con un paquete.
+          </span>
+        </span>
+        <div className="booking-dialog-reward-list">
+          {Object.entries(REWARDS).map(([type, reward]) => {
+            const activa = type === elegida
+            return (
+              <button
+                key={type}
+                type="button"
+                className={`booking-slot ${activa ? 'is-selected' : ''}`}
+                aria-pressed={activa}
+                onClick={this.handleReward(type)}
+                disabled={
+                  this.state.saving ||
+                  neuronas < reward.cost ||
+                  !rewardFits(type, selection.minutes)
+                }
+              >
+                <span className="booking-slot-time">{reward.label}</span>
+                <span className="booking-slot-note">{formatNeuronas(reward.cost)}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
   render() {
     const { card, onClose } = this.props
     const { saving, error } = this.state
@@ -563,6 +663,7 @@ class BookingDialog extends Component {
           {this.renderDuration()}
 
           {this.renderPack()}
+          {this.renderRewards()}
           {this.renderSummary()}
 
           {error ? <Banner type="danger">{error}</Banner> : null}
@@ -589,6 +690,7 @@ class BookingDialog extends Component {
 
 BookingDialog.defaultProps = {
   packs: [],
+  neuronasBalance: 0,
   rescheduleOf: null,
 }
 

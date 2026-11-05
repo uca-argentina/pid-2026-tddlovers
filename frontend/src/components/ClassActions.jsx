@@ -13,6 +13,7 @@ import {
   owesPayment,
   statusLabel,
 } from '../utils/classStates.js'
+import { rewardLabel } from '../utils/neuronas.js'
 import './ClassActions.css'
 
 /**
@@ -198,6 +199,9 @@ class ClassActions extends Component {
             <span className="class-status is-info">
               {cls.packTokens === 1 ? '1 clase' : `${cls.packTokens} clases`} del paquete
             </span>
+          ) : null}
+          {cls.rewardType ? (
+            <span className="class-status is-info">{rewardLabel(cls.rewardType)} con neuronas</span>
           ) : null}
         </div>
 

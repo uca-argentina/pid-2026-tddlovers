@@ -70,6 +70,7 @@ class TeacherHomeworkDialog extends Component {
           <TeacherSubmissionDialog
             key={abierta.id}
             submission={abierta}
+            homework={homework}
             onChange={onChange}
             onClose={this.handleClose}
           />

@@ -1,8 +1,9 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { apiHomework, apiSubmission } from '../../testing/fixtures.js'
 import HomeworkPage from './HomeworkPage.jsx'
+import TeacherSubmissionDialog from './TeacherSubmissionDialog.jsx'
 
 const api = vi.hoisted(() => ({
   createHomework: vi.fn(),
@@ -259,6 +260,54 @@ describe('HomeworkPage como docente', () => {
       studentId: 'a1',
     })
     expect(await screen.findByRole('button', { name: /Guía 3/ })).toBeInTheDocument()
+  })
+
+  it('avisa al asignar si el plazo es muy corto para sumar neuronas', async () => {
+    api.fetchHomeworks.mockResolvedValue([])
+    api.fetchHomeworkTargets.mockResolvedValue({ students: [], groups: [] })
+    renderPage('teacher')
+    const aviso = /menos de 24 h de plazo, esta tarea no suma/
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Nueva tarea' }))
+    const fecha = await screen.findByLabelText('Fecha de entrega')
+    expect(screen.queryByText(aviso)).not.toBeInTheDocument()
+
+    fireEvent.change(fecha, { target: { value: NOW.iso } })
+    fireEvent.change(screen.getByLabelText('Hora'), { target: { value: '23:59' } })
+    expect(screen.getByText(aviso)).toBeInTheDocument()
+
+    fireEvent.change(fecha, { target: { value: '2099-12-31' } })
+    expect(screen.queryByText(aviso)).not.toBeInTheDocument()
+  })
+
+  describe('avisos de neuronas al corregir', () => {
+    const entrega = apiSubmission({ submittedAt: '2099-09-14T12:00:00.000Z' })
+    const abrir = (homework, submission = entrega) =>
+      render(<TeacherSubmissionDialog submission={submission} homework={homework} />)
+
+    it('una tarea de plazo corto avisa que no suma, aun con una devolución larga', async () => {
+      abrir(apiHomework({ createdAt: '2099-09-20T12:00:00.000Z' }))
+      expect(screen.getByText(/corregirla no suma neuronas/)).toBeInTheDocument()
+
+      await userEvent.type(screen.getByLabelText('Devolución'), 'Corta')
+      expect(screen.queryByText(/al menos 20 caracteres/)).not.toBeInTheDocument()
+    })
+
+    it('con plazo suficiente solo pide el largo de la devolución', async () => {
+      abrir(apiHomework())
+      expect(screen.queryByText(/corregirla no suma/)).not.toBeInTheDocument()
+
+      await userEvent.type(screen.getByLabelText('Devolución'), 'Corta')
+      expect(screen.getByText(/al menos 20 caracteres/)).toBeInTheDocument()
+    })
+
+    it('una entrega ya corregida no avisa nada', () => {
+      abrir(
+        apiHomework({ createdAt: '2099-09-20T12:00:00.000Z' }),
+        { ...entrega, feedback: 'Bien', correctedAt: '2099-09-21T12:00:00.000Z' },
+      )
+      expect(screen.queryByText(/no suma neuronas/)).not.toBeInTheDocument()
+    })
   })
 
   it('asigna a una clase grupal', async () => {

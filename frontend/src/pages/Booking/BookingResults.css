@@ -284,3 +284,26 @@
     padding: 32px 0;
   }
 }
+
+/* Las etiquetas de la tarjeta: la del docente destacado y la de los canjes. */
+.booking-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.booking-card-tag {
+  padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 35%, transparent);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.booking-card-tag.is-featured {
+  color: #fff;
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+}

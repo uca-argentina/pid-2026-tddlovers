@@ -76,6 +76,20 @@ class BookingCard extends Component {
     )
   }
 
+  renderTags() {
+    const { card } = this.props
+    const destacada = card.teacherFeatured && !card.onVacation
+    if (!destacada && !card.teacherAcceptsRewards) return null
+    return (
+      <div className="booking-card-tags">
+        {destacada ? <span className="booking-card-tag is-featured">Destacado</span> : null}
+        {card.teacherAcceptsRewards ? (
+          <span className="booking-card-tag">Acepta neuronas</span>
+        ) : null}
+      </div>
+    )
+  }
+
   renderGroups() {
     const { card } = this.props
     const grupos = this.getGroupsWithRoom()
@@ -135,6 +149,7 @@ class BookingCard extends Component {
         {card.onVacation ? (
           <p className="booking-card-vacation">El docente está de licencia este día.</p>
         ) : null}
+        {this.renderTags()}
         {this.renderPack()}
         {this.renderGroups()}
 
