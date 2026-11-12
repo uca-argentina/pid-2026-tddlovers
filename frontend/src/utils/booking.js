@@ -258,7 +258,7 @@ export function filterCards(cards, filters = {}) {
     ) {
       return false
     }
-    if (modalities.length > 0 && !modalities.includes(card.modality)) return false
+    if (modalities.length > 0 & !modalities.includes(card.modality)) return false
     if (kinds.length > 0 && !kinds.includes(cardKind(card))) return false
     if (docente && !normalizeText(card.teacherName).includes(docente)) return false
     if (docentes && !docentes.has(String(card.teacherId))) return false
