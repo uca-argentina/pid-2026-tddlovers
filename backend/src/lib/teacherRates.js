@@ -8,7 +8,7 @@
 //
 // Tabla: teacher_rates (tarifa por materia × modalidad, en centavos). Lo usan
 // routes/users/index.js (validateRates al guardar el perfil),
-// routes/classes/index.js (bookingPriceCents, isValidClassMinutes,
+// routes/bookings/index.js (bookingPriceCents, isValidClassMinutes,
 // MIN_CLASS_MINUTES) y lib/neuronas.js (classPriceCents).
 // Espejo: frontend/src/utils/rates.js (classPriceCents) y
 // frontend/src/utils/packs.js (quoteBooking), solo para mostrar el precio.
@@ -61,7 +61,7 @@ export function classPriceCents(hourlyRateCents, minutes) {
  * @param {number} [args.packTokens] - body.packTokens.
  * @param {string|null} [args.rewardType] - body.rewardType (clave de REWARDS).
  * @returns {number} centavos que se guardan en classes.price_cents (solo el extra).
- * Lo usa: routes/classes/index.js (priceBooking, al reservar y al reprogramar).
+ * Lo usa: routes/bookings/index.js (priceBooking, al reservar y al reprogramar).
  */
 export function bookingPriceCents({
   hourlyRateCents,
@@ -78,7 +78,7 @@ export function bookingPriceCents({
 /**
  * ¿Es una duración que el alumno puede elegir? Entero, ≥30 y de a 5 minutos.
  * @param {*} minutes - body.durationMinutes de POST /api/classes.
- * Lo usa: routes/classes/index.js (parseBookingBody).
+ * Lo usa: routes/bookings/index.js (parseBookingBody).
  */
 export function isValidClassMinutes(minutes) {
   return (

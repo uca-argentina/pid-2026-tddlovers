@@ -6,7 +6,7 @@ import { getPool } from './pool.js';
 //
 // Tablas: teacher_rates (migración 009; FK a teacher_subjects, así que sacar
 // una materia del perfil borra sus tarifas). Sin locks.
-// Lo usan: lib/publicUser.js, routes/classes (precio al reservar),
+// Lo usan: lib/publicUser.js, routes/bookings (precio al reservar),
 // routes/teachers (validar la modalidad de una ventana) y, por los fragmentos
 // SQL, db/availability.js, db/users.js y db/favorites.js.
 
@@ -70,7 +70,7 @@ export async function findRatesByTeacher(teacherId) {
  *   docente y modalidad salen de la ventana (findWindowById); subjectId del body de la reserva.
  * @returns {Promise<number|null>} centavos por hora (0 = gratis) o null.
  * Origen: teacher_rates.
- * Lo usa: routes/classes/index.js (reservar y reprogramar).
+ * Lo usa: routes/bookings/index.js (reservar y reprogramar).
  */
 export async function findRate({ teacherId, subjectId, modality }) {
   const result = await getPool().query(

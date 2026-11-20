@@ -1,13 +1,13 @@
 import { Component } from 'react'
-import ClassActions from './ClassActions.jsx'
+import BookingActions from './BookingActions.jsx'
 import FavoriteButton from './FavoriteButton.jsx'
-import TurnActions from './TurnActions.jsx'
+import ClassActions from './ClassActions.jsx'
 import { PaperclipIcon } from './icons.jsx'
 import { formatRangeLabel } from '../utils/availability.js'
 import { formatDayLong, fromISODate } from '../utils/calendar.js'
 import { isFavorite } from '../utils/favorites.js'
 import { formatMoney } from '../utils/rates.js'
-import { turnCapacityLabel, turnPriceLabel } from '../utils/reservations.js'
+import { classCapacityLabel, classPriceLabel } from '../utils/reservations.js'
 import { modalityLabel } from '../utils/windows.js'
 import { rewardLabel } from '../utils/neuronas.js'
 import './ClassCard.css'
@@ -22,7 +22,7 @@ const INTERACTIVE = 'button, a, input, textarea, select, label'
  * material; en la tarjeta quedan los botones rápidos, sin tomar lista.
  *
  * Para el docente una grupal es UNA tarjeta aunque sean varias reservas
- * (`rows`, una por alumno): no lleva nombres, y sus botones (TurnActions)
+ * (`rows`, una por alumno): no lleva nombres, y sus botones (ClassActions)
  * actúan sobre la clase entera. El alumno ve su reserva, con el docente.
  *
  * La tarjeta entera es clickeable para el dedo, y la materia es además un
@@ -31,8 +31,8 @@ const INTERACTIVE = 'button, a, input, textarea, select, label'
  *
  * Solo la usa ReservationsPage (renderCard). Sin fetch propio.
  *
- * Props (de ReservationsPage): cls (la reserva que representa al turno, de
- * GET /api/classes), rows (turnRows: todas las del turno), viewRole,
+ * Props (de ReservationsPage): cls (la reserva que representa a la clase, de
+ * GET /api/bookings), rows (classRows: todas las de la clase), viewRole,
  * favoriteIds / onFavoriteChange / onFavoriteError (de withFavorites),
  * showActions (false en "Próxima"/"Última"), badge ({ label, tone } o null),
  * onOpen(cls) (abre ClassDetailDialog) y onChange(reservaActualizada).
@@ -40,7 +40,7 @@ const INTERACTIVE = 'button, a, input, textarea, select, label'
 class ClassCard extends Component {
   handleClick = (event) => {
     // Los clicks de adentro de un portal (el diálogo de cancelar de
-    // ClassActions) también llegan acá por el árbol de React: si el DOM no
+    // BookingActions) también llegan acá por el árbol de React: si el DOM no
     // está adentro de la tarjeta, no es un click en la tarjeta.
     if (!event.currentTarget.contains(event.target)) return
     if (event.target.closest(INTERACTIVE)) return
@@ -61,7 +61,7 @@ class ClassCard extends Component {
    */
   getPrice() {
     const { cls, viewRole } = this.props
-    if (viewRole === 'teacher' && cls.maxStudents > 1) return `${turnPriceLabel(this.rows())} c/u`
+    if (viewRole === 'teacher' && cls.maxStudents > 1) return `${classPriceLabel(this.rows())} c/u`
     let precio = formatMoney(cls.priceCents)
     if (cls.packTokens > 0) {
       precio += ` · ${cls.packTokens === 1 ? '1 clase' : `${cls.packTokens} clases`} del paquete`
@@ -72,8 +72,8 @@ class ClassCard extends Component {
 
   renderActions() {
     const { cls, viewRole, onChange } = this.props
-    if (viewRole === 'teacher') return <TurnActions rows={this.rows()} onChange={onChange} />
-    return <ClassActions cls={cls} viewRole={viewRole} exclude={['attend']} onChange={onChange} />
+    if (viewRole === 'teacher') return <ClassActions rows={this.rows()} onChange={onChange} />
+    return <BookingActions booking={cls} viewRole={viewRole} exclude={['attend']} onChange={onChange} />
   }
 
   render() {
@@ -97,7 +97,7 @@ class ClassCard extends Component {
         <div className="class-card-meta-row">
           <p className="class-card-meta">
             {viewRole === 'teacher' ? '' : `Docente: ${cls.teacherName} · `}
-            {turnCapacityLabel(cls, this.rows(), viewRole)}
+            {classCapacityLabel(cls, this.rows(), viewRole)}
             {` · ${modalityLabel(cls.modality)}`}
             {` · ${this.getPrice()}`}
           </p>
@@ -122,7 +122,7 @@ ClassCard.defaultProps = {
   viewRole: 'student',
   // Ids de los docentes favoritos del alumno; null = sin corazones.
   favoriteIds: null,
-  // Las reservas de la clase (el turno), canceladas incluidas. Para el
+  // Las reservas de la clase (la clase), canceladas incluidas. Para el
   // docente, una por alumno; si no se pasan, la clase es solo `cls`.
   rows: null,
   showActions: true,

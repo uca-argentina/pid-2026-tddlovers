@@ -1,19 +1,19 @@
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import ClassCard from './ClassCard.jsx'
-import { apiClass } from '../testing/fixtures.js'
+import { apiBooking } from '../testing/fixtures.js'
 
 vi.mock('../api/client.js', () => ({
-  acceptTurn: vi.fn(),
-  cancelTurn: vi.fn(),
-  cancelLesson: vi.fn(),
-  payLesson: vi.fn(),
+  acceptClass: vi.fn(),
+  cancelClass: vi.fn(),
+  cancelBooking: vi.fn(),
+  payBooking: vi.fn(),
 }))
 
-const turno = { teacherId: 't1', date: '2099-09-14', startTime: '13:00', maxStudents: 3 }
-const sofia = apiClass({ ...turno, id: 'r1', studentName: 'Sofía Ramírez' })
-const ana = apiClass({
-  ...turno,
+const clase = { teacherId: 't1', date: '2099-09-14', startTime: '13:00', maxStudents: 3 }
+const sofia = apiBooking({ ...clase, id: 'r1', studentName: 'Sofía Ramírez' })
+const ana = apiBooking({
+  ...clase,
   id: 'r2',
   studentName: 'Ana Pérez',
   priceCents: 0,

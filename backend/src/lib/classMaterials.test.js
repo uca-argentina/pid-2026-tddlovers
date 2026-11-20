@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   MAX_FILE_BYTES,
-  MAX_FILES_PER_TURN,
-  MAX_TURN_BYTES,
+  MAX_FILES_PER_CLASS,
+  MAX_CLASS_BYTES,
   checkEditMaterial,
   checkUploadRoom,
   checkViewMaterial,
@@ -113,10 +113,10 @@ describe('checkUploadRoom', () => {
     expect(checkUploadRoom(vacio, [{ sizeBytes: MAX_FILE_BYTES + 1 }])).toMatch(/hasta 10 MB/);
   });
 
-  it('suma lo que ya tiene el turno', () => {
-    const lleno = { count: MAX_FILES_PER_TURN, bytes: 0 };
+  it('suma lo que ya tiene la clase', () => {
+    const lleno = { count: MAX_FILES_PER_CLASS, bytes: 0 };
     expect(checkUploadRoom(lleno, [{ sizeBytes: 1 }])).toMatch(/hasta 20 archivos/);
-    const pesado = { count: 1, bytes: MAX_TURN_BYTES - 10 };
+    const pesado = { count: 1, bytes: MAX_CLASS_BYTES - 10 };
     expect(checkUploadRoom(pesado, [{ sizeBytes: 11 }])).toMatch(/hasta 25 MB/);
   });
 });

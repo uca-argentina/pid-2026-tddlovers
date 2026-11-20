@@ -4,16 +4,23 @@
 // `overrides` para pisar solo lo que el test necesita. Lo usan los *.test.jsx
 // / *.test.js de pages/, components/, utils/ y App.test.jsx.
 //
-// Una clase tal como la devuelve el backend (GET /api/classes, /:id y las
-// acciones): los mismos campos que CLASS_COLUMNS en backend/src/db/classes.js.
+// Una reserva tal como la devuelve el backend (GET /api/bookings, /:id y las
+// acciones): los mismos campos que BOOKING_COLUMNS en backend/src/db/bookings.js.
 // Vive en un solo lugar para que, si la forma cambia, los tests no sigan
 // probando con una que ya no existe. Cada test pisa solo lo que le importa.
 //
 // Por defecto: individual, virtual, pendiente y sin pagar, en 2099 para que
 // "ya empezó" no dependa del reloj.
-export function apiClass(overrides = {}) {
+export function apiBooking(overrides = {}) {
+  // `classId` es el id de la CLASE (classes.id), compartido por las reservas
+  // de una grupal. Si el test no lo da, sale del docente, la fecha y el
+  // inicio: como en la base, donde hay una sola clase en pie por horario.
+  const teacherId = overrides.teacherId ?? 't1'
+  const date = overrides.date ?? '2099-09-14'
+  const startTime = overrides.startTime ?? '13:00'
   return {
     id: 'c1',
+    classId: `k-${teacherId}-${date}-${startTime}`,
     date: '2099-09-14',
     startTime: '13:00',
     endTime: '14:00',

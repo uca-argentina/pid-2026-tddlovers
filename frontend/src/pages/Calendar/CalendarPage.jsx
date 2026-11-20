@@ -5,8 +5,8 @@ import MonthPane from './MonthPane.jsx'
 import DayAgenda from './DayAgenda.jsx'
 import withFavorites from '../../routes/withFavorites.jsx'
 import { addDays, groupByDate, toISODate } from '../../utils/calendar.js'
-import { fetchClasses } from '../../api/client.js'
-import { calendarTurns, pendingTurnCount } from '../../utils/reservations.js'
+import { fetchBookings } from '../../api/client.js'
+import { calendarClasses, pendingClassCount } from '../../utils/reservations.js'
 import './CalendarPage.css'
 
 // Hasta dónde se buscan solicitudes pendientes para el aviso del docente.
@@ -37,25 +37,25 @@ const PENDING_LOOKAHEAD_DAYS = 90
  *     withFavorites (solo con viewRole 'student'); se reenvían a DayAgenda.
  *
  * Datos (api/client.js):
- *   - fetchClasses → GET /api/classes?from&to, cada vez que MonthPane avisa
+ *   - fetchBookings → GET /api/bookings?from&to, cada vez que MonthPane avisa
  *     el rango de la grilla. Devuelve las clases del usuario de la sesión
  *     (una fila por reserva).
- *   - fetchClasses → GET /api/classes?from=hoy&to=hoy+90&status=pendiente,
+ *   - fetchBookings → GET /api/bookings?from=hoy&to=hoy+90&status=pendiente,
  *     solo para el docente, al montar y después de cada cambio de una clase
  *     (para el aviso "Tenés N solicitudes").
  *
  * Estado:
  *   - selectedIso: día elegido en MonthPane ("YYYY-MM-DD").
- *   - classes: filas de GET /api/classes del rango; classesLoading/Error.
- *   - pendingCount: clases (turnos) con alguna reserva pendiente del docente
+ *   - bookings: filas de GET /api/bookings del rango; bookingsLoading/Error.
+ *   - pendingCount: clases (clases) con alguna reserva pendiente del docente
  *     en los próximos 90 días.
  */
 class CalendarPage extends Component {
   state = {
     selectedIso: toISODate(new Date()),
-    classes: [],
-    classesLoading: false,
-    classesError: null,
+    bookings: [],
+    bookingsLoading: false,
+    bookingsError: null,
     // Solo para el docente: cuántas clases esperan que responda, en
     // cualquier mes (no solo el que se está mirando).
     pendingCount: 0,
@@ -90,15 +90,15 @@ class CalendarPage extends Component {
   }
 
   /**
-   * Cuenta las clases con solicitudes pendientes del docente: fetchClasses
-   * con status=pendiente (GET /api/classes) de hoy a hoy + 90 días →
+   * Cuenta las clases con solicitudes pendientes del docente: fetchBookings
+   * con status=pendiente (GET /api/bookings) de hoy a hoy + 90 días →
    * `pendingCount`. Cuenta TURNOS, como Mis reservas: una grupal con tres
    * pendientes es una clase esperando respuesta, no tres.
    */
   loadPending = () => {
     const token = ++this.pendingToken
     const hoy = new Date()
-    fetchClasses({
+    fetchBookings({
       from: toISODate(hoy),
       to: toISODate(addDays(hoy, PENDING_LOOKAHEAD_DAYS)),
       status: 'pendiente',
@@ -106,8 +106,8 @@ class CalendarPage extends Component {
       .then((pendientes) => {
         if (token !== this.pendingToken) return
         // FILTRO: el backend ya trae solo las pendientes (?status=pendiente);
-        // pendingTurnCount igual mira el estado y las agrupa por turno.
-        this.setState({ pendingCount: pendingTurnCount(pendientes) })
+        // pendingClassCount igual mira el estado y las agrupa por clase.
+        this.setState({ pendingCount: pendingClassCount(pendientes) })
       })
       .catch(() => {
         // El aviso es un extra: si falla, el calendario sigue andando.
@@ -116,15 +116,15 @@ class CalendarPage extends Component {
 
   /**
    * FILTRO: las clases agrupadas por fecha ISO, cada lista ordenada por hora,
-   * sin los turnos cancelados para todos (calendarTurns en
+   * sin las clases canceladas para todos (calendarClasses en
    * utils/reservations.js; regla de pantalla, se ven en "Mis reservas").
    *
    * Una grupal llega como una fila por alumno (así está en la base), pero es
-   * UNA clase: va una vez, como la reserva que representa al turno. MonthPane
+   * UNA clase: va una vez, como la reserva que representa a la clase. MonthPane
    * solo mira id, startTime y subjectName, así que la forma plana le sirve.
    */
   getClassesByDate() {
-    return groupByDate(calendarTurns(this.state.classes))
+    return groupByDate(calendarClasses(this.state.bookings))
   }
 
   /** MonthPane avisa qué rango abarca la grilla; recién ahí se pide. */
@@ -134,23 +134,23 @@ class CalendarPage extends Component {
 
   /**
    * Trae las clases del usuario entre `from` y `to` ("YYYY-MM-DD", el rango
-   * de la grilla de MonthPane) con fetchClasses → GET /api/classes?from&to y
-   * las guarda en `classes`. Maneja classesLoading/classesError.
+   * de la grilla de MonthPane) con fetchBookings → GET /api/bookings?from&to y
+   * las guarda en `bookings`. Maneja bookingsLoading/bookingsError.
    */
   loadClasses = (from, to) => {
     const token = ++this.fetchToken
 
-    this.setState({ classesLoading: true, classesError: null })
-    fetchClasses({ from, to })
-      .then((classes) => {
+    this.setState({ bookingsLoading: true, bookingsError: null })
+    fetchBookings({ from, to })
+      .then((bookings) => {
         if (token !== this.fetchToken) return
-        this.setState({ classes, classesLoading: false })
+        this.setState({ bookings, bookingsLoading: false })
       })
       .catch((error) => {
         if (token !== this.fetchToken) return
         this.setState({
-          classesLoading: false,
-          classesError: error.message || 'No se pudieron cargar las clases.',
+          bookingsLoading: false,
+          bookingsError: error.message || 'No se pudieron cargar las clases.',
         })
       })
   }
@@ -162,13 +162,13 @@ class CalendarPage extends Component {
   /**
    * Una reserva cambió de estado (la aceptó, la pagó, la canceló): se
    * reemplaza esa fila y listo, no hace falta volver a pedir el mes. Si quedó
-   * cancelada va al final de su turno, y el turno sale del calendario solo si
+   * cancelada va al final de su clase, y la clase sale del calendario solo si
    * ya no queda nadie.
    */
   handleClassChange = (updated) => {
     if (!updated?.id) return
     this.setState((prev) => ({
-      classes: prev.classes.map((item) => (String(item.id) === String(updated.id) ? updated : item)),
+      bookings: prev.bookings.map((item) => (String(item.id) === String(updated.id) ? updated : item)),
     }))
     if (this.props.viewRole === 'teacher') this.loadPending()
   }
@@ -188,7 +188,7 @@ class CalendarPage extends Component {
   }
 
   render() {
-    const { selectedIso, classesLoading, classesError } = this.state
+    const { selectedIso, bookingsLoading, bookingsError } = this.state
     const classesByDate = this.getClassesByDate()
 
     return (
@@ -196,12 +196,12 @@ class CalendarPage extends Component {
         <MonthPane
           eventsByDate={classesByDate}
           selectedIso={selectedIso}
-          loading={classesLoading}
+          loading={bookingsLoading}
           onSelectDay={this.handleSelectDay}
           onRangeChange={this.handleRangeChange}
         >
           {this.renderPending()}
-          {classesError ? <Banner type="danger">{classesError}</Banner> : null}
+          {bookingsError ? <Banner type="danger">{bookingsError}</Banner> : null}
         </MonthPane>
 
         {/* Va después en el DOM pero se dibuja a la izquierda (order en el
@@ -215,7 +215,7 @@ class CalendarPage extends Component {
           <DayAgenda
             classesByDate={classesByDate}
             selectedIso={selectedIso}
-            loading={classesLoading}
+            loading={bookingsLoading}
             viewRole={this.props.viewRole}
             favoriteIds={this.props.favoriteIds}
             onClassChange={this.handleClassChange}

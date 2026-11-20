@@ -80,7 +80,7 @@ export async function findTeacherForReview(id) {
 /**
  * Cambia el estado, pero solo si sigue en el que vio la ruta (`from`): si dos
  * admins deciden a la vez, el segundo no pisa al primero. Misma idea que
- * transitionClass en db/classes.js. true si se actualizó.
+ * transitionBooking en db/bookings.js. true si se actualizó.
  *
  * @param {string} id - users.id del docente (params.id).
  * @param {{from: string, to: string, reviewedBy: string}} cambio - `from` es el

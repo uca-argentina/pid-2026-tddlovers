@@ -89,11 +89,11 @@ export function maxTokensFor(pack, minutes) {
  * Los paquetes como quedan al reprogramar `rescheduleOf`: la clase vieja se
  * cancela en la misma transacción, así que las clases del paquete que tenía
  * apartadas vuelven a estar para reservar (el backend hace lo mismo con
- * excludeClassId). Sin esto, con el paquete justo, reprogramar cobraría entera
+ * excludeBookingId). Sin esto, con el paquete justo, reprogramar cobraría entera
  * una clase que el paquete cubre.
  *
  * @param {Array|null} packs - de GET /api/packs/mine.
- * @param {object|null} rescheduleOf - la clase que se reprograma (GET /api/classes/:id,
+ * @param {object|null} rescheduleOf - la clase que se reprograma (GET /api/bookings/:id,
  *   de ?reprogramar=<id>), con studentPackId y packTokens.
  * @returns {Array} copia con `available` y `usable` ajustados en el paquete de esa clase.
  * Lo usa: pages/Booking/BookingBoard.jsx (para la tarjeta y el modal).
@@ -124,7 +124,7 @@ export function packsForReschedule(packs, rescheduleOf) {
  *   - `priceCents`: lo que se paga, o null si falta la materia o la duración;
  *   - `coveredBy`: 'pack' o 'reward' si la clase queda cubierta entera.
  *
- * El precio espeja al backend (validateBooking en routes/classes): con paquete
+ * El precio espeja al backend (validateBooking en routes/bookings): con paquete
  * se cobra solo lo que se pasa, con canje lo que deja el canje. El que vale es
  * el de allá.
  *
@@ -134,7 +134,7 @@ export function packsForReschedule(packs, rescheduleOf) {
  * elegido), acceptsRewards (teacherAcceptsRewards de la fila) y balance
  * (de GET /api/neuronas).
  * Lo usa: pages/Booking/BookingDialog.jsx.
- * Espejo: priceBooking/validateBooking de backend/src/routes/classes/index.js.
+ * Espejo: priceBooking/validateBooking de backend/src/routes/bookings/index.js.
  */
 export function quoteBooking({
   hourlyRateCents = null,

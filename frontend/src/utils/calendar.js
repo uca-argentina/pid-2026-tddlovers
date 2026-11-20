@@ -11,7 +11,7 @@
 // salen con toISODate. Lo usan casi todas las pantallas con fechas: el
 // calendario (pages/Calendar/), Disponibilidad, el tablero de reservas,
 // Mis reservas, Tareas, components/WeekStrip.jsx y los utils booking.js,
-// windows.js, classStates.js y homework.js.
+// windows.js, bookingStates.js y homework.js.
 
 const WEEKS_IN_GRID = 6
 const DAYS_IN_WEEK = 7
@@ -133,7 +133,7 @@ function minutesBetween(startTime, endTime) {
 /**
  * '09:00' + '10:30' -> '1 h 30 min'. Cada docente elige cuánto duran sus clases.
  *
- * @param {string} startTime - 'HH:MM' (startTime de una clase de GET /api/classes).
+ * @param {string} startTime - 'HH:MM' (startTime de una reserva de GET /api/bookings).
  * @param {string} endTime - 'HH:MM' (su endTime).
  * @returns {string}
  * Lo usan: components/ClassDetailDialog.jsx, pages/Calendar/DayAgenda.jsx.
@@ -192,8 +192,8 @@ export function buildMonthGrid(year, month, referenceDate = new Date()) {
  * `startTime`, cada día ordenado por hora. Los inicios son siempre :00 o :30
  * en 'HH:MM', así que comparar los textos alcanza para ordenar.
  *
- * @param {Array<{date: string, startTime: string}>} items - p. ej. las clases (o turnos)
- *   de GET /api/classes.
+ * @param {Array<{date: string, startTime: string}>} items - p. ej. las clases 
+ *   de GET /api/bookings.
  * @returns {Object<string, Array>} por fecha ISO.
  * Lo usa: pages/Calendar/CalendarPage.jsx.
  */

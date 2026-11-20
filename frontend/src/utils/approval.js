@@ -2,7 +2,7 @@
 // ('pending' | 'approved' | 'rejected') y acá se traducen para mostrarlos.
 //
 // Las reglas de verdad viven en backend/src/lib/teacherApproval.js. Esto las
-// copia SOLO para decidir qué botones mostrar (igual que utils/classStates.js
+// copia SOLO para decidir qué botones mostrar (igual que utils/bookingStates.js
 // con las reservas): si cambia una regla, cambiala en los dos lados. El
 // backend vuelve a chequear y explica en su `message` si no se puede.
 //

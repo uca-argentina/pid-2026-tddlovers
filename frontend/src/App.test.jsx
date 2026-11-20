@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App.jsx'
 import { formatMonthTitle } from './utils/calendar.js'
-import { apiClass, apiUser, updatedUser } from './testing/fixtures.js'
+import { apiBooking, apiUser, updatedUser } from './testing/fixtures.js'
 
 // Mockeamos el cliente entero para no esperar la latencia simulada de los
 // datos de mentira y para controlar qué devuelve cada llamada.
@@ -10,7 +10,7 @@ import { apiClass, apiUser, updatedUser } from './testing/fixtures.js'
 // importe cualquier pantalla tiene que estar acá o llega como undefined.
 const {
   loginAccount,
-  fetchClasses,
+  fetchBookings,
   fetchSubjects,
   registerAccount,
   updateProfile,
@@ -18,13 +18,13 @@ const {
   fetchMyVacations,
   fetchMyAddresses,
   fetchAvailability,
-  fetchMyLessons,
+  fetchMyBookings,
   fetchFavoriteTeachers,
   fetchCurrentUser,
   logoutAccount,
 } = vi.hoisted(() => ({
   loginAccount: vi.fn(),
-  fetchClasses: vi.fn(),
+  fetchBookings: vi.fn(),
   fetchSubjects: vi.fn(),
   registerAccount: vi.fn(),
   updateProfile: vi.fn(),
@@ -34,7 +34,7 @@ const {
   // Ni direcciones guardadas.
   fetchMyAddresses: vi.fn(() => Promise.resolve([])),
   fetchAvailability: vi.fn(),
-  fetchMyLessons: vi.fn(),
+  fetchMyBookings: vi.fn(),
   // El calendario del alumno pide sus favoritos; acá no tiene ninguno.
   fetchFavoriteTeachers: vi.fn(() => Promise.resolve([])),
   fetchCurrentUser: vi.fn(),
@@ -43,7 +43,7 @@ const {
 
 vi.mock('./api/client.js', () => ({
   loginAccount,
-  fetchClasses,
+  fetchBookings,
   fetchSubjects,
   registerAccount,
   updateProfile,
@@ -51,7 +51,7 @@ vi.mock('./api/client.js', () => ({
   fetchMyVacations,
   fetchMyAddresses,
   fetchAvailability,
-  fetchMyLessons,
+  fetchMyBookings,
   fetchFavoriteTeachers,
   fetchCurrentUser,
   logoutAccount,
@@ -66,13 +66,13 @@ function go(path) {
 describe('App', () => {
   beforeEach(() => {
     loginAccount.mockReset().mockResolvedValue(user)
-    fetchClasses.mockReset().mockResolvedValue([])
+    fetchBookings.mockReset().mockResolvedValue([])
     fetchSubjects.mockReset().mockResolvedValue([])
     registerAccount.mockReset().mockResolvedValue(user)
     updateProfile.mockReset().mockImplementation((payload) => Promise.resolve(updatedUser(user, payload)))
     fetchMyWindows.mockReset().mockResolvedValue([])
     fetchAvailability.mockReset().mockResolvedValue([])
-    fetchMyLessons.mockReset().mockResolvedValue([])
+    fetchMyBookings.mockReset().mockResolvedValue([])
     // App pregunta por la sesión al montar. Por defecto no hay nadie
     // logueado; el test que necesita sesión lo pisa.
     fetchCurrentUser.mockReset().mockRejectedValue(new Error('No autenticado'))
@@ -218,14 +218,14 @@ describe('App', () => {
   it('al recargar no monta ninguna pantalla hasta saber quién es', async () => {
     let contestar
     fetchCurrentUser.mockReturnValue(new Promise((resolve) => (contestar = resolve)))
-    fetchClasses.mockImplementation(({ status }) =>
-      Promise.resolve(status === 'pendiente' ? [apiClass({ status: 'pendiente' })] : []),
+    fetchBookings.mockImplementation(({ status }) =>
+      Promise.resolve(status === 'pendiente' ? [apiBooking({ status: 'pendiente' })] : []),
     )
     go('/')
     render(<App />)
 
     expect(screen.getByRole('status')).toHaveTextContent('Cargando...')
-    expect(fetchClasses).not.toHaveBeenCalled()
+    expect(fetchBookings).not.toHaveBeenCalled()
 
     // Llega la sesión de un docente: el calendario se monta ya como docente
     // y pide el aviso de solicitudes.

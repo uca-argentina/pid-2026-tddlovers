@@ -1,29 +1,29 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import StudentsDialog from './StudentsDialog.jsx'
-import { apiClass } from '../testing/fixtures.js'
+import { apiBooking } from '../testing/fixtures.js'
 
-const { acceptLesson, cancelLesson } = vi.hoisted(() => ({
-  acceptLesson: vi.fn(),
-  cancelLesson: vi.fn(),
+const { acceptBooking, cancelBooking } = vi.hoisted(() => ({
+  acceptBooking: vi.fn(),
+  cancelBooking: vi.fn(),
 }))
 
-vi.mock('../api/client.js', () => ({ acceptLesson, cancelLesson }))
+vi.mock('../api/client.js', () => ({ acceptBooking, cancelBooking }))
 
 const ANTES = { iso: '2099-09-10', time: '10:00' }
-const turno = { date: '2099-09-14', startTime: '13:00', maxStudents: 3 }
-const sofia = apiClass({
-  ...turno,
+const clase = { date: '2099-09-14', startTime: '13:00', maxStudents: 3 }
+const sofia = apiBooking({
+  ...clase,
   id: 'r1',
   status: 'confirmada',
   paidAt: '2099-09-01T12:00:00.000Z',
   studentName: 'Sofía Ramírez',
 })
-const ana = apiClass({ ...turno, id: 'r2', status: 'pendiente', studentName: 'Ana Pérez' })
+const ana = apiBooking({ ...clase, id: 'r2', status: 'pendiente', studentName: 'Ana Pérez' })
 
 beforeEach(() => {
-  acceptLesson.mockReset()
-  cancelLesson.mockReset()
+  acceptBooking.mockReset()
+  cancelBooking.mockReset()
 })
 
 describe('StudentsDialog', () => {
@@ -38,7 +38,7 @@ describe('StudentsDialog', () => {
   })
 
   it('rechazar a uno pide confirmación y solo toca su reserva', async () => {
-    cancelLesson.mockResolvedValue({ ...ana, status: 'cancelada', cancelReason: 'rechazada' })
+    cancelBooking.mockResolvedValue({ ...ana, status: 'cancelada', cancelReason: 'rechazada' })
     const onChange = vi.fn()
     render(<StudentsDialog rows={[ana, sofia]} now={ANTES} onClose={() => {}} onChange={onChange} />)
 
@@ -47,7 +47,7 @@ describe('StudentsDialog', () => {
     expect(within(deAna).getByText('¿Rechazar a Ana Pérez?')).toBeInTheDocument()
     await userEvent.click(within(deAna).getByRole('button', { name: 'Sí, rechazar' }))
 
-    expect(cancelLesson).toHaveBeenCalledWith('r2')
+    expect(cancelBooking).toHaveBeenCalledWith('r2')
     expect(onChange).toHaveBeenCalledWith({ ...ana, status: 'cancelada', cancelReason: 'rechazada' })
   })
 

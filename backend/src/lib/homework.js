@@ -1,6 +1,6 @@
 // Las reglas de las tareas: qué es una consigna válida, qué es una entrega,
 // cuándo es fuera de término y quién puede hacer qué. Funciones puras como
-// las de classStates.js: dependen de la hora, y así se prueban sin reloj ni
+// las de bookingStates.js: dependen de la hora, y así se prueban sin reloj ni
 // base. Espejadas en frontend/src/utils/homework.js solo para decidir qué
 // mostrar.
 //

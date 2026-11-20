@@ -1,171 +1,153 @@
 import { Component } from 'react'
-import { Link } from 'react-router-dom'
 import Modal from './Modal.jsx'
 import Banner from './Banner.jsx'
 import { SpinnerIcon } from './icons.jsx'
-import { acceptLesson, cancelLesson, markAttendance, payLesson } from '../api/client.js'
+import { acceptClass, cancelClass } from '../api/client.js'
 import {
   STATUS_TONES,
   allowedActions,
-  cancelDeadlineHint,
   cancelDescription,
   nowParts,
-  owesPayment,
   statusLabel,
-} from '../utils/classStates.js'
-import { rewardLabel } from '../utils/neuronas.js'
+} from '../utils/bookingStates.js'
+import { activeRows } from '../utils/reservations.js'
 import './ClassActions.css'
 
+// El orden de las pastillas: lo que espera algo primero.
+const STATUS_ORDER = ['pendiente', 'aceptada', 'confirmada', 'realizada', 'no_presentada']
+
 /**
- * El estado de una reserva y los botones de lo que se puede hacer con ella,
- * según quién mira. Lo usan el calendario y "Mis reservas", así que las dos
- * pantallas muestran y permiten exactamente lo mismo.
+ * El estado y los botones de una CLASE vista por el docente, que en una
+ * grupal son varias reservas (una por alumno). Lo que se hace acá se hace
+ * con todas: "Aceptar" acepta a todos los que esperan respuesta y "Cancelar
+ * clase" la cancela para todos. Decidir alumno por alumno (aceptar a uno,
+ * rechazar a otro) y tomar lista va en el detalle de la clase.
  *
- * Qué botones aparecen lo decide allowedActions (utils/classStates.js), pero
- * es solo para no ofrecer lo imposible: el backend vuelve a chequear todo, y
- * si algo cambió en el medio (el otro la canceló, pasaron las 24 h) se
- * muestra su mensaje.
+ * Va en un solo pedido por la clase entera (POST /api/classes/:classId/...),
+ * que el backend aplica todo o nada: o se acepta (o cancela) a todos, o a
+ * ninguno. Cada reserva actualizada se avisa con onChange(reserva).
  *
- * Cuando una acción sale bien avisa con onChange(claseActualizada): quien la
- * muestra decide qué hacer (reemplazarla en su lista, sacarla si se canceló).
+ * Rol: docente. Props (de ClassCard, DayAgenda y ClassDetailDialog): rows
+ * (todas las reservas de la clase, de GET /api/bookings), now (solo lo pasa
+ * ClassDetailDialog) y onChange(reserva).
  *
- * En la práctica la usa el alumno: ClassCard y DayAgenda (con
- * exclude={['attend']}) y ClassDetailDialog (viewRole "student"); el docente
- * usa TurnActions.
+ * Datos: acceptClass → POST /api/classes/:classId/accept y cancelClass →
+ * POST /api/classes/:classId/cancel, con el `classId` de las reservas; ambos
+ * devuelven el array de reservas actualizadas.
  *
- * Props: cls (una reserva de GET /api/classes), viewRole, exclude (acciones a
- * esconder), now (inyectable para tests) y
- * onChange(reservaActualizada).
- *
- * Datos (api/client.js), cada uno devuelve la reserva actualizada:
- *   acceptLesson → POST /api/classes/:id/accept, payLesson → …/pay,
- *   cancelLesson → …/cancel, markAttendance → …/attendance. Reprogramar es
- *   un link a /disponibilidad?reprogramar=<id> (BookingBoard).
- *
- * Estado: busy (acción en vuelo), error, confirmingCancel.
+ * Estado: busy ('accept' | 'cancel' | null), error, confirmingCancel.
  */
 class ClassActions extends Component {
-  state = {
-    // La acción en vuelo ('accept', 'pay', ...), para el spinner y para no
-    // mandar dos veces.
-    busy: null,
-    error: null,
-    confirmingCancel: false,
+  state = { busy: null, error: null, confirmingCancel: false }
+
+  now() {
+    return this.props.now || nowParts()
   }
 
-  /** Corre `call()` (un pedido a la API) y le pasa la reserva devuelta a onChange. */
-  run(action, call) {
-    if (this.state.busy) return
+  // FILTRO: solo las reservas en pie de la clase reciben las acciones (regla
+  // de pantalla; el backend re-chequea cada una con checkAction).
+  active() {
+    return activeRows(this.props.rows)
+  }
+
+  withAction(action) {
+    const now = this.now()
+    return this.active().filter((row) => allowedActions(row, 'teacher', now).includes(action))
+  }
+
+  /**
+   * Manda la acción sobre la clase entera (`call` = acceptClass o
+   * cancelClass) con su `classId`, si alguna reserva la permite
+   * (allowedActions), y avisa onChange por cada reserva del array devuelto.
+   */
+  async runOnClass(action, call) {
+    const [alguna] = this.withAction(action)
+    if (this.state.busy || !alguna) return
     this.setState({ busy: action, error: null })
-    call()
-      .then((updated) => {
-        this.setState({ busy: null, confirmingCancel: false })
-        this.props.onChange(updated)
+    try {
+      const updated = await call(alguna.classId)
+      this.setState({ busy: null, confirmingCancel: false })
+      for (const row of updated) this.props.onChange(row)
+    } catch (error) {
+      this.setState({
+        busy: null,
+        confirmingCancel: false,
+        error: error.message || 'No se pudo actualizar la clase. Probá de nuevo.',
       })
-      .catch((error) => {
-        this.setState({
-          busy: null,
-          confirmingCancel: false,
-          error: error.message || 'No se pudo actualizar la clase. Probá de nuevo.',
-        })
-      })
+    }
   }
 
-  handleAccept = () => this.run('accept', () => acceptLesson(this.props.cls.id))
-
-  handlePay = () => this.run('pay', () => payLesson(this.props.cls.id))
-
-  handleAttend = (attended) => () =>
-    this.run(attended ? 'present' : 'absent', () => markAttendance(this.props.cls.id, attended))
+  handleAccept = () => this.runOnClass('accept', acceptClass)
 
   handleAskCancel = () => this.setState({ confirmingCancel: true, error: null })
 
   handleCloseCancel = () => this.setState({ confirmingCancel: false })
 
-  handleCancel = () => this.run('cancel', () => cancelLesson(this.props.cls.id))
+  handleCancel = () => this.runOnClass('cancel', cancelClass)
 
-  /** El docente que dice que no a una pendiente la rechaza; lo demás es cancelar. */
+  /** Si todo lo que se cancelaría espera respuesta, es rechazar; si no, cancelar. */
   isRejecting() {
-    return this.props.viewRole === 'teacher' && this.props.cls.status === 'pendiente'
+    return this.withAction('cancel').every((row) => row.status === 'pendiente')
   }
 
-  renderButton(action, label, onClick, variant = 'secondary') {
-    const { busy } = this.state
+  renderStatus() {
+    const active = this.active()
+    if (active.length === 0) {
+      const motivo = cancelDescription(this.props.rows[0], 'teacher')
+      return (
+        <>
+          <div className="class-actions-status">
+            <span className="class-status is-muted">{statusLabel('cancelada')}</span>
+          </div>
+          {motivo ? <p className="class-actions-note">{motivo}</p> : null}
+        </>
+      )
+    }
+
+    // Una pastilla por estado; en una grupal, con cuántos alumnos están así.
+    const grupal = active.length > 1
+    return (
+      <div className="class-actions-status">
+        {STATUS_ORDER.map((status) => {
+          const count = active.filter((row) => row.status === status).length
+          if (count === 0) return null
+          return (
+            <span key={status} className={`class-status is-${STATUS_TONES[status]}`}>
+              {statusLabel(status)}
+              {grupal ? ` · ${count}` : ''}
+            </span>
+          )
+        })}
+      </div>
+    )
+  }
+
+  renderButton(action, label, onClick, variant) {
     return (
       <button
         type="button"
         className={`class-action is-${variant}`}
         onClick={onClick}
-        disabled={Boolean(busy)}
+        disabled={Boolean(this.state.busy)}
       >
-        {busy === action ? <SpinnerIcon className="spin" /> : null}
+        {this.state.busy === action ? <SpinnerIcon className="spin" /> : null}
         {label}
       </button>
     )
   }
 
-  renderButtons(actions) {
-    const { cls } = this.props
-    const botones = []
-
-    if (actions.includes('accept')) {
-      botones.push(this.renderButton('accept', 'Aceptar', this.handleAccept, 'primary'))
-    }
-    if (actions.includes('pay')) {
-      botones.push(this.renderButton('pay', 'Pagar', this.handlePay, 'primary'))
-    }
-    if (actions.includes('attend')) {
-      // Si ya tomó lista, se ofrece solo la otra marca, para corregir.
-      if (cls.status !== 'realizada') {
-        botones.push(this.renderButton('present', 'Presente', this.handleAttend(true), 'primary'))
-      }
-      if (cls.status !== 'no_presentada') {
-        botones.push(this.renderButton('absent', 'Ausente', this.handleAttend(false)))
-      }
-    }
-    if (actions.includes('reschedule')) {
-      // Un link y no un botón: reprogramar es elegir otro horario en la
-      // pantalla de reservar, que ya sabe mostrar los del docente.
-      botones.push(
-        <Link
-          key="reschedule"
-          className="class-action is-secondary"
-          to={`/disponibilidad?reprogramar=${encodeURIComponent(cls.id)}`}
-        >
-          Reprogramar
-        </Link>,
-      )
-    }
-    if (actions.includes('cancel')) {
-      const label = this.isRejecting() ? 'Rechazar' : 'Cancelar clase'
-      botones.push(this.renderButton('cancel', label, this.handleAskCancel, 'danger'))
-    }
-
-    if (botones.length === 0) return null
-    return (
-      <div className="class-actions-buttons">
-        {botones.map((boton, i) => (
-          <span key={i} className="class-actions-slot">
-            {boton}
-          </span>
-        ))}
-      </div>
-    )
-  }
-
   renderCancelDialog() {
-    const { cls, viewRole } = this.props
+    const rows = this.withAction('cancel')
     const rechazar = this.isRejecting()
-    const titulo = rechazar ? '¿Rechazar la reserva?' : '¿Cancelar la clase?'
-    let detalle = 'Se libera el horario y no se puede deshacer.'
-    if (viewRole === 'student' && cls.status === 'confirmada') {
-      detalle = 'Ya la pagaste. Se libera el horario y no se puede deshacer.'
-    }
-
+    const alumnos = rows.length > 1 ? ` para los ${rows.length} alumnos` : ''
     return (
-      <Modal title={titulo} onClose={this.handleCloseCancel}>
+      <Modal
+        title={rechazar ? '¿Rechazar la reserva?' : '¿Cancelar la clase?'}
+        onClose={this.handleCloseCancel}
+      >
         <p className="class-actions-confirm-text">
-          {cls.subjectName} · {detalle}
+          {rows[0]?.subjectName} · Se {rechazar ? 'rechaza' : 'cancela'}
+          {alumnos}, se libera el horario y no se puede deshacer.
         </p>
         <div className="class-actions-confirm-row">
           <button type="button" className="class-action is-secondary" onClick={this.handleCloseCancel}>
@@ -186,46 +168,31 @@ class ClassActions extends Component {
   }
 
   render() {
-    const { cls, viewRole } = this.props
-    const now = this.props.now || nowParts()
-    // FILTRO: los botones salen de allowedActions (espejo de checkAction del
-    // backend); `exclude` saca acciones que se hacen en otro lado: en las
-    // tarjetas, tomar lista va en el detalle de la clase (ClassDetailDialog).
-    const actions = allowedActions(cls, viewRole, now).filter((a) => !this.props.exclude.includes(a))
-    const motivo = cancelDescription(cls, viewRole)
-    const hint = viewRole === 'student' ? cancelDeadlineHint(cls, now) : null
-    const tone = STATUS_TONES[cls.status] || 'muted'
+    const aceptables = this.withAction('accept')
+    const cancelables = this.withAction('cancel')
+    const botones = []
+    if (aceptables.length > 0) {
+      const label = aceptables.length > 1 ? `Aceptar a los ${aceptables.length}` : 'Aceptar'
+      botones.push(this.renderButton('accept', label, this.handleAccept, 'primary'))
+    }
+    if (cancelables.length > 0) {
+      const label = this.isRejecting() ? 'Rechazar' : 'Cancelar clase'
+      botones.push(this.renderButton('cancel', label, this.handleAskCancel, 'danger'))
+    }
 
     return (
       <div className="class-actions">
-        <div className="class-actions-status">
-          <span className={`class-status is-${tone}`}>{statusLabel(cls.status)}</span>
-          {/* En una aceptada la deuda ya la dice el botón de pagar (y el
-              docente la ve en la pastilla). En una clase ya dada, no: puede
-              haber quedado sin pagar. */}
-          {owesPayment(cls) && cls.status !== 'aceptada' ? (
-            <span className="class-status is-warning">Pago pendiente</span>
-          ) : null}
-          {viewRole === 'teacher' && cls.status === 'aceptada' ? (
-            <span className="class-status is-muted">Sin pagar</span>
-          ) : null}
-          {/* Lo que cubre el paquete no se paga; la asistencia descuenta las
-              clases del paquete que usó. */}
-          {cls.packTokens > 0 ? (
-            <span className="class-status is-info">
-              {cls.packTokens === 1 ? '1 clase' : `${cls.packTokens} clases`} del paquete
-            </span>
-          ) : null}
-          {cls.rewardType ? (
-            <span className="class-status is-info">{rewardLabel(cls.rewardType)} con neuronas</span>
-          ) : null}
-        </div>
-
-        {motivo ? <p className="class-actions-note">{motivo}</p> : null}
-        {hint ? <p className="class-actions-note">{hint}</p> : null}
+        {this.renderStatus()}
         {this.state.error ? <Banner type="danger">{this.state.error}</Banner> : null}
-
-        {this.renderButtons(actions)}
+        {botones.length > 0 ? (
+          <div className="class-actions-buttons">
+            {botones.map((boton, i) => (
+              <span key={i} className="class-actions-slot">
+                {boton}
+              </span>
+            ))}
+          </div>
+        ) : null}
         {this.state.confirmingCancel ? this.renderCancelDialog() : null}
       </div>
     )
@@ -233,8 +200,8 @@ class ClassActions extends Component {
 }
 
 ClassActions.defaultProps = {
-  viewRole: 'student',
-  exclude: [],
+  // Las reservas de la clase; para el docente, una por alumno.
+  rows: [],
   // Inyectable para los tests; en la app es la hora real.
   now: null,
   onChange: () => {},

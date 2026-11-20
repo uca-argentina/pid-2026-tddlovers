@@ -74,19 +74,22 @@ export function isConfigured() {
 }
 
 /**
- * La clave de un archivo nuevo: agrupada por turno para poder mirarlo en la
+ * La clave de un archivo nuevo: agrupada por clase para poder mirarlo en la
  * consola del bucket, y con un id al final. Sin el nombre del archivo, que
  * puede traer cualquier cosa: el nombre real va en la base y en la descarga.
+ * (Los archivos subidos antes de la migración 024 tienen claves
+ * 'materials/<docente>/<fecha>/<HHMM>/<id>'; siguen andando porque la clave se
+ * lee de la base, nunca se arma de nuevo.)
  *
- * @param {{teacherId: string, date: string, startTime: string}} turn - el turno
- *   de la clase (loadMaterialAccess en la ruta, sale de findClassById).
+ * @param {string} classId - classes.id de la clase (loadMaterialAccess en la
+ *   ruta: params.classId).
  * @param {string} id - un randomUUID() nuevo de la ruta.
- * @returns {string} 'materials/<docente>/<fecha>/<HHMM>/<id>', que se guarda en
+ * @returns {string} 'materials/<claseId>/<id>', que se guarda en
  *   class_material_files.storage_key.
- * Lo usa: routes/classes/index.js (POST /:id/material/files).
+ * Lo usa: routes/classes/index.js (POST /:classId/material/files).
  */
-export function newFileKey({ teacherId, date, startTime }, id) {
-  return `materials/${teacherId}/${date}/${startTime.replace(':', '')}/${id}`;
+export function newFileKey(classId, id) {
+  return `materials/${classId}/${id}`;
 }
 
 /**
@@ -94,7 +97,7 @@ export function newFileKey({ teacherId, date, startTime }, id) {
  * @param {string} key - de newFileKey.
  * @param {Buffer} data - los bytes del archivo del multipart.
  * @param {string} mimeType - el tipo que mandó el navegador.
- * Lo usa: routes/classes/index.js (POST /:id/material/files).
+ * Lo usa: routes/classes/index.js (POST /:classId/material/files).
  */
 export async function putFile(key, data, mimeType) {
   const { internal, bucket } = getClients();
@@ -137,7 +140,7 @@ export async function deleteFiles(keys, log = console) {
  * @param {{filename: string, mimeType: string}} meta - nombre y tipo guardados en
  *   class_material_files.
  * @returns {Promise<string>} URL prefirmada (5 min) a la que la ruta responde con un 302.
- * Lo usa: routes/classes/index.js (GET /:id/material/files/:fileId).
+ * Lo usa: routes/classes/index.js (GET /:classId/material/files/:fileId).
  */
 export async function signedDownloadUrl(key, { filename, mimeType }) {
   const { public: signer, bucket } = getClients();

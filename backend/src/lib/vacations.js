@@ -4,7 +4,7 @@
 // Tabla: teacher_vacations (migración 016). Lo usan routes/teachers/index.js
 // (validate y describe en /me/vacations), lib/availabilityExpansion.js
 // (covers: marca onVacation en el tablero) y VACATION_MESSAGE lo usan
-// routes/classes/index.js y db/classes.js al rechazar una reserva.
+// routes/bookings/index.js y db/bookings.js al rechazar una reserva.
 // Espejo: frontend/src/utils/vacations.js (isOnVacation, vacationRangeError).
 //
 // Como lib/classPacks.js y lib/teacherApproval.js, no toca la base ni el
@@ -99,5 +99,5 @@ export class VacationRange {
 }
 
 // El 409 de reservar (o reprogramar) en un día de licencia: lo devuelven la
-// ruta (routes/classes/index.js) y el re-chequeo bajo lock de db/classes.js.
+// ruta (routes/bookings/index.js) y el re-chequeo bajo lock de db/bookings.js.
 export const VACATION_MESSAGE = 'El docente está de licencia ese día.';

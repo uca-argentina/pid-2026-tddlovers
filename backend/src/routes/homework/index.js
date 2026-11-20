@@ -1,4 +1,5 @@
-import { findClassById, findTurnClasses } from '../../db/classes.js';
+import { findClassBookings } from '../../db/bookings.js';
+import { findClass } from '../../db/classes.js';
 import {
   addMessage,
   createHomework,
@@ -37,7 +38,7 @@ import { isUuid } from '../../lib/validators.js';
 //   POST /api/homework/submissions/:id/feedback  docente de esa entrega (CSRF)
 //   GET  /api/homework/submissions/:id/messages  docente o alumno de esa entrega
 //   POST /api/homework/submissions/:id/messages  docente o alumno de esa entrega (CSRF)
-// Usa: db/homework.js, db/classes.js (findClassById, findTurnClasses),
+// Usa: db/homework.js, db/classes.js (findClass), db/bookings.js (findClassBookings),
 // lib/homework.js (reglas y validaciones) y lib/neuronas.js (correctionCredits).
 // Los errores salen como { message } (+ `fields` en validaciones); no hay código `error`.
 
@@ -54,9 +55,10 @@ export default async function homeworkRoutes(app) {
    * usuario adivinando su id. Devuelve lo que falta para crear la tarea, o
    * { error } con el status.
    *
-   * @param {object} body - request.body: exactamente uno de studentId o classId.
+   * @param {object} body - request.body: exactamente uno de studentId o classId
+   *   (classes.id, el `classId` de GET /api/homework/targets).
    * @param {string} teacherId - request.user.id.
-   * @returns {Promise<{target: {studentIds, subjectId?, classDate?, startTime?}}
+   * @returns {Promise<{target: {studentIds, classId?}}
    *   | {error: {status, message}}>}
    */
   async function resolveTarget(body, teacherId) {
@@ -71,7 +73,7 @@ export default async function homeworkRoutes(app) {
       return { target: { studentIds: [studentId] } };
     }
 
-    const cls = isUuid(classId) ? await findClassById(classId) : null;
+    const cls = isUuid(classId) ? await findClass(classId) : null;
     if (!cls || String(cls.teacherId) !== String(teacherId)) {
       return { error: { status: 404, message: 'Esa clase no existe.' } };
     }
@@ -86,19 +88,14 @@ export default async function homeworkRoutes(app) {
         },
       };
     }
-    // findTurnClasses ya deja afuera las canceladas.
-    const rows = await findTurnClasses({ teacherId, date: cls.date, startTime: cls.startTime });
+    // findClassBookings ya deja afuera las reservas canceladas.
+    const rows = await findClassBookings(cls.id);
     const studentIds = rows.map((row) => row.studentId);
     if (studentIds.length === 0) {
       return { error: { status: 409, message: 'Esa clase ya no tiene alumnos anotados.' } };
     }
     return {
-      target: {
-        studentIds,
-        subjectId: cls.subjectId,
-        classDate: cls.date,
-        startTime: cls.startTime,
-      },
+      target: { studentIds, classId: cls.id },
     };
   }
 

@@ -7,7 +7,7 @@ import {
   dayKeyFromIso,
   occursOn,
   openingsForWindow,
-  withoutClass,
+  withoutBooking,
 } from './availabilityExpansion.js';
 
 // 2026-09-14 es lunes.
@@ -36,8 +36,9 @@ const ventana = (over = {}) => ({
   ...over,
 });
 
-// Como lo devuelve findTakenSlots: un turno, con el cupo y la modalidad copiados.
-const turno = (over = {}) => ({
+// Como lo devuelve findActiveClasses: una clase en pie, con su cupo y modalidad.
+const claseEnPie = (over = {}) => ({
+  classId: 'k1',
   teacherId: 't1',
   date: LUNES,
   start: '13:00',
@@ -50,7 +51,7 @@ const turno = (over = {}) => ({
   ...over,
 });
 
-// Una clase propia del alumno como la devuelve findClassesForUser (lo que importa acá).
+// Una reserva propia del alumno como la devuelve findBookingsForUser (lo que importa acá).
 const propia = (over = {}) => ({
   id: 'c-propia',
   date: LUNES,
@@ -62,7 +63,7 @@ const propia = (over = {}) => ({
   ...over,
 });
 
-const abiertos = (window, taken = [], options = {}) => openingsForWindow(window, taken, options);
+const abiertos = (window, activeClasses = [], options = {}) => openingsForWindow(window, activeClasses, options);
 const inicios = (starts) => starts.map((option) => `${option.start}/${option.maxMinutes}`);
 
 describe('dayKeyFromIso', () => {
@@ -109,21 +110,21 @@ describe('openingsForWindow', () => {
   });
 
   it('a class of the teacher splits the window in two', () => {
-    const { starts } = abiertos(ventana({ end: '17:00' }), [turno({ start: '14:00', end: '15:00' })]);
+    const { starts } = abiertos(ventana({ end: '17:00' }), [claseEnPie({ start: '14:00', end: '15:00' })]);
     expect(inicios(starts)).toEqual(['13:00/60', '13:30/30', '15:00/120', '15:30/90', '16:00/60', '16:30/30']);
   });
 
   it('after a class ending off the half hour, the next start is the next :00/:30', () => {
-    const { starts } = abiertos(ventana(), [turno({ end: '13:45' })]);
+    const { starts } = abiertos(ventana(), [claseEnPie({ end: '13:45' })]);
     expect(inicios(starts)).toEqual(['14:00/60', '14:30/30']);
   });
 
   it('a stretch too short for a 30 minute class is not offered', () => {
-    expect(abiertos(ventana(), [turno({ end: '14:45' })]).starts).toEqual([]);
+    expect(abiertos(ventana(), [claseEnPie({ end: '14:45' })]).starts).toEqual([]);
   });
 
   it('a class from another window of the teacher also blocks', () => {
-    const otra = turno({ start: '12:30', end: '13:30', subjectId: 's2' });
+    const otra = claseEnPie({ start: '12:30', end: '13:30', subjectId: 's2' });
     expect(inicios(abiertos(ventana(), [otra]).starts)).toEqual(['13:30/90', '14:00/60', '14:30/30']);
   });
 
@@ -149,14 +150,14 @@ describe('openingsForWindow', () => {
 
     it('hide a group class that overlaps one of them (or the one already joined)', () => {
       const grupal = ventana({ maxStudents: 3 });
-      const taken = [turno({ maxStudents: 3, enrolled: 2 })];
-      expect(abiertos(grupal, taken, { own: own(13 * 60, 14 * 60) }).groups).toEqual([]);
+      const activeClasses = [claseEnPie({ maxStudents: 3, enrolled: 2 })];
+      expect(abiertos(grupal, activeClasses, { own: own(13 * 60, 14 * 60) }).groups).toEqual([]);
     });
   });
 
   it('offers joining a group class that still has room, with its subject and capacity', () => {
     const { groups, starts } = abiertos(ventana({ maxStudents: 3 }), [
-      turno({ enrolled: 2, maxStudents: 3 }),
+      claseEnPie({ enrolled: 2, maxStudents: 3 }),
     ]);
     expect(groups).toEqual([
       {
@@ -172,56 +173,56 @@ describe('openingsForWindow', () => {
   });
 
   it('a full group class is not offered', () => {
-    const taken = [turno({ enrolled: 3, maxStudents: 3 })];
-    expect(abiertos(ventana({ maxStudents: 3 }), taken).groups).toEqual([]);
+    const activeClasses = [claseEnPie({ enrolled: 3, maxStudents: 3 })];
+    expect(abiertos(ventana({ maxStudents: 3 }), activeClasses).groups).toEqual([]);
   });
 
-  it('measures the room against the turn, not the window that was raised to 5 (B1)', () => {
-    // Grupal de 3 con 3 anotados; el docente subió la ventana a 5: el turno sigue lleno.
-    const taken = [turno({ enrolled: 3, maxStudents: 3 })];
-    expect(abiertos(ventana({ maxStudents: 5 }), taken).groups).toEqual([]);
+  it('measures the room against the class, not the window that was raised to 5 (B1)', () => {
+    // Grupal de 3 con 3 anotados; el docente subió la ventana a 5: la clase sigue llena.
+    const activeClasses = [claseEnPie({ enrolled: 3, maxStudents: 3 })];
+    expect(abiertos(ventana({ maxStudents: 5 }), activeClasses).groups).toEqual([]);
   });
 
-  it('never offers joining an individual turn, even if the window is now a group (B1)', () => {
-    expect(abiertos(ventana({ maxStudents: 3 }), [turno()]).groups).toEqual([]);
+  it('never offers joining an individual class, even if the window is now a group (B1)', () => {
+    expect(abiertos(ventana({ maxStudents: 3 }), [claseEnPie()]).groups).toEqual([]);
   });
 
-  it('offers a group turn with room even if the window became individual', () => {
-    const taken = [turno({ enrolled: 1, maxStudents: 3 })];
-    expect(abiertos(ventana({ maxStudents: 1 }), taken).groups).toHaveLength(1);
+  it('offers a group class with room even if the window became individual', () => {
+    const activeClasses = [claseEnPie({ enrolled: 1, maxStudents: 3 })];
+    expect(abiertos(ventana({ maxStudents: 1 }), activeClasses).groups).toHaveLength(1);
   });
 
-  it('does not offer a group turn of another modality than the window (B2)', () => {
-    const taken = [turno({ enrolled: 1, maxStudents: 3, modality: 'in_person' })];
-    expect(abiertos(ventana({ maxStudents: 3 }), taken).groups).toEqual([]);
+  it('does not offer a group class of another modality than the window (B2)', () => {
+    const activeClasses = [claseEnPie({ enrolled: 1, maxStudents: 3, modality: 'in_person' })];
+    expect(abiertos(ventana({ maxStudents: 3 }), activeClasses).groups).toEqual([]);
   });
 
   it('does not offer joining a group of a subject the teacher no longer rates', () => {
-    const taken = [turno({ subjectId: 's9', maxStudents: 3 })];
-    expect(abiertos(ventana({ maxStudents: 3 }), taken).groups).toEqual([]);
+    const activeClasses = [claseEnPie({ subjectId: 's9', maxStudents: 3 })];
+    expect(abiertos(ventana({ maxStudents: 3 }), activeClasses).groups).toEqual([]);
   });
 
   it('does not offer joining a group that ends after the window (it was shrunk)', () => {
     const achicada = ventana({ maxStudents: 3, end: '14:30' });
-    const taken = [turno({ start: '14:00', end: '15:00', maxStudents: 3 })];
-    expect(abiertos(achicada, taken).groups).toEqual([]);
+    const activeClasses = [claseEnPie({ start: '14:00', end: '15:00', maxStudents: 3 })];
+    expect(abiertos(achicada, activeClasses).groups).toEqual([]);
   });
 
   it('does not offer joining a group that started before the window', () => {
     const grupal = ventana({ maxStudents: 3, start: '14:00', end: '16:00' });
-    const taken = [turno({ start: '13:30', end: '14:30', maxStudents: 3 })];
-    expect(abiertos(grupal, taken).groups).toEqual([]);
+    const activeClasses = [claseEnPie({ start: '13:30', end: '14:30', maxStudents: 3 })];
+    expect(abiertos(grupal, activeClasses).groups).toEqual([]);
   });
 
   it('offers a group that ends exactly when the window does', () => {
-    const taken = [turno({ start: '14:00', end: '15:00', maxStudents: 3 })];
-    expect(abiertos(ventana({ maxStudents: 3 }), taken).groups).toHaveLength(1);
+    const activeClasses = [claseEnPie({ start: '14:00', end: '15:00', maxStudents: 3 })];
+    expect(abiertos(ventana({ maxStudents: 3 }), activeClasses).groups).toHaveLength(1);
   });
 
   it('drops what already started', () => {
     // 13:10: ni sumarse a la de 13:00 ni arrancar antes de 13:30.
-    const taken = [turno({ maxStudents: 3 })];
-    const { starts, groups } = abiertos(ventana({ maxStudents: 3, end: '16:00' }), taken, {
+    const activeClasses = [claseEnPie({ maxStudents: 3 })];
+    const { starts, groups } = abiertos(ventana({ maxStudents: 3, end: '16:00' }), activeClasses, {
       cutoff: 13 * 60 + 10,
     });
     expect(groups).toEqual([]);
@@ -242,7 +243,7 @@ describe('openingsForWindow', () => {
 
 describe('bookableRows', () => {
   const filas = (over = {}) =>
-    bookableRows({ windows: [ventana()], taken: [], from: LUNES, to: MARTES, ...over });
+    bookableRows({ windows: [ventana()], activeClasses: [], from: LUNES, to: MARTES, ...over });
 
   it('builds one row per window occurrence, with the documented shape', () => {
     const rows = filas();
@@ -318,28 +319,28 @@ describe('bookableRows', () => {
   });
 
   it('only subtracts classes of that teacher on that date', () => {
-    const rows = filas({ taken: [turno({ teacherId: 'otro' }), turno({ date: MARTES })] });
+    const rows = filas({ activeClasses: [claseEnPie({ teacherId: 'otro' }), claseEnPie({ date: MARTES })] });
     expect(rows[0].starts[0]).toEqual({ start: '13:00', maxMinutes: 120 });
   });
 
   it('a full occurrence does not appear', () => {
-    expect(filas({ windows: [ventana({ end: '14:00' })], taken: [turno()] })).toEqual([]);
+    expect(filas({ windows: [ventana({ end: '14:00' })], activeClasses: [claseEnPie()] })).toEqual([]);
   });
 
   it('an occurrence where the student is busy the whole time does not appear', () => {
-    const rows = filas({ studentLessons: [propia({ startTime: '13:00', endTime: '15:00' })] });
+    const rows = filas({ studentBookings: [propia({ startTime: '13:00', endTime: '15:00' })] });
     expect(rows).toEqual([]);
   });
 
   it('a cancelled own class does not take the student\'s time', () => {
     const rows = filas({
-      studentLessons: [propia({ startTime: '13:00', endTime: '15:00', status: 'cancelada' })],
+      studentBookings: [propia({ startTime: '13:00', endTime: '15:00', status: 'cancelada' })],
     });
     expect(rows).toHaveLength(1);
   });
 
   it('own classes on another date do not count', () => {
-    const rows = filas({ studentLessons: [propia({ date: MARTES, startTime: '13:00' })] });
+    const rows = filas({ studentBookings: [propia({ date: MARTES, startTime: '13:00' })] });
     expect(rows[0].starts).toHaveLength(4);
   });
 
@@ -361,6 +362,7 @@ describe('bookableRows', () => {
     // La clase confirmada que se reprograma: Matemática de 13 a 14 con t1.
     const vieja = propia({
       id: 'vieja',
+      classId: 'k1',
       teacherId: 't1',
       subjectId: 's1',
       startTime: '13:00',
@@ -368,18 +370,25 @@ describe('bookableRows', () => {
     });
 
     it('frees the old slot and does not count it as an own class', () => {
-      const rows = filas({ taken: [turno()], studentLessons: [vieja], rescheduling: vieja });
+      const rows = filas({ activeClasses: [claseEnPie()], studentBookings: [vieja], rescheduling: vieja });
       expect(rows[0].starts[0]).toEqual({ start: '13:00', maxMinutes: 120 });
     });
 
     it('only keeps that teacher, with the subject and groups trimmed to its subject (B4)', () => {
       const otroDocente = ventana({ id: 'w2', teacherId: 't2', start: '16:00', end: '18:00' });
       const grupal = ventana({ maxStudents: 3, end: '17:00' });
-      const taken = [
-        turno({ start: '15:00', end: '16:00', subjectId: 's2', subjectName: 'Física', maxStudents: 3 }),
-        turno({ start: '16:00', end: '17:00', maxStudents: 3 }),
+      const activeClasses = [
+        claseEnPie({
+          classId: 'k2',
+          start: '15:00',
+          end: '16:00',
+          subjectId: 's2',
+          subjectName: 'Física',
+          maxStudents: 3,
+        }),
+        claseEnPie({ classId: 'k3', start: '16:00', end: '17:00', maxStudents: 3 }),
       ];
-      const rows = filas({ windows: [grupal, otroDocente], taken, rescheduling: vieja });
+      const rows = filas({ windows: [grupal, otroDocente], activeClasses, rescheduling: vieja });
       expect(rows).toHaveLength(1);
       expect(rows[0].teacherId).toBe('t1');
       expect(rows[0].subjects.map((subject) => subject.id)).toEqual(['s1']);
@@ -393,27 +402,22 @@ describe('bookableRows', () => {
   });
 });
 
-describe('withoutClass', () => {
-  const clase = {
-    teacherId: 't1',
-    date: LUNES,
-    startTime: '13:00',
-    endTime: '14:00',
-    subjectId: 's1',
-  };
+describe('withoutBooking', () => {
+  // La reserva que se reprograma: lo que importa es su clase.
+  const clase = { id: 'vieja', classId: 'k1' };
 
-  it('drops the turn of an individual class, so its slot is offered again', () => {
-    const otro = turno({ start: '14:00', end: '15:00' });
-    expect(withoutClass([turno(), otro], clase)).toEqual([otro]);
+  it('drops an individual class, so its slot is offered again', () => {
+    const otro = claseEnPie({ classId: 'k2', start: '14:00', end: '15:00' });
+    expect(withoutBooking([claseEnPie(), otro], clase)).toEqual([otro]);
   });
 
   it('in a group only frees that seat', () => {
-    expect(withoutClass([turno({ enrolled: 3 })], clase)).toEqual([turno({ enrolled: 2 })]);
+    expect(withoutBooking([claseEnPie({ enrolled: 3 })], clase)).toEqual([claseEnPie({ enrolled: 2 })]);
   });
 
-  it('leaves other teachers and dates alone', () => {
-    const ajenos = [turno({ teacherId: 't2' }), turno({ date: MARTES })];
-    expect(withoutClass(ajenos, clase)).toEqual(ajenos);
+  it('leaves other classes alone, even at the same time', () => {
+    const ajenos = [claseEnPie({ classId: 'k2', teacherId: 't2' }), claseEnPie({ classId: 'k3', date: MARTES })];
+    expect(withoutBooking(ajenos, clase)).toEqual(ajenos);
   });
 });
 

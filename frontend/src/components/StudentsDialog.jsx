@@ -2,14 +2,14 @@ import { Component } from 'react'
 import Modal from './Modal.jsx'
 import Banner from './Banner.jsx'
 import { SpinnerIcon } from './icons.jsx'
-import { acceptLesson, cancelLesson } from '../api/client.js'
+import { acceptBooking, cancelBooking } from '../api/client.js'
 import {
   STATUS_TONES,
   allowedActions,
   nowParts,
   paymentStatus,
   statusLabel,
-} from '../utils/classStates.js'
+} from '../utils/bookingStates.js'
 import { activeRows } from '../utils/reservations.js'
 import './ClassActions.css'
 import './AttendanceDialog.css'
@@ -18,17 +18,17 @@ import './AttendanceDialog.css'
  * Los alumnos de una clase grupal, antes de que empiece: un renglón por
  * alumno con su estado, si pagó, y lo que se puede hacer con su reserva
  * (aceptarlo, rechazarlo, sacarlo de la clase). Es para decidir de a uno; lo
- * de toda la clase va en los botones del detalle (TurnActions).
+ * de toda la clase va en los botones del detalle (ClassActions).
  *
  * Va en su propio modal, como tomar lista, para que una grupal de muchos no
  * llene el detalle. Cada cambio se avisa con onChange(reserva).
  *
- * Rol: docente. Props (de ClassDetailDialog): rows (reservas del turno), now,
+ * Rol: docente. Props (de ClassDetailDialog): rows (reservas de la clase), now,
  * onChange(reservaActualizada) y onClose().
  *
- * Datos: acceptLesson → POST /api/classes/:id/accept y cancelLesson →
- * POST /api/classes/:id/cancel, de a una reserva; qué botones se ven lo
- * decide allowedActions (utils/classStates.js).
+ * Datos: acceptBooking → POST /api/bookings/:id/accept y cancelBooking →
+ * POST /api/bookings/:id/cancel, de a una reserva; qué botones se ven lo
+ * decide allowedActions (utils/bookingStates.js).
  *
  * Estado: busy (id en vuelo), confirmCancelId, error.
  */
@@ -45,7 +45,7 @@ class StudentsDialog extends Component {
   }
 
   /**
-   * Corre `call(row.id)` (acceptLesson o cancelLesson) y le pasa la reserva
+   * Corre `call(row.id)` (acceptBooking o cancelBooking) y le pasa la reserva
    * devuelta a onChange; si falla deja el mensaje del backend en `error`.
    */
   run(row, call) {
@@ -65,13 +65,13 @@ class StudentsDialog extends Component {
       )
   }
 
-  handleAccept = (row) => () => this.run(row, acceptLesson)
+  handleAccept = (row) => () => this.run(row, acceptBooking)
 
   handleAskCancel = (row) => () => this.setState({ confirmCancelId: row.id, error: null })
 
   handleKeep = () => this.setState({ confirmCancelId: null })
 
-  handleCancel = (row) => () => this.run(row, cancelLesson)
+  handleCancel = (row) => () => this.run(row, cancelBooking)
 
   renderButtons(row) {
     const { busy, confirmCancelId } = this.state

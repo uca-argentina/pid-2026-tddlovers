@@ -5,11 +5,11 @@ import { getPool } from './pool.js';
 // se escribe.
 //
 // Tablas: teacher_vacations (migración 016, con exclusion constraint para que
-// los rangos de un docente no se pisen); classes (cancela las del rango).
+// los rangos de un docente no se pisen); class_bookings (cancela las reservas del rango).
 // Locks: 'vacations:' || teacherId EXCLUSIVO en createVacation; las reservas
-// (db/classes.js lockTeacherVacations) lo toman compartido.
+// (db/bookings.js lockTeacherVacations) lo toman compartido.
 // Lo usan: routes/teachers (/me/vacations), routes/availability
-// (listVacationsInRange), routes/classes y db/classes.js (isTeacherOnVacation).
+// (listVacationsInRange), routes/bookings y db/bookings.js (isTeacherOnVacation).
 
 const VACATION_COLUMNS = `
   v.id,
@@ -21,11 +21,13 @@ const VACATION_COLUMNS = `
 // Las reservas que se caen si el docente se va de vacaciones esos días: las
 // que siguen en pie y todavía no empezaron. Las que ya pasaron (o ya
 // arrancaron hoy) quedan como están: el docente toma lista de esas.
+// Va sobre `FROM class_bookings b JOIN classes c ON c.id = b.class_id`.
 const CANCELLABLE = (teacher, from, to, nowIso, nowTime) => `
-  teacher_id = ${teacher}
-  AND class_date BETWEEN ${from}::date AND ${to}::date
-  AND status IN ('pendiente', 'aceptada', 'confirmada')
-  AND (class_date > ${nowIso}::date OR (class_date = ${nowIso}::date AND start_time > ${nowTime}::time))
+  c.teacher_id = ${teacher}
+  AND c.class_date BETWEEN ${from}::date AND ${to}::date
+  AND b.status IN ('pendiente', 'aceptada', 'confirmada')
+  AND (c.class_date > ${nowIso}::date
+       OR (c.class_date = ${nowIso}::date AND c.start_time > ${nowTime}::time))
 `;
 
 /**
@@ -74,14 +76,14 @@ export async function listVacationsInRange({ from, to }) {
 /**
  * ¿Está de vacaciones ese día? Para rechazar una reserva aunque la UI se
  * saltee. `client` deja usarla adentro de la transacción de una reserva, que
- * es donde el chequeo vale de verdad (ver bookClass en db/classes.js).
+ * es donde el chequeo vale de verdad (ver createBooking en db/bookings.js).
  *
  * @param {string} teacherId - el docente de la ventana (findWindowById).
  * @param {string} date - 'YYYY-MM-DD' de la reserva (body.date).
  * @param {pg.Pool|pg.PoolClient} [client] - por defecto el pool.
  * @returns {Promise<boolean>}
  * Origen: teacher_vacations.
- * Lo usan: routes/classes/index.js (checkWindowSlot) y db/classes.js (insertClass).
+ * Lo usan: routes/bookings/index.js (checkWindowSlot) y db/bookings.js (insertBooking).
  */
 export async function isTeacherOnVacation(teacherId, date, client = getPool()) {
   const result = await client.query(
@@ -102,12 +104,13 @@ export async function isTeacherOnVacation(teacherId, date, client = getPool()) {
  *   GET /api/teachers/me/vacations/impact, validado por VacationRange.validate.
  * @param {{iso: string, time: string}} ahora - now() de lib/clock.js.
  * @returns {Promise<number>}
- * Origen: classes (CANCELLABLE).
+ * Origen: class_bookings + classes (CANCELLABLE).
  * Lo usa: routes/teachers/index.js.
  */
 export async function countClassesToCancel(teacherId, { startDate, endDate }, { iso, time }) {
   const result = await getPool().query(
-    `SELECT count(*)::int AS count FROM classes
+    `SELECT count(*)::int AS count
+     FROM class_bookings b JOIN classes c ON c.id = b.class_id
      WHERE ${CANCELLABLE('$1', '$2', '$3', '$4', '$5')}`,
     [teacherId, startDate, endDate, iso, time]
   );
@@ -129,7 +132,7 @@ export async function countClassesToCancel(teacherId, { startDate, endDate }, { 
  * @param {{iso: string, time: string}} ahora - now() de lib/clock.js.
  * @returns {Promise<{vacation: {id, teacherId, startDate, endDate}, cancelled: number}
  *   | {conflict: {id, teacherId, startDate, endDate}}>}
- * Origen: INSERT en teacher_vacations; UPDATE classes (cancel_reason 'vacaciones').
+ * Origen: INSERT en teacher_vacations; UPDATE class_bookings (cancel_reason 'vacaciones').
  * Lo usa: routes/teachers/index.js.
  * Locks/transacción: transacción propia; 'vacations:' || teacherId exclusivo.
  */
@@ -137,7 +140,7 @@ export async function createVacation(teacherId, { startDate, endDate }, { iso, t
   const client = await getPool().connect();
   try {
     await client.query('BEGIN');
-    // Exclusivo: las reservas toman este mismo lock compartido (db/classes.js
+    // Exclusivo: las reservas toman este mismo lock compartido (db/bookings.js
     // lockTeacherVacations), así ninguna queda viva en un día de licencia.
     await client.query(`SELECT pg_advisory_xact_lock(hashtext('vacations:' || $1))`, [teacherId]);
 
@@ -165,10 +168,13 @@ export async function createVacation(teacherId, { startDate, endDate }, { iso, t
     // motivo a la vista. Las clases con paquete devuelven sus clases solas:
     // lo que queda del paquete se cuenta sin las canceladas.
     const cancelled = await client.query(
-      `UPDATE classes
+      `UPDATE class_bookings
        SET status = 'cancelada', cancel_reason = 'vacaciones', cancelled_by = 'teacher',
            cancelled_at = now()
-       WHERE ${CANCELLABLE('$1', '$2', '$3', '$4', '$5')}`,
+       WHERE id IN (
+         SELECT b.id FROM class_bookings b JOIN classes c ON c.id = b.class_id
+         WHERE ${CANCELLABLE('$1', '$2', '$3', '$4', '$5')}
+       )`,
       [teacherId, startDate, endDate, iso, time]
     );
 

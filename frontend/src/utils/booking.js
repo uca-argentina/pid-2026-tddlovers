@@ -53,30 +53,30 @@
 //   components/SearchBar.jsx:getSuggestions — usa suggest; docentes aprobados del backend.
 //
 // Calendario
-//   pages/Calendar/CalendarPage.jsx:getClassesByDate — sin turnos cancelados para todos.
-//   pages/Calendar/CalendarPage.jsx:loadPending — clases (turnos) con solicitudes pendientes.
+//   pages/Calendar/CalendarPage.jsx:getClassesByDate — sin clases canceladas para todos.
+//   pages/Calendar/CalendarPage.jsx:loadPending — clases (clases) con solicitudes pendientes.
 //   pages/Calendar/CalendarPage.jsx:renderPending — el aviso solo para el docente.
-//   utils/reservations.js:calendarTurns — un turno por clase, sin los cancelados para todos.
+//   utils/reservations.js:calendarClasses — una entrada por clase, sin las canceladas para todos.
 //   pages/Calendar/DayAgenda.jsx:renderPlace — dirección exacta solo pagada (la decide el back).
 //   pages/Calendar/DayAgenda.jsx:renderFavorite — corazón solo para alumnos.
 //   pages/Calendar/DayAgenda.jsx:getDays — días con clases más el elegido.
-//   api/client.js:fetchMyLessons — clases propias en pie (líneas del calendario del tablero).
+//   api/client.js:fetchMyBookings — clases propias en pie (líneas del calendario del tablero).
 //
 // Mis reservas
 //   utils/reservations.js:activeRows — reservas en pie (sin canceladas).
-//   utils/reservations.js:turnInCategory — en qué categoría va cada turno.
+//   utils/reservations.js:classInCategory — en qué categoría va cada clase.
 //   utils/reservations.js:nextClass — próxima: en pie y sin terminar.
 //   utils/reservations.js:lastClass — última: en pie y terminada.
-//   utils/reservations.js:filterTurns — filtros que elige el usuario en la categoría.
+//   utils/reservations.js:filterClasses — filtros que elige el usuario en la categoría.
 //   pages/Reservations/ReservationsPage.jsx:lastBadge — "Falta tomar lista" solo al docente.
-//   pages/Reservations/ReservationsPage.jsx:renderCategories — cuenta los turnos de cada una.
-//   pages/Reservations/CategoryDialog.jsx:render — aplica filterTurns.
+//   pages/Reservations/ReservationsPage.jsx:renderCategories — cuenta las clases de cada una.
+//   pages/Reservations/CategoryDialog.jsx:render — aplica filterClasses.
 //   components/ClassCard.jsx:render — corazón solo para alumnos.
 //
 // Detalle, acciones y asistencia
-//   utils/classStates.js:allowedActions — qué botones (espejo de checkAction del backend).
-//   components/ClassActions.jsx:render — botones de allowedActions menos `exclude`.
-//   components/TurnActions.jsx:active — acciones solo sobre las reservas en pie.
+//   utils/bookingStates.js:allowedActions — qué botones (espejo de checkAction del backend).
+//   components/BookingActions.jsx:render — botones de allowedActions menos `exclude`.
+//   components/ClassActions.jsx:active — acciones solo sobre las reservas en pie.
 //   components/StudentsDialog.jsx:renderRow — el pago solo en reservas en pie.
 //   components/AttendanceDialog.jsx:handleAllPresent — "Todos presentes" solo a los sin marca.
 //   components/ClassDetailDialog.jsx:getRows — el alumno ve solo su reserva.
@@ -397,7 +397,7 @@ export function filterSubjectsFor(cards, catalog, selectedIds = []) {
 
 /**
  * '2 de 5 anotados'. `enrolled` y `maxStudents` son los de un elemento de
- * `groups` de la fila (el cupo del turno, no el de la ventana).
+ * `groups` de la fila (el cupo de la clase, no el de la ventana).
  * Lo usan: pages/Booking/BookingCard.jsx, BookingDialog.jsx.
  */
 export function formatEnrolled(enrolled, maxStudents) {

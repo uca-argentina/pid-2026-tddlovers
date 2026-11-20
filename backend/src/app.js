@@ -6,6 +6,7 @@ import authRoutes from './routes/auth/index.js';
 import subjectsRoutes from './routes/subjects/index.js';
 import usersRoutes from './routes/users/index.js';
 import teachersRoutes from './routes/teachers/index.js';
+import bookingsRoutes from './routes/bookings/index.js';
 import classesRoutes from './routes/classes/index.js';
 import availabilityRoutes from './routes/availability/index.js';
 import adminRoutes from './routes/admin/index.js';
@@ -93,6 +94,7 @@ export function buildApp(opts = {}) {
   app.register(subjectsRoutes, { prefix: '/api/subjects' });
   app.register(usersRoutes, { prefix: '/api/users' });
   app.register(teachersRoutes, { prefix: '/api/teachers' });
+  app.register(bookingsRoutes, { prefix: '/api/bookings' });
   app.register(classesRoutes, { prefix: '/api/classes' });
   app.register(availabilityRoutes, { prefix: '/api/availability' });
   app.register(adminRoutes, { prefix: '/api/admin' });

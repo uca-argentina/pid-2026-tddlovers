@@ -1,29 +1,30 @@
 // El material de una clase ya dada (resumen + archivos): quién lo ve, quién
 // lo carga, desde cuándo y cuánto entra. Funciones puras como las de
-// classStates.js: dependen de la hora, y así se prueban sin reloj ni base.
+// bookingStates.js: dependen de la hora, y así se prueban sin reloj ni base.
 //
-// El material es del TURNO (docente, fecha, inicio): en una grupal lo carga
-// una vez el docente y lo ven todos los anotados.
+// El material es de la CLASE (classes.id), no de cada reserva: en una grupal
+// lo carga una vez el docente y lo ven todos los anotados.
 //
-// Tablas: class_materials y class_material_files (migración 018); los bytes de
+// Tablas: class_materials y class_material_files (migración 018; por class_id
+// desde la 024); los bytes de
 // los archivos viven en el bucket S3 (storage/files.js), no en Postgres.
-// Lo usan: routes/classes/index.js (rutas /:id/material*), db/classMaterials.js
+// Lo usan: routes/classes/index.js (rutas /:classId/material*), db/classMaterials.js
 // (re-chequeo de topes bajo lock) y storage/files.js (contentDisposition).
 // Espejo: frontend/src/utils/classMaterials.js (canEditMaterial,
 // canViewMaterial, uploadProblem), solo para decidir qué mostrar.
 
-import { hasEnded } from './classStates.js';
+import { hasEnded } from './bookingStates.js';
 
 // Topes de CLAUDE.md ("Class material"): resumen ≤5000 caracteres, cada archivo
-// ≤10 MB, y por turno ≤20 archivos y ≤25 MB en total. MAX_FILE_BYTES y
-// MAX_FILES_PER_TURN también los usa la ruta como límites de @fastify/multipart.
+// ≤10 MB, y por clase ≤20 archivos y ≤25 MB en total. MAX_FILE_BYTES y
+// MAX_FILES_PER_CLASS también los usa la ruta como límites de @fastify/multipart.
 const MAX_SUMMARY_LENGTH = 5000;
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;
-// Topes por turno: los archivos van al bucket S3 (no a Postgres), pero el
+// Topes por clase: los archivos van al bucket S3 (no a Postgres), pero el
 // espacio del bucket es limitado y la subida se arma en memoria antes de
-// subirla, así que un turno no puede ocupar más que esto.
-export const MAX_TURN_BYTES = 25 * 1024 * 1024;
-export const MAX_FILES_PER_TURN = 20;
+// subirla, así que una clase no puede ocupar más que esto.
+export const MAX_CLASS_BYTES = 25 * 1024 * 1024;
+export const MAX_FILES_PER_CLASS = 20;
 const MAX_NAME_LENGTH = 255;
 
 // Estados en los que la clase pudo haberse dado: una pendiente que llegó a
@@ -38,22 +39,38 @@ const INLINE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/web
 const NOT_ENDED_MESSAGE = 'Vas a poder ver el material cuando termine la clase.';
 
 /**
+ * El estado con el que se decide el material de una clase para su docente: el
+ * de una reserva que pudo darse, si hay alguna (en una grupal alcanza con que
+ * un alumno haya tenido la clase), o 'cancelada' si ninguna.
+ *
+ * @param {Array<{status: string}>} bookings - las reservas en pie de la clase
+ *   (findClassBookings de db/bookings.js).
+ * @returns {string} un booking_status.
+ * Lo usa: routes/classes/index.js (loadMaterialAccess, para el docente).
+ */
+export function materialStatusOf(bookings) {
+  return bookings.find((booking) => GIVEN_STATUSES.includes(booking.status))?.status ?? 'cancelada';
+}
+
+/**
  * ¿Puede `role` cargar o borrar material de esa clase? Solo el docente, y solo
  * cuando la clase ya terminó y pudo haberse dado (no pendiente ni cancelada).
  *
- * @param {object} cls - la clase de findClassById (db/classes.js): status, date, endTime.
+ * @param {{status: string, date: string, endTime: string}} subject - fecha y fin de
+ *   la clase, con el estado que le corresponde a quien mira (loadMaterialAccess
+ *   en la ruta: materialStatusOf para el docente, su reserva para el alumno).
  * @param {{role: 'teacher'|'student', now: {iso, time}}} ctx - `role` es el papel en
  *   esa clase (loadOwnClass de la ruta) y `now` sale de now() de lib/clock.js.
  * @returns {null|{status: number, message: string}} como checkAction.
  * Lo usa: routes/classes/index.js (PUT material, subir y borrar archivos, vía loadMaterialAccess).
  * Espejo: frontend/src/utils/classMaterials.js (canEditMaterial).
  */
-export function checkEditMaterial(cls, { role, now }) {
+export function checkEditMaterial(subject, { role, now }) {
   if (role !== 'teacher') return { status: 403, message: 'Solo el docente puede cargar material.' };
-  if (!GIVEN_STATUSES.includes(cls.status)) {
+  if (!GIVEN_STATUSES.includes(subject.status)) {
     return { status: 409, message: 'Esta clase no se dio: no se le puede cargar material.' };
   }
-  if (!hasEnded(cls, now)) {
+  if (!hasEnded(subject, now)) {
     return { status: 409, message: 'Vas a poder cargar el material cuando termine la clase.' };
   }
   return null;
@@ -66,14 +83,14 @@ export function checkEditMaterial(cls, { role, now }) {
  * Lo usa: routes/classes/index.js (GET material y descarga de archivos).
  * Espejo: frontend/src/utils/classMaterials.js (canViewMaterial).
  */
-export function checkViewMaterial(cls, { role, now }) {
+export function checkViewMaterial(subject, { role, now }) {
   // FILTRO: el material se ve solo de una clase que se dio (aceptada,
   // confirmada, realizada o ausente) y que ya terminó.
-  if (role === 'teacher') return checkEditMaterial(cls, { role, now });
-  if (!GIVEN_STATUSES.includes(cls.status)) {
+  if (role === 'teacher') return checkEditMaterial(subject, { role, now });
+  if (!GIVEN_STATUSES.includes(subject.status)) {
     return { status: 409, message: 'Esta clase no se dio: no tiene material.' };
   }
-  if (!hasEnded(cls, now)) return { status: 409, message: NOT_ENDED_MESSAGE };
+  if (!hasEnded(subject, now)) return { status: 409, message: NOT_ENDED_MESSAGE };
   return null;
 }
 
@@ -113,11 +130,11 @@ export function sanitizeFilename(name) {
 }
 
 /**
- * Si los archivos nuevos entran en el turno, sumados a los que ya tiene.
+ * Si los archivos nuevos entran en la clase, sumados a los que ya tiene.
  *
- * @param {{count: number, bytes: number}} existing - lo ya guardado del turno:
+ * @param {{count: number, bytes: number}} existing - lo ya guardado de la clase:
  *   en la ruta sale del material actual (findMaterial), y en db/classMaterials.js
- *   de un count/sum sobre class_material_files bajo el lock del turno.
+ *   de un count/sum sobre class_material_files bajo el lock de la clase.
  * @param {Array<{sizeBytes: number}>} files - los archivos del multipart leídos hasta ahora.
  * @returns {string|null} null si entran, o el mensaje de por qué no.
  * Lo usan: routes/classes/index.js (mientras lee la subida) y db/classMaterials.js (addFiles).
@@ -129,12 +146,12 @@ export function checkUploadRoom(existing, files) {
   if (files.some((f) => f.sizeBytes > MAX_FILE_BYTES)) {
     return `Cada archivo puede pesar hasta ${MAX_FILE_BYTES / 1024 / 1024} MB.`;
   }
-  if (existing.count + files.length > MAX_FILES_PER_TURN) {
-    return `Una clase puede tener hasta ${MAX_FILES_PER_TURN} archivos.`;
+  if (existing.count + files.length > MAX_FILES_PER_CLASS) {
+    return `Una clase puede tener hasta ${MAX_FILES_PER_CLASS} archivos.`;
   }
   const total = existing.bytes + files.reduce((sum, f) => sum + f.sizeBytes, 0);
-  if (total > MAX_TURN_BYTES) {
-    return `Los archivos de una clase pueden sumar hasta ${MAX_TURN_BYTES / 1024 / 1024} MB.`;
+  if (total > MAX_CLASS_BYTES) {
+    return `Los archivos de una clase pueden sumar hasta ${MAX_CLASS_BYTES / 1024 / 1024} MB.`;
   }
   return null;
 }

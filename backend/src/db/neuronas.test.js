@@ -2,28 +2,28 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('./pool.js', () => ({ getPool: vi.fn() }));
 
-const { buyFeatured, creditCorrection, featuredActiveOn, findFeaturedStatus, syncTurnCredits } =
+const { buyFeatured, creditCorrection, featuredActiveOn, findFeaturedStatus, syncClassCredits } =
   await import('./neuronas.js');
 const { getPool } = await import('./pool.js');
 
 const DOCENTE = 'docente-1';
 
-// Una base en memoria que entiende solo las consultas que usa syncTurnCredits:
+// Una base en memoria que entiende solo las consultas que usa syncClassCredits:
 // alcanza para probar que el resultado sale del estado y no del orden.
-function fakeDb(classes) {
+function fakeDb(bookings) {
   const credits = new Map();
   const client = {
     async query(sql, params = []) {
       if (sql.includes('pg_advisory_xact_lock')) return { rows: [] };
-      if (sql.includes('FROM classes c')) {
-        const [teacherId, monday, sunday, date, startTime] = params;
-        const rows = classes
+      if (sql.includes('FROM class_bookings b')) {
+        const [teacherId, monday, sunday, classId] = params;
+        const rows = bookings
           .filter(
             (c) =>
               c.teacherId === teacherId &&
               c.date >= monday &&
               c.date <= sunday &&
-              (c.status === 'realizada' || (c.date === date && c.startTime === startTime))
+              (c.status === 'realizada' || c.classId === classId)
           )
           .map((c) => ({ subjectName: 'Matemática', packPriceCents: 0, ...c }));
         return { rows };
@@ -40,10 +40,12 @@ function fakeDb(classes) {
       throw new Error(`Consulta inesperada: ${sql}`);
     },
   };
-  return { client, credits, classes };
+  return { client, credits, bookings };
 }
 
-const clase = (over) => ({
+// Cada reserva es su propia clase (classId = 'k-' + id).
+const reserva = (over) => ({
+  classId: `k-${over.id}`,
   teacherId: DOCENTE,
   studentId: 'alumno-1',
   status: 'confirmada',
@@ -57,9 +59,14 @@ const clase = (over) => ({
 });
 
 async function apply(db, id, change) {
-  const cls = db.classes.find((c) => c.id === id);
+  const cls = db.bookings.find((c) => c.id === id);
   Object.assign(cls, change);
-  await syncTurnCredits(db.client, { teacherId: DOCENTE, date: cls.date, startTime: cls.startTime });
+  await syncClassCredits(db.client, {
+    classId: cls.classId,
+    teacherId: DOCENTE,
+    date: cls.date,
+    startTime: cls.startTime,
+  });
 }
 
 const snapshot = (db) => Object.fromEntries([...db.credits].sort());
@@ -71,11 +78,11 @@ const total = (db, userId) =>
 
 // Lunes y miércoles de la misma semana, 5 h cada uno: entre los dos pasan las 8 h.
 const semana = () => [
-  clase({ id: 'lunes', date: '2099-09-14' }),
-  clase({ id: 'miercoles', date: '2099-09-16' }),
+  reserva({ id: 'lunes', date: '2099-09-14' }),
+  reserva({ id: 'miercoles', date: '2099-09-16' }),
 ];
 
-describe('syncTurnCredits', () => {
+describe('syncClassCredits', () => {
   it('el tope de 8 h no depende del orden en que se marca y se paga', async () => {
     const PAGA = { paidAt: '2099-09-17T12:00:00.000Z' };
     const DADA = { status: 'realizada' };
@@ -95,7 +102,7 @@ describe('syncTurnCredits', () => {
     expect(snapshot(a)).toEqual(snapshot(b));
     // 8 h = 80 neuronas para el alumno: 50 del lunes y 30 del miércoles.
     expect(total(a, 'alumno-1')).toBe(80);
-    expect(a.credits.get('alumno-1|class:miercoles').amount).toBe(30);
+    expect(a.credits.get('alumno-1|booking:miercoles').amount).toBe(30);
   });
 
   it('marcar A y después B da lo mismo que B y después A', async () => {
@@ -116,21 +123,21 @@ describe('syncTurnCredits', () => {
     const db = fakeDb(semana());
     await apply(db, 'lunes', DADA_PAGA);
     await apply(db, 'miercoles', DADA_PAGA);
-    expect(db.credits.get('alumno-1|class:miercoles').amount).toBe(30);
+    expect(db.credits.get('alumno-1|booking:miercoles').amount).toBe(30);
 
     await apply(db, 'lunes', { status: 'no_presentada' });
 
-    expect(db.credits.has('alumno-1|class:lunes')).toBe(false);
-    expect(db.credits.has(`${DOCENTE}|turn:2099-09-14:08:00`)).toBe(false);
-    expect(db.credits.get('alumno-1|class:miercoles').amount).toBe(50);
-    expect(db.credits.get(`${DOCENTE}|turn:2099-09-16:08:00`).amount).toBe(50);
+    expect(db.credits.has('alumno-1|booking:lunes')).toBe(false);
+    expect(db.credits.has(`${DOCENTE}|taught:k-lunes`)).toBe(false);
+    expect(db.credits.get('alumno-1|booking:miercoles').amount).toBe(50);
+    expect(db.credits.get(`${DOCENTE}|taught:k-miercoles`).amount).toBe(50);
   });
 
-  it('el tope de 150 por fecha no depende del orden de los turnos del día', async () => {
-    // Cuatro alumnos distintos, 4 h cada uno el mismo día: 40 por turno, 160 en total.
+  it('el tope de 150 por fecha no depende del orden de las clases del día', async () => {
+    // Cuatro alumnos distintos, 4 h cada uno el mismo día: 40 por clase, 160 en total.
     const dia = () =>
       ['08:00', '12:00', '16:00', '20:00'].map((startTime, i) =>
-        clase({
+        reserva({
           id: `t${i}`,
           studentId: `alumno-${i}`,
           date: '2099-09-14',
@@ -147,7 +154,7 @@ describe('syncTurnCredits', () => {
 
     expect(snapshot(a)).toEqual(snapshot(b));
     expect(total(a, DOCENTE)).toBe(150);
-    expect(a.credits.get(`${DOCENTE}|turn:2099-09-14:20:00`).amount).toBe(30);
+    expect(a.credits.get(`${DOCENTE}|taught:k-t3`).amount).toBe(30);
   });
 });
 
@@ -196,7 +203,7 @@ describe('Destacados: cupo global', () => {
           // acá llegan 4 y queda un lugar.
           return { rows: [1, 2, 3, 4].map((n) => ({ teacherId: `otro-${n}` })) };
         }
-        if (sql.includes('earned - spent_classes')) return { rows: [{ earned: 2000, balance: 2000 }] };
+        if (sql.includes('earned - spent_bookings')) return { rows: [{ earned: 2000, balance: 2000 }] };
         if (sql.includes('INSERT INTO teacher_featured')) return { rows: [{ endDate: '2099-09-13' }] };
         return { rows: [] };
       }),

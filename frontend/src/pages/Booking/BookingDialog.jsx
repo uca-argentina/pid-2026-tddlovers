@@ -3,7 +3,7 @@ import Modal from '../../components/Modal.jsx'
 import Banner from '../../components/Banner.jsx'
 import DurationSlider from '../../components/DurationSlider.jsx'
 import { SpinnerIcon } from '../../components/icons.jsx'
-import { bookLesson, rescheduleLesson } from '../../api/client.js'
+import { createBooking, rescheduleBooking } from '../../api/client.js'
 import { formatDayLongWithYear, fromISODate } from '../../utils/calendar.js'
 import { formatRangeLabel } from '../../utils/availability.js'
 import { formatEnrolled, toMinutes } from '../../utils/booking.js'
@@ -77,7 +77,7 @@ const DEFAULT_MINUTES = 60
  *     maxStudents, subjects [{id, name, hourlyRateCents}], starts [{start,
  *     maxMinutes}] y groups [{start, end, subjectId, subjectName, enrolled,
  *     maxStudents}].
- *   - rescheduleOf: la clase que se reprograma (GET /api/classes/:id), o null.
+ *   - rescheduleOf: la clase que se reprograma (GET /api/bookings/:id), o null.
  *   - packs: paquetes del alumno (GET /api/packs/mine), ya ajustados por
  *     BookingBoard si se reprograma (packsForReschedule).
  *   - neuronasBalance: saldo de GET /api/neuronas.
@@ -85,8 +85,8 @@ const DEFAULT_MINUTES = 60
  *   - onBooked({ date, subjectName, teacherName, rescheduled, usedPack,
  *     usedReward }): se llama cuando el backend confirmó la reserva.
  *
- * Datos: al confirmar, bookLesson → POST /api/classes, o rescheduleLesson →
- * POST /api/classes/:id/reschedule si hay rescheduleOf.
+ * Datos: al confirmar, createBooking → POST /api/bookings, o rescheduleBooking →
+ * POST /api/bookings/:id/reschedule si hay rescheduleOf.
  *
  * Estado (todo lo elige el alumno en el modal):
  *   - subjectId: materia elegida; groupStart: inicio de la grupal a la que se
@@ -229,8 +229,8 @@ class BookingDialog extends Component {
   /**
    * Arma el pedido con la selección (ventana, fecha, inicio, materia,
    * duración, y si corresponde packId/packTokens o rewardType según
-   * getQuote) y lo manda: bookLesson → POST /api/classes, o rescheduleLesson
-   * → POST /api/classes/:id/reschedule. Si sale bien llama a onBooked con el
+   * getQuote) y lo manda: createBooking → POST /api/bookings, o rescheduleBooking
+   * → POST /api/bookings/:id/reschedule. Si sale bien llama a onBooked con el
    * resumen para el cartel; si falla deja el mensaje del backend en `error`.
    */
   handleConfirm = () => {
@@ -259,7 +259,7 @@ class BookingDialog extends Component {
       pedido.packTokens = tokens
     }
     if (reward) pedido.rewardType = reward
-    const guardar = rescheduleOf ? rescheduleLesson(rescheduleOf.id, pedido) : bookLesson(pedido)
+    const guardar = rescheduleOf ? rescheduleBooking(rescheduleOf.id, pedido) : createBooking(pedido)
 
     guardar
       .then(() =>

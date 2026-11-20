@@ -4,7 +4,7 @@ import Modal from '../../components/Modal.jsx'
 import { SpinnerIcon } from '../../components/icons.jsx'
 import { createHomework, fetchHomeworkTargets } from '../../api/client.js'
 import { formatDayLong, fromISODate } from '../../utils/calendar.js'
-import { nowParts } from '../../utils/classStates.js'
+import { nowParts } from '../../utils/bookingStates.js'
 import { MAX_TEXT_LENGTH, MAX_TITLE_LENGTH } from '../../utils/homework.js'
 import { homeworkEarns } from '../../utils/neuronas.js'
 

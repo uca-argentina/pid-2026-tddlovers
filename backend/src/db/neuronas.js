@@ -8,7 +8,7 @@ import {
   MAX_FEATURED_TEACHERS,
   homeworkEarns,
   weekBounds,
-  weekTurnCredits,
+  weekClassCredits,
   withinCap,
 } from '../lib/neuronas.js';
 
@@ -18,16 +18,16 @@ import {
 // queden guardados juntos o no se guarde ninguno.
 //
 // Tablas: neurona_credits (migración 021; una fila por source_key:
-// 'class:<id>', 'turn:<fecha>:<inicio>', 'bonus:<id>', 'submission:<id>'),
-// teacher_featured (021); lee classes (reward_type/reward_neuronas de 021,
+// 'booking:<reservaId>', 'taught:<claseId>', 'bonus:<reservaId>', 'submission:<id>'),
+// teacher_featured (021); lee class_bookings + classes (reward_type/reward_neuronas de 021,
 // pack de 014/015), student_packs (014), subjects, homeworks y
 // homework_submissions (020). El saldo nunca se guarda: se calcula.
 // Locks (pg_advisory_xact_lock):
 //   'neuronas:' || userId  por usuario; orden siempre docente → alumno
 //   'neuronas-featured'    global, en buyFeatured (después del del docente)
-// Lo usan: db/availability.js (featuredActiveOn), db/classes.js (syncTurnCredits, hasBalanceFor), db/homework.js
+// Lo usan: db/availability.js (featuredActiveOn), db/bookings.js (syncClassCredits, hasBalanceFor), db/homework.js
 // (creditCorrection, removeHomeworkOnTimeCredit), routes/neuronas y
-// routes/classes (findBalance, settleHomeworkCredits).
+// routes/bookings (findBalance, settleHomeworkCredits).
 
 /**
  * La condición de "Destacado vigente el día `today`" para una fila de
@@ -74,85 +74,91 @@ async function addCreditOnce(client, { userId, reason, key, amount, detail, earn
 }
 
 /**
- * Recalcula las neuronas de un turno desde el estado actual de sus reservas. Se
- * llama al tomar lista o registrar un pago. Es idempotente: corregir presente a
- * ausente o pagar una clase ya dada queda bien con solo volver a correrla.
+ * Recalcula las neuronas de una clase desde el estado actual de sus reservas.
+ * Se llama al tomar lista o registrar un pago. Es idempotente: corregir
+ * presente a ausente o pagar una clase ya dada queda bien con solo volver a
+ * correrla.
  *
  * Los topes (8 h por pareja en la semana, 150 por fecha para el docente) miran
- * lo anterior, así que este cambio puede mover a los turnos que vienen después
+ * lo anterior, así que este cambio puede mover a las clases que vienen después
  * en la semana: pagar el lunes después del miércoles le saca minutos al
- * miércoles. Por eso se recalculan también todos esos, con setCredit, y el total
- * queda igual sea cual sea el orden en que se marcaron.
+ * miércoles. Por eso se recalculan también todas esas, con setCredit, y el
+ * total queda igual sea cual sea el orden en que se marcaron.
  *
- * @param {pg.PoolClient} client - la transacción de transitionClasses (db/classes.js).
- * @param {{teacherId, date, startTime}} turno - lo que devuelve TRANSITION_SQL.
+ * Claves: 'class:<reservaId>' (alumno), 'bonus:<reservaId>' (docente, por un
+ * canje) y 'taught:<claseId>' (docente, por dar la clase).
+ *
+ * @param {pg.PoolClient} client - la transacción de transitionBookings (db/bookings.js).
+ * @param {{classId, teacherId, date, startTime}} cls - lo que devuelve TRANSITION_SQL.
  * @returns {Promise<void>}
- * Origen: classes de la semana del docente (+ subjects, student_packs); escribe
- *   neurona_credits con las cuentas de weekTurnCredits (lib/neuronas.js).
- * Lo usa: db/classes.js (transitionClasses, al tomar lista o pagar).
+ * Origen: class_bookings + classes de la semana del docente (+ subjects, student_packs); escribe
+ *   neurona_credits con las cuentas de weekClassCredits (lib/neuronas.js).
+ * Lo usa: db/bookings.js (transitionBookings, al tomar lista o pagar).
  * Locks/transacción: 'neuronas:' || teacherId.
  */
-export async function syncTurnCredits(client, { teacherId, date, startTime }) {
+export async function syncClassCredits(client, { classId, teacherId, date, startTime }) {
   await lockUser(client, teacherId);
   const { monday, sunday } = weekBounds(date);
 
   const result = await client.query(
-    `SELECT c.id,
-            c.student_id AS "studentId",
-            c.status,
+    `SELECT b.id,
+            b.class_id AS "classId",
+            b.student_id AS "studentId",
+            b.status,
             to_char(c.class_date, 'YYYY-MM-DD') AS date,
             to_char(c.start_time, 'HH24:MI') AS "startTime",
             to_char(c.end_time, 'HH24:MI') AS "endTime",
-            c.price_cents AS "priceCents",
-            c.paid_at AS "paidAt",
-            c.reward_type AS "rewardType",
-            c.reward_neuronas AS "rewardNeuronas",
+            b.price_cents AS "priceCents",
+            b.paid_at AS "paidAt",
+            b.reward_type AS "rewardType",
+            b.reward_neuronas AS "rewardNeuronas",
             s.name AS "subjectName",
             COALESCE(sp.price_cents, 0) AS "packPriceCents"
-     FROM classes c
+     FROM class_bookings b
+     JOIN classes c ON c.id = b.class_id
      JOIN subjects s ON s.id = c.subject_id
-     LEFT JOIN student_packs sp ON sp.id = c.student_pack_id
+     LEFT JOIN student_packs sp ON sp.id = b.student_pack_id
      WHERE c.teacher_id = $1
        AND c.class_date BETWEEN $2::date AND $3::date
-       AND (c.status = 'realizada' OR (c.class_date = $4::date AND c.start_time = $5::time))`,
-    [teacherId, monday, sunday, date, startTime]
+       AND (b.status = 'realizada' OR b.class_id = $4)`,
+    [teacherId, monday, sunday, classId]
   );
 
-  // Los turnos anteriores no cambian: los topes solo miran hacia atrás. Los
-  // posteriores que no tienen realizadas no están en la consulta, pero tampoco
-  // tienen neuronas: al dejar de ser realizada cada turno ya puso las suyas en 0.
+  // Las clases anteriores no cambian: los topes solo miran hacia atrás. Las
+  // posteriores sin realizadas no están en la consulta, pero tampoco tienen
+  // neuronas: al dejar de tener realizadas cada una ya puso las suyas en 0.
   const changed = `${date}T${startTime}`;
-  const turns = weekTurnCredits(result.rows).filter(
-    (turn) => `${turn.date}T${turn.startTime}` >= changed
+  const toSave = weekClassCredits(result.rows).filter(
+    (cls) => `${cls.date}T${cls.startTime}` >= changed
   );
 
-  for (const turn of turns) {
-    const detail = turn.rows[0].subjectName;
-    for (const booking of turn.bookings) {
+  for (const cls of toSave) {
+    const detail = cls.rows[0].subjectName;
+    for (const booking of cls.bookings) {
       await setCredit(client, {
         userId: booking.studentId,
         reason: 'class_attended',
-        key: `class:${booking.classId}`,
+        key: `booking:${booking.bookingId}`,
         amount: booking.student,
         detail,
-        earnedOn: turn.date,
+        earnedOn: cls.date,
       });
       await setCredit(client, {
         userId: teacherId,
         reason: 'reward_bonus',
-        key: `bonus:${booking.classId}`,
+        key: `bonus:${booking.bookingId}`,
         amount: booking.bonus,
         detail,
-        earnedOn: turn.date,
+        earnedOn: cls.date,
       });
     }
     await setCredit(client, {
       userId: teacherId,
       reason: 'class_taught',
-      key: `turn:${turn.date}:${turn.startTime}`,
-      amount: turn.teacher,
+      key: `taught:${cls.classId}`,
+      amount: cls.teacher,
       detail,
-      earnedOn: turn.date,
+      earnedOn: cls.date,
     });
   }
 }
@@ -246,7 +252,7 @@ export async function creditCorrection(client, submission, credits, today) {
  * @param {{iso: string, time: string}} ahora - now() de lib/clock.js.
  * @returns {Promise<void>}
  * Origen: homework_submissions + homeworks sin crédito todavía; escribe neurona_credits.
- * Lo usan: routes/neuronas/index.js (GET /) y routes/classes/index.js (priceBooking, al canjear).
+ * Lo usan: routes/neuronas/index.js (GET /) y routes/bookings/index.js (priceBooking, al canjear).
  * Locks/transacción: transacción propia; 'neuronas:' || studentId.
  */
 export async function settleHomeworkCredits(studentId, { iso, time }) {
@@ -321,18 +327,18 @@ export async function removeHomeworkOnTimeCredit(client, submissionId, studentId
  * @param {string} userId - request.user.id (o el alumno/docente dentro de una transacción).
  * @param {pg.Pool|pg.PoolClient} [db] - por defecto el pool.
  * @returns {Promise<{earned: number, balance: number}>} earned = Σ créditos (define el nivel).
- * Origen: neurona_credits − classes.reward_neuronas no canceladas − teacher_featured.cost_neuronas.
- * Lo usan: hasBalanceFor y buyFeatured (acá), routes/neuronas/index.js y routes/classes/index.js.
+ * Origen: neurona_credits − class_bookings.reward_neuronas no canceladas − teacher_featured.cost_neuronas.
+ * Lo usan: hasBalanceFor y buyFeatured (acá), routes/neuronas/index.js y routes/bookings/index.js.
  */
 export async function findBalance(userId, db = getPool()) {
   // FILTRO: los canjes de clases canceladas no restan: cancelar devuelve las neuronas.
   const result = await db.query(
-    `SELECT earned, earned - spent_classes - spent_featured AS balance
+    `SELECT earned, earned - spent_bookings - spent_featured AS balance
      FROM (
        SELECT
          (SELECT COALESCE(sum(amount), 0)::int FROM neurona_credits WHERE user_id = $1) AS earned,
-         (SELECT COALESCE(sum(reward_neuronas), 0)::int FROM classes
-          WHERE student_id = $1 AND status <> 'cancelada') AS spent_classes,
+         (SELECT COALESCE(sum(reward_neuronas), 0)::int FROM class_bookings
+          WHERE student_id = $1 AND status <> 'cancelada') AS spent_bookings,
          (SELECT COALESCE(sum(cost_neuronas), 0)::int FROM teacher_featured
           WHERE teacher_id = $1) AS spent_featured
      ) totals`,
@@ -345,11 +351,11 @@ export async function findBalance(userId, db = getPool()) {
  * Adentro de la transacción de la reserva: entre el chequeo de la ruta y el
  * INSERT el alumno puede estar gastando lo mismo en otra pestaña.
  *
- * @param {pg.PoolClient} client - transacción de insertClass (db/classes.js).
+ * @param {pg.PoolClient} client - transacción de insertBooking (db/bookings.js).
  * @param {string} studentId - booking.studentId.
  * @param {number} cost - booking.rewardNeuronas.
  * @returns {Promise<boolean>}
- * Lo usa: db/classes.js (insertClass).
+ * Lo usa: db/bookings.js (insertBooking).
  * Locks/transacción: 'neuronas:' || studentId.
  */
 export async function hasBalanceFor(client, studentId, cost) {
@@ -384,7 +390,8 @@ export async function findCreditCounts(userId) {
  * @param {number} [limit] - cuántos movimientos (50).
  * @returns {Promise<Array<{id, reason, amount, detail, createdAt}>>} reason es la de
  *   neurona_credits, 'class_reward' (canje) o 'featured' (Destacado).
- * Origen: neurona_credits ∪ classes con canje no canceladas ∪ teacher_featured.
+ * Origen: neurona_credits ∪ reservas (class_bookings + classes) con canje no canceladas ∪
+ *   teacher_featured.
  * Lo usa: routes/neuronas/index.js (GET /).
  */
 export async function listMovements(userId, limit = 50) {
@@ -396,10 +403,11 @@ export async function listMovements(userId, limit = 50) {
        FROM neurona_credits
        WHERE user_id = $1
        UNION ALL
-       SELECT c.id, 'class_reward', -c.reward_neuronas, s.name, c.created_at
-       FROM classes c
+       SELECT b.id, 'class_reward', -b.reward_neuronas, s.name, b.created_at
+       FROM class_bookings b
+       JOIN classes c ON c.id = b.class_id
        JOIN subjects s ON s.id = c.subject_id
-       WHERE c.student_id = $1 AND c.reward_type IS NOT NULL AND c.status <> 'cancelada'
+       WHERE b.student_id = $1 AND b.reward_type IS NOT NULL AND b.status <> 'cancelada'
        UNION ALL
        SELECT id, 'featured', -cost_neuronas, '', created_at
        FROM teacher_featured

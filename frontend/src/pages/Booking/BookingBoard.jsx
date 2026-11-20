@@ -11,8 +11,8 @@ import withViewport from '../../routes/withViewport.jsx'
 import withFavorites from '../../routes/withFavorites.jsx'
 import {
   fetchAvailability,
-  fetchClass,
-  fetchMyLessons,
+  fetchBooking,
+  fetchMyBookings,
   fetchMyPacks,
   fetchNeuronas,
   fetchSubjects,
@@ -51,7 +51,7 @@ const QUICK_KINDS = [
  * el alumno, todos en utils/booking.js.
  *
  * Con ?reprogramar=<id> la misma pantalla sirve para reprogramar una clase
- * confirmada: el backend (excludeClassId) manda solo los horarios del mismo
+ * confirmada: el backend (excludeBookingId) manda solo los horarios del mismo
  * docente con la misma materia, y el modal pide el cambio en vez de una
  * reserva nueva.
  *
@@ -78,10 +78,10 @@ const QUICK_KINDS = [
  *
  * Datos (api/client.js):
  *   - fetchSubjects → GET /api/subjects, al montar (catálogo para los chips).
- *   - fetchAvailability → GET /api/availability?from&to[&excludeClassId], y
- *     fetchMyLessons → GET /api/classes?from&to, cada vez que MonthPane avisa
+ *   - fetchAvailability → GET /api/availability?from&to[&excludeBookingId], y
+ *     fetchMyBookings → GET /api/bookings?from&to, cada vez que MonthPane avisa
  *     un rango nuevo (onRangeChange) o cambia el usuario / la reprogramación.
- *   - fetchClass → GET /api/classes/:id, si hay ?reprogramar=<id>.
+ *   - fetchBooking → GET /api/bookings/:id, si hay ?reprogramar=<id>.
  *   - fetchMyPacks → GET /api/packs/mine y fetchNeuronas → GET /api/neuronas,
  *     solo con un alumno logueado (al montar, al cambiar `user` y después de
  *     reservar con paquete/canje o reprogramar).
@@ -90,13 +90,13 @@ const QUICK_KINDS = [
  *   - selectedIso: día elegido ("YYYY-MM-DD"); arranca hoy, lo cambia MonthPane.
  *   - from/to: rango visible que reportó MonthPane (onRangeChange).
  *   - slots: filas (ventana × fecha) de GET /api/availability.
- *   - myLessons: clases propias del rango (GET /api/classes), solo para
+ *   - myBookings: reservas propias del rango (GET /api/bookings), solo para
  *     pintar las líneas del calendario.
  *   - subjects: catálogo de GET /api/subjects.
  *   - loading/error: del último pedido de rango (o de la reprogramación).
  *   - booking: tarjeta abierta en BookingDialog; booked: lo que devolvió el
  *     modal tras reservar (para el cartel verde).
- *   - rescheduling: la clase de GET /api/classes/:id que se reprograma.
+ *   - rescheduling: la clase de GET /api/bookings/:id que se reprograma.
  *   - packs / neuronasBalance: de /api/packs/mine y /api/neuronas.
  *   - filters: ver EMPTY_BOOKING_FILTERS en utils/booking.js.
  *   - filtersOpen: hoja de filtros abierta (solo teléfono).
@@ -107,7 +107,7 @@ class BookingBoard extends Component {
     from: null,
     to: null,
     slots: [],
-    myLessons: [],
+    myBookings: [],
     subjects: [],
     loading: false,
     error: null,
@@ -213,8 +213,8 @@ class BookingBoard extends Component {
   }
 
   /**
-   * Si la URL trae ?reprogramar=<id>, trae esa clase con fetchClass
-   * (GET /api/classes/:id) y la guarda en `rescheduling`; si no, la limpia.
+   * Si la URL trae ?reprogramar=<id>, trae esa clase con fetchBooking
+   * (GET /api/bookings/:id) y la guarda en `rescheduling`; si no, la limpia.
    * Si falla, deja el mensaje del backend en `error`.
    */
   loadReschedule() {
@@ -224,7 +224,7 @@ class BookingBoard extends Component {
       this.setState({ rescheduling: null })
       return
     }
-    fetchClass(id)
+    fetchBooking(id)
       .then((cls) => {
         if (token !== this.rescheduleToken) return
         this.setState({ rescheduling: cls })
@@ -303,25 +303,25 @@ class BookingBoard extends Component {
    * Carga los horarios y las clases propias del rango [from, to] que muestra
    * MonthPane ("YYYY-MM-DD").
    *
-   * - fetchAvailability → GET /api/availability?from&to (con excludeClassId =
+   * - fetchAvailability → GET /api/availability?from&to (con excludeBookingId =
    *   la clase que se reprograma: el backend no la cuenta como ocupada y
    *   devuelve solo ese docente y esa materia) → `slots`.
-   * - fetchMyLessons → GET /api/classes?from&to (las del usuario de la
-   *   sesión) → `myLessons`, para las líneas del calendario; sin usuario, [].
+   * - fetchMyBookings → GET /api/bookings?from&to (las del usuario de la
+   *   sesión) → `myBookings`, para las líneas del calendario; sin usuario, [].
    * Maneja `loading` y `error`; descarta respuestas viejas con rangeToken.
    */
   loadRange = (from, to) => {
     const token = ++this.rangeToken
     this.setState({ loading: true, error: null })
 
-    const pedidos = [fetchAvailability({ from, to, excludeClassId: this.getRescheduleId() })]
+    const pedidos = [fetchAvailability({ from, to, excludeBookingId: this.getRescheduleId() })]
     // Sin usuario no hay clases propias que dibujar.
-    pedidos.push(this.props.user ? fetchMyLessons({ from, to }) : Promise.resolve([]))
+    pedidos.push(this.props.user ? fetchMyBookings({ from, to }) : Promise.resolve([]))
 
     Promise.all(pedidos)
-      .then(([slots, myLessons]) => {
+      .then(([slots, myBookings]) => {
         if (token !== this.rangeToken) return
-        this.setState({ slots, myLessons, loading: false })
+        this.setState({ slots, myBookings, loading: false })
       })
       .catch((error) => {
         if (token !== this.rangeToken) return
@@ -374,11 +374,11 @@ class BookingBoard extends Component {
   }
 
   /** Las clases propias agrupadas por día, que son las líneas azules. */
-  getLessonsByDate() {
+  getMyBookingsByDate() {
     const map = {}
-    for (const lesson of this.state.myLessons) {
-      if (!map[lesson.date]) map[lesson.date] = []
-      map[lesson.date].push(lesson)
+    for (const booking of this.state.myBookings) {
+      if (!map[booking.date]) map[booking.date] = []
+      map[booking.date].push(booking)
     }
     for (const iso of Object.keys(map)) {
       map[iso].sort((a, b) => a.startTime.localeCompare(b.startTime))
@@ -679,7 +679,7 @@ class BookingBoard extends Component {
         <MonthPane
           mobile
           compactTitle
-          eventsByDate={this.getLessonsByDate()}
+          eventsByDate={this.getMyBookingsByDate()}
           freeByDate={this.getFreeByDate(porFecha)}
           selectedIso={selectedIso}
           loading={loading}
@@ -707,7 +707,7 @@ class BookingBoard extends Component {
       <div className="booking-board">
         <div className="booking-panes">
           <MonthPane
-            eventsByDate={this.getLessonsByDate()}
+            eventsByDate={this.getMyBookingsByDate()}
             freeByDate={this.getFreeByDate(porFecha)}
             selectedIso={selectedIso}
             loading={loading}

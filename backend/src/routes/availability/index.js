@@ -1,17 +1,13 @@
 import { findPublishedWindows } from '../../db/availability.js';
-import {
-  expireStartedPending,
-  findClassById,
-  findClassesForUser,
-  findTakenSlots,
-} from '../../db/classes.js';
+import { expireStartedPending, findBookingById, findBookingsForUser } from '../../db/bookings.js';
+import { findActiveClasses } from '../../db/classes.js';
 import { listVacationsInRange } from '../../db/vacations.js';
 import { bookableRows, dateRangeProblem } from '../../lib/availabilityExpansion.js';
 import { now } from '../../lib/clock.js';
 import { isUuid } from '../../lib/validators.js';
 
 // Montado en /api/availability (app.js):
-//   GET /api/availability?from&to[&excludeClassId]  con sesión (cualquier rol)
+//   GET /api/availability?from&to[&excludeBookingId]  con sesión (cualquier rol)
 // Lo que el alumno puede reservar, ya expandido por fecha. La disponibilidad
 // cruda del docente está en routes/teachers (/me/availability).
 // Esta ruta solo lee de la base: qué se muestra lo decide bookableRows
@@ -19,36 +15,36 @@ import { isUuid } from '../../lib/validators.js';
 // link ni la dirección exacta.
 
 /**
- * La clase que el alumno está reprogramando, si `excludeClassId` es suya y
- * sigue confirmada (lo único que se puede reprogramar); si no, null y se
+ * La reserva que el alumno está reprogramando, si `excludeBookingId` es suya
+ * y sigue confirmada (lo único que se puede reprogramar); si no, null y se
  * ignora en silencio. Esto solo cambia qué se le MUESTRA: el POST de
  * reprogramar vuelve a validar todo.
  *
- * @param {string|undefined} excludeClassId - query.excludeClassId (ya UUID).
+ * @param {string|undefined} excludeBookingId - query.excludeBookingId (ya UUID).
  * @param {object} user - request.user.
- * @returns {Promise<object|null>} la clase (findClassById) o null.
+ * @returns {Promise<object|null>} la reserva (findBookingById) o null.
  */
-async function classBeingRescheduled(excludeClassId, user) {
-  if (!excludeClassId) return null;
-  const cls = await findClassById(excludeClassId);
-  // FILTRO: solo una clase propia y confirmada cambia lo que se muestra; con
+async function bookingBeingRescheduled(excludeBookingId, user) {
+  if (!excludeBookingId) return null;
+  const booking = await findBookingById(excludeBookingId);
+  // FILTRO: solo una reserva propia y confirmada cambia lo que se muestra; con
   // cualquier otra el parámetro se ignora.
-  if (!cls || String(cls.studentId) !== String(user.id) || cls.status !== 'confirmada') {
+  if (!booking || String(booking.studentId) !== String(user.id) || booking.status !== 'confirmada') {
     return null;
   }
-  return cls;
+  return booking;
 }
 
 /**
- * Las clases no canceladas del alumno en el rango, con cualquier docente:
+ * Las reservas no canceladas del alumno en el rango, con cualquier docente:
  * con ellas bookableRows saca lo que se le pisa. A quien no es alumno no se
  * le cruza nada.
  */
-async function ownLessons(user, from, to) {
+async function ownBookings(user, from, to) {
   if (user.role !== 'student') return [];
-  const lessons = await findClassesForUser({ userId: user.id, role: 'student', from, to });
+  const bookings = await findBookingsForUser({ userId: user.id, role: 'student', from, to });
   // FILTRO: una cancelada no ocupa el horario del alumno.
-  return lessons.filter((lesson) => lesson.status !== 'cancelada');
+  return bookings.filter((booking) => booking.status !== 'cancelada');
 }
 
 export default async function availabilityRoutes(app) {
@@ -61,18 +57,18 @@ export default async function availabilityRoutes(app) {
    * (`groups`). Las filas sin nada para reservar no salen, salvo las de
    * licencia (en gris, con `onVacation`).
    *
-   * `?excludeClassId=<id>`: al reprogramar, la clase vieja no ocupa su
+   * `?excludeBookingId=<id>`: al reprogramar, la reserva vieja no ocupa su
    * horario, y solo salen el mismo docente y la misma materia.
    *
    * Respuesta: 200 [filas de bookableRows].
-   * Errores: 400 rango inválido (dateRangeProblem) o excludeClassId no UUID.
+   * Errores: 400 rango inválido (dateRangeProblem) o excludeBookingId no UUID.
    */
   app.get('/', { onRequest: app.requireAuth }, async (request, reply) => {
-    const { from, to, excludeClassId } = request.query ?? {};
+    const { from, to, excludeBookingId } = request.query ?? {};
 
     const problem = dateRangeProblem(from, to);
     if (problem) return reply.code(400).send({ message: problem });
-    if (excludeClassId !== undefined && !isUuid(excludeClassId)) {
+    if (excludeBookingId !== undefined && !isUuid(excludeBookingId)) {
       return reply.code(400).send({ message: 'La clase a reprogramar no es válida' });
     }
 
@@ -80,20 +76,20 @@ export default async function availabilityRoutes(app) {
     const clock = now();
     await expireStartedPending(clock);
 
-    const [windows, taken, vacations, studentLessons, rescheduling] = await Promise.all([
+    const [windows, activeClasses, vacations, studentBookings, rescheduling] = await Promise.all([
       findPublishedWindows({ from, to, today: clock.iso }),
-      findTakenSlots({ from, to }),
+      findActiveClasses({ from, to }),
       listVacationsInRange({ from, to }),
-      ownLessons(request.user, from, to),
-      classBeingRescheduled(excludeClassId, request.user),
+      ownBookings(request.user, from, to),
+      bookingBeingRescheduled(excludeBookingId, request.user),
     ]);
 
     return reply.send(
       bookableRows({
         windows,
-        taken,
+        activeClasses,
         vacations,
-        studentLessons,
+        studentBookings,
         rescheduling,
         viewerId: request.user.id,
         from,

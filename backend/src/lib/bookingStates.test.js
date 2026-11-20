@@ -7,7 +7,7 @@ import {
   hasEnded,
   hasStarted,
   minutesUntilStart,
-} from './classStates.js';
+} from './bookingStates.js';
 
 // La clase es el lunes 14/9 a las 13:00. "Ahora" se mueve alrededor.
 const clase = (over = {}) => ({

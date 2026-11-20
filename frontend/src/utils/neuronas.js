@@ -51,8 +51,8 @@ export function formatNeuronas(amount) {
 
 /**
  * El texto de un canje ('30 min gratis'...), o '' si no hay.
- * `rewardType` es el de una clase de GET /api/classes (null si no canjeó).
- * Lo usan: components/ClassCard.jsx, ClassDetailDialog.jsx, ClassActions.jsx.
+ * `rewardType` es el de una reserva de GET /api/bookings (null si no canjeó).
+ * Lo usan: components/ClassCard.jsx, ClassDetailDialog.jsx, BookingActions.jsx.
  */
 export function rewardLabel(rewardType) {
   return REWARDS[rewardType]?.label ?? ''

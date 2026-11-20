@@ -1,19 +1,19 @@
 // Las reglas de las neuronas: qué suma, cuánto, y qué cuesta cada premio.
-// Funciones puras, como classStates.js, para probarlas sin reloj ni base.
+// Funciones puras, como bookingStates.js, para probarlas sin reloj ni base.
 // Espejadas en frontend/src/utils/neuronas.js solo para mostrar: la que vale es
 // esta. Los números son valores iniciales para ajustar con el uso.
 //
-// Tablas: neurona_credits, teacher_featured, classes.reward_type /
-// reward_neuronas (migración 021). El saldo nunca se guarda: lo suma
+// Tablas: neurona_credits, teacher_featured, class_bookings.reward_type /
+// reward_neuronas (migración 021; class_bookings desde la 023). El saldo nunca se guarda: lo suma
 // db/neuronas.js.
-// Lo usan: db/neuronas.js (topes, weekTurnCredits, homeworkEarns...),
-// routes/classes/index.js (REWARDS, rewardProblem), routes/homework/index.js
+// Lo usan: db/neuronas.js (topes, weekClassCredits, homeworkEarns...),
+// routes/bookings/index.js (REWARDS, rewardProblem), routes/homework/index.js
 // (correctionCredits), routes/neuronas/index.js (levelFor, badgesFor,
 // Destacado) y lib/teacherRates.js (rewardPriceCents).
 
 import { now as clockNow } from './clock.js';
 import { classPriceCents } from './teacherRates.js';
-import { toEpochMinutes } from './classStates.js';
+import { toEpochMinutes } from './bookingStates.js';
 
 // Canjes que el alumno elige al reservar (body.rewardType) y su costo en
 // neuronas: free_30 (500), free_60 (1000), discount_10 (250), discount_20 (500).
@@ -75,27 +75,27 @@ const LEVELS = [
  * según qué las cubre: si no, un docente con tarifa $ 0 y una cuenta falsa
  * sumaría sin límite. `packPriceCents` es el precio del paquete de la reserva.
  *
- * @param {object} cls - fila de classes como la lee syncTurnCredits (db/neuronas.js):
+ * @param {object} booking - una reserva como la lee syncClassCredits (db/neuronas.js):
  *   { status, priceCents, paidAt, rewardType, packPriceCents (de student_packs) }.
  * @returns {boolean}
- * Lo usan: este archivo (countsForStudent, turnCredits).
+ * Lo usan: este archivo (countsForStudent, classCredits).
  */
-export function countsForTeacher(cls) {
-  if (cls.status !== 'realizada') return false;
-  if (cls.priceCents > 0) return Boolean(cls.paidAt);
-  return Boolean(cls.rewardType) || cls.packPriceCents > 0;
+export function countsForTeacher(booking) {
+  if (booking.status !== 'realizada') return false;
+  if (booking.priceCents > 0) return Boolean(booking.paidAt);
+  return Boolean(booking.rewardType) || booking.packPriceCents > 0;
 }
 
 /**
  * Si la clase le da neuronas al alumno: cuenta para el docente y no se pagó
  * con un canje (si no, se encadenarían clases gratis). Solo se usa acá.
  */
-export function countsForStudent(cls) {
-  return countsForTeacher(cls) && !cls.rewardType;
+export function countsForStudent(booking) {
+  return countsForTeacher(booking) && !booking.rewardType;
 }
 
-function classMinutes(cls) {
-  return toEpochMinutes(cls.date, cls.endTime) - toEpochMinutes(cls.date, cls.startTime);
+function bookingMinutes(booking) {
+  return toEpochMinutes(booking.date, booking.endTime) - toEpochMinutes(booking.date, booking.startTime);
 }
 
 /**
@@ -114,13 +114,13 @@ export function studentClassCredit(minutes) {
 }
 
 /**
- * Lo que suma el docente por un turno, según los minutos que contaron de cada
+ * Lo que suma el docente por una clase, según los minutos que contaron de cada
  * presente. El primero vale entero y los demás la mitad: premia al grupo sin
  * que una clase de 50 valga 50 individuales, que desalentaría dar individuales.
- * @param {number[]} studentMinutes - minutos contados de cada reserva del turno.
- * @returns {number} neuronas del docente por el turno, antes del tope diario. Solo se usa acá.
+ * @param {number[]} studentMinutes - minutos contados de cada reserva de la clase.
+ * @returns {number} neuronas del docente por la clase, antes del tope diario. Solo se usa acá.
  */
-export function teacherTurnCredit(studentMinutes) {
+export function teacherClassCredit(studentMinutes) {
   const [first = 0, ...rest] = [...studentMinutes]
     .filter((minutes) => minutes > 0)
     .sort((a, b) => b - a)
@@ -133,7 +133,7 @@ export function teacherTurnCredit(studentMinutes) {
  * El lunes y el domingo de la semana de esa fecha.
  * @param {string} iso - 'YYYY-MM-DD'.
  * @returns {{monday: string, sunday: string}}
- * Lo usa: db/neuronas.js (syncTurnCredits y el tope semanal de tareas).
+ * Lo usa: db/neuronas.js (syncClassCredits y el tope semanal de tareas).
  */
 export function weekBounds(iso) {
   const [y, m, d] = iso.split('-').map(Number);
@@ -147,19 +147,19 @@ export function weekBounds(iso) {
 const startsBefore = (a, b) => `${a.date}T${a.startTime}` < `${b.date}T${b.startTime}`;
 
 /**
- * Lo que le corresponde a cada reserva de un turno y al docente. `weekRows` son
+ * Lo que le corresponde a cada reserva de una clase y al docente. `weekRows` son
  * las clases realizadas de ese docente en la semana. Se recalcula todo desde el
  * estado actual, y por eso corregir una asistencia revierte sus neuronas sin
  * deshacer nada. El límite mira solo las clases anteriores para que el resultado
  * no dependa del orden en que el docente tomó lista.
  *
- * @param {Array<object>} turnRows - las reservas de un turno (filas de classes).
+ * @param {Array<object>} classRows - las reservas de una clase (filas de syncClassCredits).
  * @param {Array<object>} weekRows - todas las filas de la semana del docente.
- * @returns {{bookings: Array<{classId, studentId, minutes, student, bonus}>, teacher: number}}
- * Lo usa: weekTurnCredits (este archivo).
+ * @returns {{bookings: Array<{bookingId, studentId, minutes, student, bonus}>, teacher: number}}
+ * Lo usa: weekClassCredits (este archivo).
  */
-export function turnCredits(turnRows, weekRows) {
-  const bookings = turnRows.map((row) => {
+export function classCredits(classRows, weekRows) {
+  const bookings = classRows.map((row) => {
     const counts = countsForTeacher(row);
     const previous = weekRows
       .filter(
@@ -168,63 +168,73 @@ export function turnCredits(turnRows, weekRows) {
           countsForTeacher(other) &&
           startsBefore(other, row)
       )
-      .reduce((sum, other) => sum + classMinutes(other), 0);
-    const minutes = counts ? minutesWithinPairLimit(classMinutes(row), previous) : 0;
+      .reduce((sum, other) => sum + bookingMinutes(other), 0);
+    const minutes = counts ? minutesWithinPairLimit(bookingMinutes(row), previous) : 0;
     return {
-      classId: row.id,
+      bookingId: row.id,
       studentId: row.studentId,
       minutes,
       student: countsForStudent(row) ? studentClassCredit(minutes) : 0,
       bonus: counts && row.rewardType ? rewardBonus(row.rewardNeuronas) : 0,
     };
   });
-  return { bookings, teacher: teacherTurnCredit(bookings.map((row) => row.minutes)) };
+  return { bookings, teacher: teacherClassCredit(bookings.map((row) => row.minutes)) };
 }
 
 /**
  * Lo que entra de `amount` en un tope, dado lo que ya se sumó.
  * @returns {number} entre 0 y `amount`.
- * Lo usan: weekTurnCredits y db/neuronas.js (tope diario de correcciones).
+ * Lo usan: weekClassCredits y db/neuronas.js (tope diario de correcciones).
  */
 export function withinCap(amount, cap, alreadyEarned) {
   return Math.max(0, Math.min(amount, cap - alreadyEarned));
 }
 
 /**
- * Las neuronas de todos los turnos de un docente en una semana, desde cero.
- * `weekRows` son sus clases realizadas de la semana más las filas (en cualquier
- * estado) de los turnos que hay que poner en cero. Los dos topes se aplican en
- * orden cronológico: el de 8 h por pareja mira las clases anteriores y el de 150
- * por fecha, los turnos anteriores de ese día. Así el total no depende del orden
- * en que se tomó lista o se pagó, y cambiar un turno solo puede mover a los que
- * vienen después: es lo que le permite a syncTurnCredits recalcular solo esos.
- * Devuelve los turnos en orden: [{ date, startTime, rows, bookings, teacher }].
+ * Las neuronas de todas las clases de un docente en una semana, desde cero.
+ * `weekRows` son sus reservas realizadas de la semana más las reservas (en
+ * cualquier estado) de la clase que hay que poner en cero. Los dos topes se
+ * aplican en orden cronológico: el de 8 h por pareja mira las clases anteriores
+ * y el de 150 por fecha, las clases anteriores de ese día. Así el total no
+ * depende del orden en que se tomó lista o se pagó, y cambiar una clase solo
+ * puede mover a las que vienen después: es lo que le permite a
+ * syncClassCredits recalcular solo esas.
+ * Devuelve las clases en orden: [{ classId, date, startTime, rows, bookings, teacher }].
  *
- * @param {Array<object>} weekRows - la consulta de syncTurnCredits (db/neuronas.js):
- *   classes JOIN subjects LEFT JOIN student_packs de la semana del docente.
- * Lo usa: db/neuronas.js (syncTurnCredits, que guarda el resultado en neurona_credits).
+ * @param {Array<object>} weekRows - la consulta de syncClassCredits (db/neuronas.js):
+ *   class_bookings JOIN classes JOIN subjects LEFT JOIN student_packs de la semana del docente,
+ *   cada fila con su `classId`.
+ * Lo usa: db/neuronas.js (syncClassCredits, que guarda el resultado en neurona_credits).
  */
-export function weekTurnCredits(weekRows) {
-  const turns = new Map();
+export function weekClassCredits(weekRows) {
+  const classes = new Map();
   for (const row of weekRows) {
-    const key = `${row.date}T${row.startTime}`;
-    if (!turns.has(key)) turns.set(key, { date: row.date, startTime: row.startTime, rows: [] });
-    turns.get(key).rows.push(row);
+    if (!classes.has(row.classId)) {
+      classes.set(row.classId, {
+        classId: row.classId,
+        date: row.date,
+        startTime: row.startTime,
+        rows: [],
+      });
+    }
+    classes.get(row.classId).rows.push(row);
   }
+  const ordered = [...classes.values()].sort((a, b) =>
+    `${a.date}T${a.startTime}`.localeCompare(`${b.date}T${b.startTime}`)
+  );
   const earnedByDate = new Map();
-  return [...turns.keys()].sort().map((key) => {
-    const turn = turns.get(key);
-    const credits = turnCredits(turn.rows, weekRows);
-    const earned = earnedByDate.get(turn.date) ?? 0;
+  return ordered.map((cls) => {
+    const credits = classCredits(cls.rows, weekRows);
+    const earned = earnedByDate.get(cls.date) ?? 0;
     const teacher = withinCap(credits.teacher, TEACHER_CLASS_DAILY_CAP, earned);
-    earnedByDate.set(turn.date, earned + teacher);
-    return { ...turn, bookings: credits.bookings, teacher };
+    earnedByDate.set(cls.date, earned + teacher);
+    return { ...cls, bookings: credits.bookings, teacher };
   });
 }
 
 /**
  * El bono del docente por dar una clase canjeada: la mitad de lo que gastó el
- * alumno (classes.reward_neuronas), sin tope. Solo se usa acá (turnCredits).
+ * alumno (class_bookings.reward_neuronas), sin tope. Solo se usa acá (classCredits).
  */
 export function rewardBonus(rewardNeuronas) {
   return Math.floor(rewardNeuronas / 2);
@@ -290,7 +300,7 @@ export function correctionCredits(submission, feedback, now) {
  * @param {{hourlyRateCents: number, minutes: number}} args - la tarifa (findRate,
  *   db/rates.js) y body.durationMinutes.
  * @returns {string|null}
- * Lo usa: routes/classes/index.js (priceBooking).
+ * Lo usa: routes/bookings/index.js (priceBooking).
  */
 export function rewardProblem(rewardType, { hourlyRateCents, minutes }) {
   const reward = REWARDS[rewardType];

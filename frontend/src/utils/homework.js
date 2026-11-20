@@ -1,5 +1,5 @@
 import { formatDayLong, fromISODate } from './calendar.js'
-import { nowParts } from './classStates.js'
+import { nowParts } from './bookingStates.js'
 
 // Las tareas. Las reglas son un ESPEJO de backend/src/lib/homework.js y sirven
 // solo para decidir qué mostrar: el backend vuelve a chequear todo. Si se toca
@@ -29,7 +29,7 @@ const MOMENT_FORMAT = new Intl.DateTimeFormat('es-AR', {
  * Si ya pasó la fecha y hora de entrega (hora argentina).
  *
  * @param {{dueDate: string, dueTime: string}} homework - una tarea de GET /api/homework.
- * @param {object} [now] - nowParts() de utils/classStates.js ({ iso, time }).
+ * @param {object} [now] - nowParts() de utils/bookingStates.js ({ iso, time }).
  * @returns {boolean}
  * Lo usa: pages/Homework/StudentHomeworkDialog.jsx.
  * Espejo: isPastDue de backend/src/lib/homework.js.

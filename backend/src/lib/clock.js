@@ -1,7 +1,7 @@
 // La hora de "ahora" en el formato de la app: 'YYYY-MM-DD' y 'HH:MM', en hora
 // ARGENTINA — la de los usuarios, que es la de las fechas y horas que se
 // guardan (sin zona, ver CLAUDE.md). Es la ÚNICA fuente de "hoy" y "ahora" del
-// backend: las reglas puras (classStates, classMaterials, homework, vacations,
+// backend: las reglas puras (bookingStates, classMaterials, homework, vacations,
 // classPacks...) reciben su resultado como parámetro en vez de leer el reloj.
 //
 // Con la zona escrita acá y no con la hora local del proceso: el contenedor
@@ -28,7 +28,7 @@ const FORMAT = new Intl.DateTimeFormat('en-CA', {
  *   submitted_at) para llevarlos al mismo formato.
  * @returns {{iso: string, time: string}} `iso` 'YYYY-MM-DD' y `time` 'HH:MM' (24 h).
  * Lo usan: routes/{availability,classes,homework,neuronas,teachers}/index.js,
- *   db/classes.js y lib/neuronas.js.
+ *   db/bookings.js y lib/neuronas.js.
  */
 export function now(date = new Date()) {
   const parts = Object.fromEntries(FORMAT.formatToParts(date).map((p) => [p.type, p.value]));

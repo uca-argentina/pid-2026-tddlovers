@@ -1,16 +1,16 @@
-import { hasEnded, nowParts } from './classStates.js'
+import { hasEnded, nowParts } from './bookingStates.js'
 
 // El material de una clase ya dada. Las reglas son un ESPEJO de
 // backend/src/lib/classMaterials.js y sirven solo para decidir qué mostrar:
 // el backend vuelve a chequear todo. Si se toca una regla allá, va acá.
 //
-// Las clases que reciben son las de GET /api/classes; el material en sí
-// ({ summary, files }) llega de GET /api/classes/:id/material.
+// Las clases que reciben son las de GET /api/bookings; el material en sí
+// ({ summary, files }) llega de GET /api/classes/:classId/material.
 // Lo usan: components/ClassMaterial.jsx (todo) y components/ClassDetailDialog.jsx
 // (canHaveMaterial).
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024
-const MAX_FILES_PER_TURN = 20
+const MAX_FILES_PER_CLASS = 20
 const MAX_TURN_BYTES = 25 * 1024 * 1024
 export const MAX_SUMMARY_LENGTH = 5000
 
@@ -24,34 +24,34 @@ const PREVIEW_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/we
  * vence al empezar). Regla del backend (backend/src/lib/classMaterials.js);
  * esto es su espejo para no mostrar la sección.
  *
- * @param {object} cls - una clase de GET /api/classes.
+ * @param {object} booking - una reserva de GET /api/bookings.
  * @returns {boolean}
  * Lo usan: components/ClassMaterial.jsx, components/ClassDetailDialog.jsx.
  */
-export function canHaveMaterial(cls) {
-  return GIVEN_STATUSES.includes(cls.status)
+export function canHaveMaterial(booking) {
+  return GIVEN_STATUSES.includes(booking.status)
 }
 
 /**
  * Si el usuario puede escribir el resumen y subir/borrar archivos: el docente,
  * en una clase dada que ya terminó.
  *
- * @param {object} cls - una clase de GET /api/classes.
+ * @param {object} booking - una reserva de GET /api/bookings.
  * @param {string} role - el rol de la sesión ('teacher' | 'student').
- * @param {object} [now] - la hora actual como la arma nowParts() de utils/classStates.js.
+ * @param {object} [now] - la hora actual como la arma nowParts() de utils/bookingStates.js.
  * @returns {boolean}
  * Lo usa: components/ClassMaterial.jsx.
  */
-export function canEditMaterial(cls, role, now = nowParts()) {
-  return role === 'teacher' && canHaveMaterial(cls) && hasEnded(cls, now)
+export function canEditMaterial(booking, role, now = nowParts()) {
+  return role === 'teacher' && canHaveMaterial(booking) && hasEnded(booking, now)
 }
 
 /**
  * Si el material ya se puede ver (docente o alumno): clase dada y terminada.
  * Mismos parámetros que canEditMaterial, sin el rol. Lo usa: components/ClassMaterial.jsx.
  */
-export function canViewMaterial(cls, now = nowParts()) {
-  return canHaveMaterial(cls) && hasEnded(cls, now)
+export function canViewMaterial(booking, now = nowParts()) {
+  return canHaveMaterial(booking) && hasEnded(booking, now)
 }
 
 /**
@@ -67,10 +67,10 @@ export function isPreviewable(mimeType) {
 }
 
 /**
- * Por qué no se pueden subir estos archivos al turno, o null si entran.
+ * Por qué no se pueden subir estos archivos a la clase, o null si entran.
  * `existing` son los que ya tiene ({ sizeBytes }); `files`, los File elegidos.
  *
- * @param {Array<{sizeBytes: number}>} existing - `files` del material (GET /api/classes/:id/material).
+ * @param {Array<{sizeBytes: number}>} existing - `files` del material (GET /api/classes/:classId/material).
  * @param {File[]} files - los elegidos en el <input type="file">.
  * @returns {string|null} el mensaje a mostrar, o null si entran.
  * Lo usa: components/ClassMaterial.jsx.
@@ -81,8 +81,8 @@ export function uploadProblem(existing, files) {
   const pesado = files.find((file) => file.size > MAX_FILE_BYTES)
   if (pesado) return `"${pesado.name}" pesa más de ${MAX_FILE_BYTES / 1024 / 1024} MB.`
   if (files.some((file) => file.size === 0)) return 'Hay un archivo vacío.'
-  if (existing.length + files.length > MAX_FILES_PER_TURN) {
-    return `Una clase puede tener hasta ${MAX_FILES_PER_TURN} archivos.`
+  if (existing.length + files.length > MAX_FILES_PER_CLASS) {
+    return `Una clase puede tener hasta ${MAX_FILES_PER_CLASS} archivos.`
   }
   const guardados = existing.reduce((sum, file) => sum + file.sizeBytes, 0)
   const total = guardados + files.reduce((sum, file) => sum + file.size, 0)

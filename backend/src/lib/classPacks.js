@@ -14,10 +14,10 @@
 //
 // Tablas: class_packs (lo que ofrece el docente) y student_packs (lo comprado),
 // migraciones 014 y 015; las reservas que usan un paquete tienen
-// classes.student_pack_id y classes.pack_tokens.
+// class_bookings.student_pack_id y class_bookings.pack_tokens (023).
 // Lo usan: routes/teachers/index.js (validatePackOffer), routes/packs/index.js
-// (expiryFor, StudentPack.summary), routes/classes/index.js y db/classes.js
-// (StudentPack.bookingProblem: la ruta chequea y db/classes.js lo repite bajo
+// (expiryFor, StudentPack.summary), routes/bookings/index.js y db/bookings.js
+// (StudentPack.bookingProblem: la ruta chequea y db/bookings.js lo repite bajo
 // el lock del paquete).
 // Relacionado: frontend/src/utils/packs.js NO recalcula estas cuentas; usa
 // `remaining`/`available`/`expired` que vienen de summary().
@@ -188,7 +188,7 @@ export class StudentPack {
    * @param {number} args.minutes - body.durationMinutes.
    * @returns {null|{status: number, message: string}} null si se puede; si no,
    *   400 (pedido mal armado) o 409 (el paquete no alcanza) con el motivo.
-   * Lo usan: routes/classes/index.js (priceBooking) y db/classes.js (re-chequeo bajo lock).
+   * Lo usan: routes/bookings/index.js (priceBooking) y db/bookings.js (re-chequeo bajo lock).
    */
   bookingProblem({ date, today, tokens, minutes }) {
     if (!Number.isInteger(tokens) || tokens < 1) {

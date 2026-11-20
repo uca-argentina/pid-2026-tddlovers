@@ -3,7 +3,7 @@ import Modal from './Modal.jsx'
 import Banner from './Banner.jsx'
 import { SpinnerIcon } from './icons.jsx'
 import { markAttendance } from '../api/client.js'
-import { paymentStatus } from '../utils/classStates.js'
+import { paymentStatus } from '../utils/bookingStates.js'
 import './ClassActions.css'
 import './AttendanceDialog.css'
 
@@ -19,7 +19,7 @@ import './AttendanceDialog.css'
  * onChange(reserva).
  *
  * Rol: docente. Props (de ClassDetailDialog): rows, onChange y onClose.
- * Datos: markAttendance → POST /api/classes/:id/attendance con
+ * Datos: markAttendance → POST /api/bookings/:id/attendance con
  * { attended }, una reserva a la vez (también para "Todos presentes").
  * Estado: busy (id en vuelo o 'all') y error.
  */

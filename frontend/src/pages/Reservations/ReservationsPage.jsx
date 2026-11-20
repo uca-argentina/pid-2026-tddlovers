@@ -3,19 +3,19 @@ import Banner from '../../components/Banner.jsx'
 import ClassCard from '../../components/ClassCard.jsx'
 import ClassDetailDialog from '../../components/ClassDetailDialog.jsx'
 import { ChevronRightIcon, SpinnerIcon } from '../../components/icons.jsx'
-import { fetchClasses } from '../../api/client.js'
+import { fetchBookings } from '../../api/client.js'
 import withFavorites from '../../routes/withFavorites.jsx'
 import { addDays, toISODate } from '../../utils/calendar.js'
-import { hasStarted, nowParts } from '../../utils/classStates.js'
+import { hasStarted, nowParts } from '../../utils/bookingStates.js'
 import {
   CATEGORIES,
-  groupTurns,
+  groupClasses,
   lastClass,
   nextClass,
-  turnRows,
-  turnSiblings,
-  turnsIn,
-  withTurnMaterial,
+  classRows,
+  classSiblings,
+  classesIn,
+  withClassMaterial,
 } from '../../utils/reservations.js'
 import CategoryDialog from './CategoryDialog.jsx'
 import './ReservationsPage.css'
@@ -47,17 +47,17 @@ const DAYS_AHEAD = 90
  *   - now: "ahora" inyectable para tests (en la app es null → nowParts()).
  *   - favoriteIds, onFavoriteChange, onFavoriteError: de withFavorites.
  *
- * Datos: fetchClasses → GET /api/classes?from&to (de hoy − 180 a hoy + 90
+ * Datos: fetchBookings → GET /api/bookings?from&to (de hoy − 180 a hoy + 90
  * días), solo al montar. Los cambios posteriores llegan como la clase
  * actualizada que devuelve cada acción (handleChange), sin volver a pedir.
  *
- * Estado: classes (filas de GET /api/classes, una por reserva), loading,
+ * Estado: bookings (filas de GET /api/bookings, una por reserva), loading,
  * error, openCategory (key de CATEGORIES con la hoja abierta) y detailId (id
  * de la reserva abierta en ClassDetailDialog).
  */
 class ReservationsPage extends Component {
   state = {
-    classes: [],
+    bookings: [],
     loading: true,
     error: null,
     // La categoría abierta (su key) y la reserva en detalle (su id).
@@ -79,18 +79,18 @@ class ReservationsPage extends Component {
     return this.props.now || nowParts()
   }
 
-  /** Trae las reservas del usuario (GET /api/classes, ver DAYS_BACK/DAYS_AHEAD) → `classes`. */
+  /** Trae las reservas del usuario (GET /api/bookings, ver DAYS_BACK/DAYS_AHEAD) → `bookings`. */
   load = () => {
     const token = ++this.fetchToken
     const hoy = new Date()
     this.setState({ loading: true, error: null })
-    fetchClasses({
+    fetchBookings({
       from: toISODate(addDays(hoy, -DAYS_BACK)),
       to: toISODate(addDays(hoy, DAYS_AHEAD)),
     })
-      .then((classes) => {
+      .then((bookings) => {
         if (token !== this.fetchToken) return
-        this.setState({ classes, loading: false })
+        this.setState({ bookings, loading: false })
       })
       .catch((error) => {
         if (token !== this.fetchToken) return
@@ -102,19 +102,19 @@ class ReservationsPage extends Component {
   }
 
   /**
-   * Una acción devolvió una reserva actualizada (de POST /api/classes/:id/…):
+   * Una acción devolvió una reserva actualizada (de POST /api/bookings/:id/…):
    * se reemplaza esa fila por id, sin volver a pedir la lista.
    */
   handleChange = (updated) => {
     if (!updated?.id) return
     this.setState((prev) => ({
-      classes: prev.classes.map((item) => (String(item.id) === String(updated.id) ? updated : item)),
+      bookings: prev.bookings.map((item) => (String(item.id) === String(updated.id) ? updated : item)),
     }))
   }
 
-  /** El material es del turno: el clip aparece en todas sus reservas en pie. */
+  /** El material es de la clase: el clip aparece en todas sus reservas en pie. */
   handleMaterialChange = (cls, hasMaterial) => {
-    this.setState((prev) => ({ classes: withTurnMaterial(prev.classes, cls, hasMaterial) }))
+    this.setState((prev) => ({ bookings: withClassMaterial(prev.bookings, cls, hasMaterial) }))
   }
 
   handleOpenCategory = (key) => () => this.setState({ openCategory: key })
@@ -126,7 +126,7 @@ class ReservationsPage extends Component {
   handleCloseClass = () => this.setState({ detailId: null })
 
   /**
-   * La tarjeta de una clase, con todas las reservas de su turno. La próxima
+   * La tarjeta de una clase, con todas las reservas de su clase. La próxima
    * y la última van sin botones: son para saber cuál es y entrar al detalle.
    */
   renderCard(cls, { summary = false, badge = null } = {}) {
@@ -134,7 +134,7 @@ class ReservationsPage extends Component {
       <ClassCard
         key={cls.id}
         cls={cls}
-        rows={turnRows(cls, this.state.classes)}
+        rows={classRows(cls, this.state.bookings)}
         viewRole={this.props.viewRole}
         favoriteIds={this.props.favoriteIds}
         showActions={!summary}
@@ -153,7 +153,7 @@ class ReservationsPage extends Component {
    */
   lastBadge(cls) {
     if (this.props.viewRole !== 'teacher') return null
-    const sinLista = turnSiblings(cls, this.state.classes).some((row) =>
+    const sinLista = classSiblings(cls, this.state.bookings).some((row) =>
       ['aceptada', 'confirmada'].includes(row.status),
     )
     return sinLista ? { label: 'Falta tomar lista', tone: 'warning' } : null
@@ -161,8 +161,8 @@ class ReservationsPage extends Component {
 
   renderHighlights() {
     const now = this.now()
-    const proxima = nextClass(this.state.classes, now)
-    const ultima = lastClass(this.state.classes, now)
+    const proxima = nextClass(this.state.bookings, now)
+    const ultima = lastClass(this.state.bookings, now)
     const enCurso = proxima && hasStarted(proxima, now)
 
     return (
@@ -199,13 +199,13 @@ class ReservationsPage extends Component {
   }
 
   renderCategories() {
-    // FILTRO: cada categoría cuenta solo sus turnos (turnsIn en
+    // FILTRO: cada categoría cuenta solo sus clases (classesIn en
     // utils/reservations.js; regla de pantalla).
-    const turns = groupTurns(this.state.classes)
+    const entries = groupClasses(this.state.bookings)
     return (
       <ul className="reservations-categories" aria-label="Reservas por estado">
         {CATEGORIES.map((category) => {
-          const count = turnsIn(category, turns).length
+          const count = classesIn(category, entries).length
           const cantidad = `${count} ${count === 1 ? 'clase' : 'clases'}`
           return (
             <li key={category.key}>
@@ -236,7 +236,7 @@ class ReservationsPage extends Component {
     return (
       <CategoryDialog
         category={category}
-        turns={turnsIn(category, groupTurns(this.state.classes))}
+        entries={classesIn(category, groupClasses(this.state.bookings))}
         viewRole={this.props.viewRole}
         renderCard={this.renderListCard}
         onClose={this.handleCloseCategory}
@@ -247,18 +247,18 @@ class ReservationsPage extends Component {
   renderListCard = (cls) => this.renderCard(cls)
 
   renderDetailDialog() {
-    const { detailId, classes } = this.state
+    const { detailId, bookings } = this.state
     if (!detailId) return null
-    const abierta = classes.find((item) => String(item.id) === String(detailId))
+    const abierta = bookings.find((item) => String(item.id) === String(detailId))
     if (!abierta) return null
-    // Siempre la que representa al turno: si la reserva abierta se canceló
+    // Siempre la que representa a la clase: si la reserva abierta se canceló
     // (un alumno de la grupal), la clase sigue con los demás.
-    const cls = turnRows(abierta, classes)[0]
+    const cls = classRows(abierta, bookings)[0]
 
     return (
       <ClassDetailDialog
         cls={cls}
-        classes={classes}
+        bookings={bookings}
         viewRole={this.props.viewRole}
         now={this.props.now}
         onClose={this.handleCloseClass}

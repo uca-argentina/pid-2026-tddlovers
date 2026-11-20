@@ -4,11 +4,14 @@ vi.mock('../../db/availability.js', () => ({
   findPublishedWindows: vi.fn(),
 }));
 
-vi.mock('../../db/classes.js', () => ({
+vi.mock('../../db/bookings.js', () => ({
   expireStartedPending: vi.fn(),
-  findClassById: vi.fn(),
-  findClassesForUser: vi.fn(),
-  findTakenSlots: vi.fn(),
+  findBookingById: vi.fn(),
+  findBookingsForUser: vi.fn(),
+}));
+
+vi.mock('../../db/classes.js', () => ({
+  findActiveClasses: vi.fn(),
 }));
 
 vi.mock('../../db/vacations.js', () => ({
@@ -29,9 +32,10 @@ vi.mock('../../lib/clock.js', () => ({
 }));
 
 const { findPublishedWindows } = await import('../../db/availability.js');
-const { expireStartedPending, findClassById, findClassesForUser, findTakenSlots } = await import(
-  '../../db/classes.js'
+const { expireStartedPending, findBookingById, findBookingsForUser } = await import(
+  '../../db/bookings.js'
 );
+const { findActiveClasses } = await import('../../db/classes.js');
 const { listVacationsInRange } = await import('../../db/vacations.js');
 const { findValidSession } = await import('../../db/sessions.js');
 const { buildApp } = await import('../../app.js');
@@ -39,7 +43,7 @@ const { buildApp } = await import('../../app.js');
 const ALUMNO_ID = '3b2f6c1e-1d5a-4c7e-9f0a-1b2c3d4e5f60';
 const DOCENTE_ID = '9f1c2d3e-4b5a-4c6d-8e7f-0a1b2c3d4e5f';
 const MATE = 'a1b2c3d4-0000-4000-8000-000000000001';
-const CLASE_ID = 'c0ffee00-1111-4222-8333-444455556666';
+const RESERVA_ID = 'c0ffee00-1111-4222-8333-444455556666';
 const LUNES = '2099-09-14';
 
 async function authedHeaders(app, userId = ALUMNO_ID, role = 'student') {
@@ -72,8 +76,8 @@ const ventana = {
   teacherFeatured: false,
 };
 
-// Como la devuelve findTakenSlots: un turno, con cupo y modalidad copiados.
-const turno = {
+// Como la devuelve findActiveClasses: una clase en pie, con su cupo y modalidad.
+const claseEnPie = {
   teacherId: DOCENTE_ID,
   date: LUNES,
   start: '14:00',
@@ -85,9 +89,9 @@ const turno = {
   modality: 'virtual',
 };
 
-// Como la devuelve findClassById (CLASS_COLUMNS), con lo que importa acá.
-const clase = (over = {}) => ({
-  id: CLASE_ID,
+// Como la devuelve findBookingById (BOOKING_COLUMNS), con lo que importa acá.
+const reserva = (over = {}) => ({
+  id: RESERVA_ID,
   date: LUNES,
   startTime: '14:00',
   endTime: '15:00',
@@ -126,9 +130,9 @@ describe('GET /api/availability', () => {
   beforeEach(() => {
     app = buildApp({ logger: false });
     findPublishedWindows.mockResolvedValue([ventana]);
-    findTakenSlots.mockResolvedValue([turno]);
+    findActiveClasses.mockResolvedValue([claseEnPie]);
     listVacationsInRange.mockResolvedValue([]);
-    findClassesForUser.mockResolvedValue([]);
+    findBookingsForUser.mockResolvedValue([]);
     expireStartedPending.mockResolvedValue(undefined);
   });
 
@@ -150,7 +154,7 @@ describe('GET /api/availability', () => {
       { start: '16:30', maxMinutes: 30 },
     ]);
     expect(res.json()[0]).not.toHaveProperty('free');
-    expect(findClassById).not.toHaveBeenCalled();
+    expect(findBookingById).not.toHaveBeenCalled();
   });
 
   it('passes "today" from the Argentine clock to findPublishedWindows', async () => {
@@ -159,14 +163,14 @@ describe('GET /api/availability', () => {
     expect(findPublishedWindows).toHaveBeenCalledWith({ from: LUNES, to: LUNES, today: '2099-09-07' });
   });
 
-  it('subtracts the student\'s own classes with any teacher, and hides what becomes empty', async () => {
-    findClassesForUser.mockResolvedValue([
-      clase({ id: 'otra', teacherId: 'otro', startTime: '16:00', endTime: '17:00' }),
-      clase({ id: 'cancelada', teacherId: 'otro', startTime: '15:00', endTime: '16:00', status: 'cancelada' }),
+  it('subtracts the student\'s own bookings with any teacher, and hides what becomes empty', async () => {
+    findBookingsForUser.mockResolvedValue([
+      reserva({ id: 'otra', teacherId: 'otro', startTime: '16:00', endTime: '17:00' }),
+      reserva({ id: 'cancelada', teacherId: 'otro', startTime: '15:00', endTime: '16:00', status: 'cancelada' }),
     ]);
     const headers = await authedHeaders(app);
     const res = await app.inject({ method: 'GET', url: URL, headers });
-    expect(findClassesForUser).toHaveBeenCalledWith({
+    expect(findBookingsForUser).toHaveBeenCalledWith({
       userId: ALUMNO_ID,
       role: 'student',
       from: LUNES,
@@ -178,35 +182,35 @@ describe('GET /api/availability', () => {
     ]);
 
     // Ocupado toda la tarde: la fila no sale.
-    findClassesForUser.mockResolvedValue([
-      clase({ id: 'otra', teacherId: 'otro', startTime: '15:00', endTime: '17:00' }),
+    findBookingsForUser.mockResolvedValue([
+      reserva({ id: 'otra', teacherId: 'otro', startTime: '15:00', endTime: '17:00' }),
     ]);
     const full = await app.inject({ method: 'GET', url: URL, headers });
     expect(full.json()).toEqual([]);
   });
 
-  it('does not cross own classes for a teacher, and never offers their own windows', async () => {
+  it('does not cross own bookings for a teacher, and never offers their own windows', async () => {
     findPublishedWindows.mockResolvedValue([
       ventana,
       { ...ventana, id: 'f0f0f0f0-0000-4000-8000-000000000002', teacherId: ALUMNO_ID },
     ]);
     const headers = await authedHeaders(app, ALUMNO_ID, 'teacher');
     const res = await app.inject({ method: 'GET', url: URL, headers });
-    expect(findClassesForUser).not.toHaveBeenCalled();
+    expect(findBookingsForUser).not.toHaveBeenCalled();
     expect(res.json().map((row) => row.teacherId)).toEqual([DOCENTE_ID]);
   });
 
   it('does not offer a full group whose window was raised (B1)', async () => {
     findPublishedWindows.mockResolvedValue([{ ...ventana, maxStudents: 5 }]);
-    findTakenSlots.mockResolvedValue([{ ...turno, enrolled: 3, maxStudents: 3 }]);
+    findActiveClasses.mockResolvedValue([{ ...claseEnPie, enrolled: 3, maxStudents: 3 }]);
     const headers = await authedHeaders(app);
     const res = await app.inject({ method: 'GET', url: URL, headers });
     expect(res.json()[0].groups).toEqual([]);
   });
 
-  it('offers a group with room with the turn capacity', async () => {
+  it('offers a group with room with the class capacity', async () => {
     findPublishedWindows.mockResolvedValue([{ ...ventana, maxStudents: 5 }]);
-    findTakenSlots.mockResolvedValue([{ ...turno, enrolled: 2, maxStudents: 3 }]);
+    findActiveClasses.mockResolvedValue([{ ...claseEnPie, enrolled: 2, maxStudents: 3 }]);
     const headers = await authedHeaders(app);
     const res = await app.inject({ method: 'GET', url: URL, headers });
     expect(res.json()[0].groups).toEqual([
@@ -226,64 +230,64 @@ describe('GET /api/availability', () => {
     await app.inject({ method: 'GET', url: URL, headers });
     expect(expireStartedPending).toHaveBeenCalledWith({ iso: '2099-09-07', time: '10:00' });
     expect(expireStartedPending.mock.invocationCallOrder[0]).toBeLessThan(
-      findTakenSlots.mock.invocationCallOrder[0]
+      findActiveClasses.mock.invocationCallOrder[0]
     );
   });
 
-  describe('excludeClassId', () => {
-    it('frees the slot of the class being rescheduled', async () => {
-      findClassById.mockResolvedValueOnce(clase());
+  describe('excludeBookingId', () => {
+    it('frees the slot of the booking being rescheduled', async () => {
+      findBookingById.mockResolvedValueOnce(reserva());
       const headers = await authedHeaders(app);
       const res = await app.inject({
         method: 'GET',
-        url: `${URL}&excludeClassId=${CLASE_ID}`,
+        url: `${URL}&excludeBookingId=${RESERVA_ID}`,
         headers,
       });
       expect(res.statusCode).toBe(200);
       // 14:00-15:00 → 14:30-15:30 tiene que poder elegirse.
       expect(res.json()[0].starts[0]).toEqual({ start: '14:00', maxMinutes: 180 });
-      expect(findClassById).toHaveBeenCalledWith(CLASE_ID);
+      expect(findBookingById).toHaveBeenCalledWith(RESERVA_ID);
     });
 
-    it('is ignored for a class of someone else', async () => {
-      findClassById.mockResolvedValueOnce(clase({ studentId: DOCENTE_ID }));
+    it('is ignored for a booking of someone else', async () => {
+      findBookingById.mockResolvedValueOnce(reserva({ studentId: DOCENTE_ID }));
       const headers = await authedHeaders(app);
       const res = await app.inject({
         method: 'GET',
-        url: `${URL}&excludeClassId=${CLASE_ID}`,
+        url: `${URL}&excludeBookingId=${RESERVA_ID}`,
         headers,
       });
       expect(res.statusCode).toBe(200);
       expect(startsOf(res.json()[0])[0]).toBe('15:00');
     });
 
-    it('is ignored for a class that is not confirmed', async () => {
+    it('is ignored for a booking that is not confirmed', async () => {
       for (const status of ['pendiente', 'aceptada', 'cancelada']) {
-        findClassById.mockResolvedValueOnce(clase({ status }));
+        findBookingById.mockResolvedValueOnce(reserva({ status }));
         const headers = await authedHeaders(app);
         const res = await app.inject({
           method: 'GET',
-          url: `${URL}&excludeClassId=${CLASE_ID}`,
+          url: `${URL}&excludeBookingId=${RESERVA_ID}`,
           headers,
         });
         expect(startsOf(res.json()[0])[0]).toBe('15:00');
       }
     });
 
-    it('is ignored for a class that does not exist', async () => {
-      findClassById.mockResolvedValueOnce(null);
+    it('is ignored for a booking that does not exist', async () => {
+      findBookingById.mockResolvedValueOnce(null);
       const headers = await authedHeaders(app);
       const res = await app.inject({
         method: 'GET',
-        url: `${URL}&excludeClassId=${CLASE_ID}`,
+        url: `${URL}&excludeBookingId=${RESERVA_ID}`,
         headers,
       });
       expect(res.statusCode).toBe(200);
       expect(startsOf(res.json()[0])[0]).toBe('15:00');
     });
 
-    it('only keeps the teacher and subject of that class', async () => {
-      findClassById.mockResolvedValueOnce(clase());
+    it('only keeps the teacher and subject of that booking', async () => {
+      findBookingById.mockResolvedValueOnce(reserva());
       findPublishedWindows.mockResolvedValue([
         { ...ventana, subjects: [...ventana.subjects, { id: 'fisica', name: 'Física', hourlyRateCents: 1 }] },
         { ...ventana, id: 'f0f0f0f0-0000-4000-8000-000000000003', teacherId: 'otro-docente' },
@@ -291,7 +295,7 @@ describe('GET /api/availability', () => {
       const headers = await authedHeaders(app);
       const res = await app.inject({
         method: 'GET',
-        url: `${URL}&excludeClassId=${CLASE_ID}`,
+        url: `${URL}&excludeBookingId=${RESERVA_ID}`,
         headers,
       });
       expect(res.json()).toHaveLength(1);
@@ -300,9 +304,9 @@ describe('GET /api/availability', () => {
 
     it('is a 400 when it is not a UUID', async () => {
       const headers = await authedHeaders(app);
-      const res = await app.inject({ method: 'GET', url: `${URL}&excludeClassId=abc`, headers });
+      const res = await app.inject({ method: 'GET', url: `${URL}&excludeBookingId=abc`, headers });
       expect(res.statusCode).toBe(400);
-      expect(findClassById).not.toHaveBeenCalled();
+      expect(findBookingById).not.toHaveBeenCalled();
     });
   });
 

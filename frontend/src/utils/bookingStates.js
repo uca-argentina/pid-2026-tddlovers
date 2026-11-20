@@ -2,16 +2,16 @@ import { formatDayLong, fromISODate, toISODate } from './calendar.js'
 
 // Los estados de una reserva y qué se puede hacer en cada uno.
 //
-// Las reglas son un ESPEJO de backend/src/lib/classStates.js y sirven solo
+// Las reglas son un ESPEJO de backend/src/lib/bookingStates.js y sirven solo
 // para decidir qué botones mostrar: el que decide de verdad es el backend, que
 // vuelve a chequear todo (y dice por qué no, si algo cambió en el medio). Si
 // se toca una regla allá, hay que tocarla acá.
 //
-// Todas reciben una clase (reserva) tal como la devuelve GET /api/classes
+// Todas reciben una clase (reserva) tal como la devuelve GET /api/bookings
 // (status, date, startTime, endTime, paidAt, priceCents, packTokens,
 // rewardType, cancelReason, cancelledBy) y, cuando importa, el rol de la
-// sesión. Lo usan los componentes de clase (components/ClassActions.jsx,
-// TurnActions.jsx, StudentsDialog.jsx, AttendanceDialog.jsx,
+// sesión. Lo usan los componentes de clase (components/BookingActions.jsx,
+// ClassActions.jsx, StudentsDialog.jsx, AttendanceDialog.jsx,
 // ClassDetailDialog.jsx, ClassMaterial.jsx), pages/Reservations/ y los utils
 // reservations.js, classMaterials.js y homework.js (nowParts/hasEnded).
 
@@ -38,7 +38,7 @@ export const STATUS_TONES = {
 
 /**
  * El texto en pantalla de un `status` ('no_presentada' -> 'No presentada').
- * Lo usan: components/ClassActions.jsx, TurnActions.jsx, StudentsDialog.jsx.
+ * Lo usan: components/BookingActions.jsx, ClassActions.jsx, StudentsDialog.jsx.
  */
 export function statusLabel(status) {
   return STATUS_LABELS[status] || status
@@ -64,75 +64,75 @@ function toEpochMinutes(iso, time) {
   return Date.UTC(y, m - 1, d, hh, mm) / 60000
 }
 
-function minutesUntilStart(cls, now) {
-  return toEpochMinutes(cls.date, cls.startTime) - toEpochMinutes(now.iso, now.time)
+function minutesUntilStart(booking, now) {
+  return toEpochMinutes(booking.date, booking.startTime) - toEpochMinutes(now.iso, now.time)
 }
 
 /**
  * Si la clase ya empezó (date + startTime <= ahora).
  * Lo usan: components/ClassDetailDialog.jsx, pages/Reservations/ReservationsPage.jsx.
  */
-export function hasStarted(cls, now = nowParts()) {
-  return minutesUntilStart(cls, now) <= 0
+export function hasStarted(booking, now = nowParts()) {
+  return minutesUntilStart(booking, now) <= 0
 }
 
 /**
  * Ya terminó: el fin llegó. Un fin "24:00" es la medianoche siguiente.
  * Lo usan: utils/classMaterials.js, utils/reservations.js, components/ClassMaterial.jsx.
- * Espejo: hasEnded de backend/src/lib/classStates.js.
+ * Espejo: hasEnded de backend/src/lib/bookingStates.js.
  */
-export function hasEnded(cls, now = nowParts()) {
-  return toEpochMinutes(cls.date, cls.endTime) <= toEpochMinutes(now.iso, now.time)
+export function hasEnded(booking, now = nowParts()) {
+  return toEpochMinutes(booking.date, booking.endTime) <= toEpochMinutes(now.iso, now.time)
 }
 
-function withNotice(cls, now) {
-  return minutesUntilStart(cls, now) >= CANCEL_NOTICE_HOURS * 60
+function withNotice(booking, now) {
+  return minutesUntilStart(booking, now) >= CANCEL_NOTICE_HOURS * 60
 }
 
 const RULES = {
-  accept: (cls, role, now) => role === 'teacher' && cls.status === 'pendiente' && !hasStarted(cls, now),
-  cancel: (cls, role, now) =>
-    ['pendiente', 'aceptada', 'confirmada'].includes(cls.status) &&
-    !hasStarted(cls, now) &&
-    (role === 'teacher' || cls.status === 'pendiente' || withNotice(cls, now)),
-  pay: (cls, role) =>
+  accept: (booking, role, now) => role === 'teacher' && booking.status === 'pendiente' && !hasStarted(booking, now),
+  cancel: (booking, role, now) =>
+    ['pendiente', 'aceptada', 'confirmada'].includes(booking.status) &&
+    !hasStarted(booking, now) &&
+    (role === 'teacher' || booking.status === 'pendiente' || withNotice(booking, now)),
+  pay: (booking, role) =>
     role === 'student' &&
-    !cls.paidAt &&
-    ['aceptada', 'realizada', 'no_presentada'].includes(cls.status),
-  attend: (cls, role, now) =>
+    !booking.paidAt &&
+    ['aceptada', 'realizada', 'no_presentada'].includes(booking.status),
+  attend: (booking, role, now) =>
     role === 'teacher' &&
-    ['aceptada', 'confirmada', 'realizada', 'no_presentada'].includes(cls.status) &&
-    hasStarted(cls, now),
-  reschedule: (cls, role, now) =>
-    role === 'student' && cls.status === 'confirmada' && withNotice(cls, now),
+    ['aceptada', 'confirmada', 'realizada', 'no_presentada'].includes(booking.status) &&
+    hasStarted(booking, now),
+  reschedule: (booking, role, now) =>
+    role === 'student' && booking.status === 'confirmada' && withNotice(booking, now),
 }
 
 /**
  * FILTRO: qué botones se muestran. Lo que `role` puede hacer ahora con la
  * clase: accept, cancel, pay, attend, reschedule. Regla del backend
- * (checkAction en backend/src/lib/classStates.js, que la vuelve a chequear);
+ * (checkAction en backend/src/lib/bookingStates.js, que la vuelve a chequear);
  * esto es solo su espejo para elegir botones.
  *
- * @param {object} cls - una clase de GET /api/classes.
+ * @param {object} booking - una reserva de GET /api/bookings.
  * @param {'teacher'|'student'} role - el rol de la sesión.
  * @param {object} [now] - nowParts().
  * @returns {string[]} las acciones permitidas; cada una corresponde a
- *   POST /api/classes/:id/{accept,cancel,pay,attendance,reschedule}.
- * Lo usan: components/ClassActions.jsx, TurnActions.jsx, StudentsDialog.jsx,
+ *   POST /api/bookings/:id/{accept,cancel,pay,attendance,reschedule}.
+ * Lo usan: components/BookingActions.jsx, ClassActions.jsx, StudentsDialog.jsx,
  * AttendanceDialog.jsx, ClassDetailDialog.jsx.
- * Espejo: RULES/checkAction de backend/src/lib/classStates.js (la autoridad).
+ * Espejo: RULES/checkAction de backend/src/lib/bookingStates.js (la autoridad).
  */
-export function allowedActions(cls, role, now = nowParts()) {
-  return Object.keys(RULES).filter((action) => RULES[action](cls, role, now))
+export function allowedActions(booking, role, now = nowParts()) {
+  return Object.keys(RULES).filter((action) => RULES[action](booking, role, now))
 }
 
 /**
  * Una clase que se debe: la aceptada todavía no se pagó (por eso no está
  * confirmada), y una ya dada puede haber quedado sin pagar (se paga después).
- * Lo usa: components/ClassActions.jsx.
+ * Lo usa: components/BookingActions.jsx.
  */
-export function owesPayment(cls) {
-  return !cls.paidAt && ['aceptada', 'realizada', 'no_presentada'].includes(cls.status)
+export function owesPayment(booking) {
+  return !booking.paidAt && ['aceptada', 'realizada', 'no_presentada'].includes(booking.status)
 }
 
 /**
@@ -141,13 +141,13 @@ export function owesPayment(cls) {
  * { label, tone } con los tonos de las pastillas.
  * Lo usan: components/ClassDetailDialog.jsx, StudentsDialog.jsx, AttendanceDialog.jsx.
  */
-export function paymentStatus(cls) {
+export function paymentStatus(booking) {
   // Antes que paidAt: aceptar una clase cubierta entera por el canje o por el
   // paquete ya la marca paga, y "Pagó" diría algo que el alumno no hizo.
-  if (cls.rewardType && cls.priceCents === 0) return { label: 'Con neuronas', tone: 'info' }
-  if (cls.packTokens > 0 && cls.priceCents === 0) return { label: 'Con paquete', tone: 'info' }
-  if (cls.paidAt) return { label: 'Pagó', tone: 'success' }
-  if (cls.priceCents === 0) return { label: 'Gratis', tone: 'info' }
+  if (booking.rewardType && booking.priceCents === 0) return { label: 'Con neuronas', tone: 'info' }
+  if (booking.packTokens > 0 && booking.priceCents === 0) return { label: 'Con paquete', tone: 'info' }
+  if (booking.paidAt) return { label: 'Pagó', tone: 'success' }
+  if (booking.priceCents === 0) return { label: 'Gratis', tone: 'info' }
   return { label: 'Sin pagar', tone: 'warning' }
 }
 
@@ -155,43 +155,43 @@ export function paymentStatus(cls) {
  * Por qué está cancelada, dicho desde quien mira: "Cancelada por vos" no es
  * lo mismo que "Cancelada por el docente".
  *
- * @param {object} cls - una clase de GET /api/classes (cancelReason, cancelledBy).
+ * @param {object} booking - una reserva de GET /api/bookings (cancelReason, cancelledBy).
  * @param {'teacher'|'student'} role - el rol de quien mira.
  * @returns {string|null} null si no está cancelada o no hay nada que explicar.
- * Lo usan: components/ClassActions.jsx, TurnActions.jsx.
+ * Lo usan: components/BookingActions.jsx, ClassActions.jsx.
  */
-export function cancelDescription(cls, role) {
-  if (cls.status !== 'cancelada') return null
-  if (cls.cancelReason === 'vencida') return 'El docente no respondió antes de la clase.'
-  if (cls.cancelReason === 'reprogramada') return 'Reprogramada a otro horario.'
-  if (cls.cancelReason === 'vacaciones') {
+export function cancelDescription(booking, role) {
+  if (booking.status !== 'cancelada') return null
+  if (booking.cancelReason === 'vencida') return 'El docente no respondió antes de la clase.'
+  if (booking.cancelReason === 'reprogramada') return 'Reprogramada a otro horario.'
+  if (booking.cancelReason === 'vacaciones') {
     return role === 'teacher'
       ? 'Se canceló por tu licencia.'
       : 'El docente está de licencia: se canceló la clase.'
   }
-  const fuiYo = cls.cancelledBy === role
-  if (cls.cancelReason === 'rechazada') {
+  const fuiYo = booking.cancelledBy === role
+  if (booking.cancelReason === 'rechazada') {
     return fuiYo ? 'La rechazaste.' : 'El docente rechazó la reserva.'
   }
-  if (!cls.cancelledBy) return null
+  if (!booking.cancelledBy) return null
   if (fuiYo) return 'La cancelaste vos.'
-  return cls.cancelledBy === 'teacher' ? 'La canceló el docente.' : 'La canceló el alumno.'
+  return booking.cancelledBy === 'teacher' ? 'La canceló el docente.' : 'La canceló el alumno.'
 }
 
 /**
  * Hasta cuándo puede el alumno cancelar o reprogramar una clase ya aceptada,
  * dicho en criollo, o por qué ya no puede. null si no aplica (pendiente, que
  * se retira siempre, o algo ya cerrado).
- * Lo usa: components/ClassActions.jsx.
+ * Lo usa: components/BookingActions.jsx.
  */
-export function cancelDeadlineHint(cls, now = nowParts()) {
-  if (!['aceptada', 'confirmada'].includes(cls.status) || hasStarted(cls, now)) return null
-  if (!withNotice(cls, now)) {
+export function cancelDeadlineHint(booking, now = nowParts()) {
+  if (!['aceptada', 'confirmada'].includes(booking.status) || hasStarted(booking, now)) return null
+  if (!withNotice(booking, now)) {
     return `Faltan menos de ${CANCEL_NOTICE_HOURS} h: ya no se puede cancelar ni reprogramar.`
   }
   // Las cuentas van en minutos "UTC" solo como reloj sin zona: toISOString
   // devuelve la misma fecha y hora local que entraron, 24 h antes.
-  const limite = new Date((toEpochMinutes(cls.date, cls.startTime) - CANCEL_NOTICE_HOURS * 60) * 60000)
+  const limite = new Date((toEpochMinutes(booking.date, booking.startTime) - CANCEL_NOTICE_HOURS * 60) * 60000)
   const iso = limite.toISOString().slice(0, 10)
   const hora = limite.toISOString().slice(11, 16)
   return `Podés cancelar o reprogramar hasta el ${formatDayLong(fromISODate(iso)).toLowerCase()} a las ${hora}.`

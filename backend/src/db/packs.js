@@ -5,12 +5,12 @@ import { getPool } from './pool.js';
 //
 // Tablas: class_packs (lo que ofrece el docente) y student_packs (lo que
 // compró el alumno), de la migración 014, con class_minutes de 015; lee
-// classes.student_pack_id (014) y classes.pack_tokens (015) para las cuentas,
+// class_bookings.student_pack_id (014) y class_bookings.pack_tokens (015) para las cuentas,
 // y users para el nombre y la aprobación del docente.
-// Locks: ninguno acá; el 'pack:' || studentPackId lo toma db/classes.js
+// Locks: ninguno acá; el 'pack:' || studentPackId lo toma db/bookings.js
 // (reservePackSlot) antes de llamar a findStudentPack.
-// Lo usan: routes/teachers (/me/packs), routes/packs, routes/classes
-// (listStudentPacks al reservar) y db/classes.js (findStudentPack).
+// Lo usan: routes/teachers (/me/packs), routes/packs, routes/bookings
+// (listStudentPacks al reservar) y db/bookings.js (findStudentPack).
 
 const OFFER_COLUMNS = `
   p.id,
@@ -134,7 +134,7 @@ export async function findOfferById(id) {
 // Un paquete comprado con sus cuentas, en clases del paquete (una reserva
 // puede usar más de una: pack_tokens). `attended` son las que usaron las
 // reservas realizadas (las que descontaron) y `reserved` las de las reservas
-// en curso; ausentes y canceladas no cuentan. `excludeClassId` deja afuera una clase: al
+// en curso; ausentes y canceladas no cuentan. `excludeBookingId` deja afuera una reserva: al
 // reprogramar, la vieja se cancela en la misma transacción y no tiene que
 // ocupar lugar; `exclude` es el parámetro de la consulta que lo trae.
 const studentPackColumns = (exclude = 'NULL') => `
@@ -149,14 +149,14 @@ const studentPackColumns = (exclude = 'NULL') => `
   sp.purchased_at AS "purchasedAt",
   to_char(sp.expires_on, 'YYYY-MM-DD') AS "expiresOn",
   (
-    SELECT COALESCE(sum(c.pack_tokens), 0)::int FROM classes c
-    WHERE c.student_pack_id = sp.id AND c.status = 'realizada'
+    SELECT COALESCE(sum(b.pack_tokens), 0)::int FROM class_bookings b
+    WHERE b.student_pack_id = sp.id AND b.status = 'realizada'
   ) AS attended,
   (
-    SELECT COALESCE(sum(c.pack_tokens), 0)::int FROM classes c
-    WHERE c.student_pack_id = sp.id
-      AND c.status IN ('pendiente', 'aceptada', 'confirmada')
-      AND (${exclude}::uuid IS NULL OR c.id <> ${exclude}::uuid)
+    SELECT COALESCE(sum(b.pack_tokens), 0)::int FROM class_bookings b
+    WHERE b.student_pack_id = sp.id
+      AND b.status IN ('pendiente', 'aceptada', 'confirmada')
+      AND (${exclude}::uuid IS NULL OR b.id <> ${exclude}::uuid)
   ) AS reserved
 `;
 
@@ -167,14 +167,14 @@ const studentPackColumns = (exclude = 'NULL') => `
  * @param {object} args
  * @param {string} args.studentId - request.user.id del alumno.
  * @param {string|null} [args.teacherId] - el docente de la ventana, al reservar.
- * @param {string|null} [args.excludeClassId] - la clase vieja, al reprogramar.
+ * @param {string|null} [args.excludeBookingId] - la reserva vieja, al reprogramar.
  * @returns {Promise<Array<{id, packId, teacherId, teacherName, teacherApproved, classCount,
  *   classMinutes, priceCents, purchasedAt, expiresOn, attended, reserved}>>} sin
  *   `remaining`/`available`/`usable`: esos los calcula StudentPack (lib/classPacks.js).
- * Origen: student_packs JOIN users + sumas de classes.pack_tokens.
- * Lo usan: routes/packs/index.js (GET /mine) y routes/classes/index.js (priceBooking).
+ * Origen: student_packs JOIN users + sumas de class_bookings.pack_tokens.
+ * Lo usan: routes/packs/index.js (GET /mine) y routes/bookings/index.js (priceBooking).
  */
-export async function listStudentPacks({ studentId, teacherId = null, excludeClassId = null }) {
+export async function listStudentPacks({ studentId, teacherId = null, excludeBookingId = null }) {
   // FILTRO: solo los paquetes del propio alumno (y del docente pedido, al
   // reservar). NO se ocultan los vencidos, agotados o de docentes dados de
   // baja: el alumno tiene que ver lo que compró; `usable` (StudentPack#summary)
@@ -185,29 +185,29 @@ export async function listStudentPacks({ studentId, teacherId = null, excludeCla
      JOIN users t ON t.id = sp.teacher_id
      WHERE sp.student_id = $1 AND ($2::uuid IS NULL OR sp.teacher_id = $2::uuid)
      ORDER BY sp.purchased_at DESC`,
-    [studentId, teacherId, excludeClassId]
+    [studentId, teacherId, excludeBookingId]
   );
   return result.rows;
 }
 
 /**
  * Un paquete comprado con sus cuentas, para re-chequear dentro de la
- * transacción de una reserva (db/classes.js), con el paquete ya bloqueado.
+ * transacción de una reserva (db/bookings.js), con el paquete ya bloqueado.
  * Las mismas columnas que listStudentPacks: la regla de si queda lugar la
  * decide StudentPack (lib/classPacks.js), no el SQL. null si no existe.
  *
  * @param {pg.PoolClient} client - la transacción de la reserva, con 'pack:' tomado.
- * @param {{id: string, excludeClassId?: string|null}} args - id = booking.studentPackId.
+ * @param {{id: string, excludeBookingId?: string|null}} args - id = booking.studentPackId.
  * @returns {Promise<object|null>} misma forma que listStudentPacks.
- * Lo usa: db/classes.js (reservePackSlot).
+ * Lo usa: db/bookings.js (reservePackSlot).
  */
-export async function findStudentPack(client, { id, excludeClassId = null }) {
+export async function findStudentPack(client, { id, excludeBookingId = null }) {
   const result = await client.query(
     `SELECT ${studentPackColumns('$2')}
      FROM student_packs sp
      JOIN users t ON t.id = sp.teacher_id
      WHERE sp.id = $1`,
-    [id, excludeClassId]
+    [id, excludeBookingId]
   );
   return result.rows[0] ?? null;
 }

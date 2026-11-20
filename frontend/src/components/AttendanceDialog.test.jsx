@@ -1,15 +1,15 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import AttendanceDialog from './AttendanceDialog.jsx'
-import { apiClass } from '../testing/fixtures.js'
+import { apiBooking } from '../testing/fixtures.js'
 
 const { markAttendance } = vi.hoisted(() => ({ markAttendance: vi.fn() }))
 
 vi.mock('../api/client.js', () => ({ markAttendance }))
 
-const sofia = apiClass({ id: 'r1', status: 'confirmada', studentName: 'Sofía Ramírez' })
-const ana = apiClass({ id: 'r2', status: 'realizada', studentName: 'Ana Pérez' })
-const tomas = apiClass({ id: 'r3', status: 'aceptada', studentName: 'Tomás Díaz' })
+const sofia = apiBooking({ id: 'r1', status: 'confirmada', studentName: 'Sofía Ramírez' })
+const ana = apiBooking({ id: 'r2', status: 'realizada', studentName: 'Ana Pérez' })
+const tomas = apiBooking({ id: 'r3', status: 'aceptada', studentName: 'Tomás Díaz' })
 
 beforeEach(() => {
   markAttendance.mockReset().mockImplementation((id, attended) =>

@@ -7,7 +7,7 @@
 //
 // Tabla: teacher_addresses (migración 019). Lo usan routes/teachers/index.js
 // (CRUD de /me/addresses), lib/availabilityWindow.js (dirección nueva cargada
-// en una ventana) y db/classes.js (formatAddress al reservar).
+// en una ventana) y db/bookings.js (formatAddress al reservar).
 // Espejo: frontend/src/utils/addresses.js (addressErrors, formatAddress).
 
 // Los mismos topes que los CHECK de la migración 019. `label` es el texto que
@@ -97,7 +97,7 @@ function capitalize(phrase) {
  *   apartment?, notes? } en camelCase; al reservar es `window.address`, que viene
  *   de teacher_addresses vía la consulta de la ventana en db/availability.js.
  * @returns {string} la línea que se guarda en classes.address.
- * Lo usa: db/classes.js (al insertar la clase).
+ * Lo usa: db/bookings.js (insertBooking, al crear la clase).
  * Espejo: frontend/src/utils/addresses.js (formatAddress).
  */
 export function formatAddress(address) {

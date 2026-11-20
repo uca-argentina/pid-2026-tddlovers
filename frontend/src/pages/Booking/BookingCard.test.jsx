@@ -82,7 +82,7 @@ describe('BookingCard', () => {
     expect(screen.getByText('Sumate a Matemática de las 13:00: 3 de 4 anotados.')).toBeInTheDocument()
   })
 
-  it('el "n de M" usa el cupo del turno, no el de la ventana', () => {
+  it('el "n de M" usa el cupo de la clase, no el de la ventana', () => {
     // La ventana se agrandó a 6 después de que se armó una grupal de 4.
     renderCard({ maxStudents: 6, groups: [grupal({ enrolled: 2, maxStudents: 4 })] })
     expect(screen.getByText('Sumate a Matemática de las 13:00: 2 de 4 anotados.')).toBeInTheDocument()

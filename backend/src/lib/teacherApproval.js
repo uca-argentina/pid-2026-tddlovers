@@ -3,14 +3,14 @@
 // un único dato (el estado) y así se leen juntas: qué puede hacer el admin,
 // qué pasa cuando el docente edita su perfil y si se le puede reservar.
 //
-// Como lib/classStates.js, no toca la base ni el reloj: se prueba solo, y la
+// Como lib/bookingStates.js, no toca la base ni el reloj: se prueba solo, y la
 // ruta decide qué guardar con lo que devuelve.
 //
 // Dato: users.approval_status (enum teacher_approval_status, migración 012),
 // que llega por la sesión (request.user.approvalStatus) o por las consultas de
 // db/* (window.teacherApprovalStatus, offer.teacherApprovalStatus...).
 // Lo usan: routes/admin/index.js (check, approve, reject), routes/users/index.js
-// (afterProfileEdit), routes/classes/index.js y routes/packs/index.js
+// (afterProfileEdit), routes/bookings/index.js y routes/packs/index.js
 // (bookingProblem).
 // Espejo: frontend/src/utils/approval.js, solo para elegir botones y avisos.
 
@@ -64,7 +64,7 @@ export class TeacherApproval {
   /**
    * null si se le puede reservar (o comprarle un paquete), o { status: 409,
    * message } para el alumno.
-   * Lo usan: routes/classes/index.js (checkWindowSlot) y routes/packs/index.js (comprar).
+   * Lo usan: routes/bookings/index.js (checkWindowSlot) y routes/packs/index.js (comprar).
    */
   bookingProblem() {
     if (this.canReceiveBookings()) return null;
@@ -73,7 +73,7 @@ export class TeacherApproval {
 
   /**
    * null si el admin puede tomar esa decisión ahora, o { status, message }.
-   * Mismo contrato que checkAction de lib/classStates.js.
+   * Mismo contrato que checkAction de lib/bookingStates.js.
    *
    * @param {'approve'|'reject'} action - la acción de la URL
    *   (POST /api/admin/teachers/:id/{approve,reject}).

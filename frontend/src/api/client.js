@@ -7,9 +7,9 @@
 //
 // Cómo leer este archivo: cada función dice el endpoint (método + path +
 // query/body), qué devuelve YA DESENVUELTO (el JSON tal cual, nunca
-// { user } / { lesson }) y qué archivo del backend lo atiende. Los prefijos
-// se registran en backend/src/app.js (/api/auth -> routes/auth, /api/classes
-// -> routes/classes, etc.). Si el backend responde con error, la promesa se
+// { user } / { booking }) y qué archivo del backend lo atiende. Los prefijos
+// se registran en backend/src/app.js (/api/auth -> routes/auth, /api/bookings
+// -> routes/bookings, /api/classes -> routes/classes, etc.). Si el backend responde con error, la promesa se
 // rechaza con un Error con `message` (en castellano, para mostrar), `status`,
 // `code` y `fields` (ver request()).
 
@@ -155,19 +155,20 @@ export function fetchCurrentUser() {
 }
 
 /**
- * Las clases del usuario logueado en ese rango: como docente las que da, como
- * alumno las que reservó. El backend filtra por la sesión, así que no hace
- * falta mandar quién es.
+ * Las reservas del usuario logueado en ese rango: como docente las de las
+ * clases que da, como alumno las suyas. El backend filtra por la sesión, así
+ * que no hace falta mandar quién es.
  *
- * GET /api/classes?from=YYYY-MM-DD&to=YYYY-MM-DD[&status=] -> [clase], cada una
- * con la forma de apiClass() en testing/fixtures.js (al alumno, `address` va
- * null hasta que paga: forViewer de backend/src/lib/classStates.js).
- * Backend: routes/classes/index.js.
+ * GET /api/bookings?from=YYYY-MM-DD&to=YYYY-MM-DD[&status=] -> [reserva], cada
+ * una con la forma de apiBooking() en testing/fixtures.js: `id` es el de la
+ * reserva y `classId` el de su clase (al alumno, `address` va null hasta que
+ * paga: forViewer de backend/src/lib/bookingStates.js).
+ * Backend: routes/bookings/index.js.
  * Lo usan: pages/Calendar/CalendarPage.jsx, pages/Reservations/ReservationsPage.jsx.
  */
-export function fetchClasses({ from, to, status }) {
+export function fetchBookings({ from, to, status }) {
   return request(
-    `/api/classes?from=${from}&to=${to}${status ? `&status=${status}` : ''}`,
+    `/api/bookings?from=${from}&to=${to}${status ? `&status=${status}` : ''}`,
   )
 }
 
@@ -243,11 +244,11 @@ export function deleteWindow(id) {
  * las que no tienen nada reservable para este alumno, salvo las de licencia
  * (`onVacation`, que se muestran en gris).
  *
- * `excludeClassId` es la clase propia que se está reprogramando: el backend
- * no la cuenta como ocupada, devuelve solo a ese docente con esa materia, y
+ * `excludeBookingId` es la reserva propia que se está reprogramando: el
+ * backend no la cuenta como ocupada, devuelve solo a ese docente con esa materia, y
  * así se la puede correr media hora dentro del mismo rato del docente.
  *
- * GET /api/availability?from&to[&excludeClassId] -> [{ id, windowId, date,
+ * GET /api/availability?from&to[&excludeBookingId] -> [{ id, windowId, date,
  * dayKey, teacherId, teacherName, teacherAcceptsRewards, teacherFeatured,
  * start, end, modality, maxStudents, locality, subjects, starts, groups,
  * onVacation }], sin las ventanas del propio usuario. Nunca trae el link ni
@@ -255,166 +256,168 @@ export function deleteWindow(id) {
  * por bookableRows de lib/availabilityExpansion.js).
  * Lo usa: pages/Booking/BookingBoard.jsx.
  */
-export function fetchAvailability({ from, to, excludeClassId = null }) {
+export function fetchAvailability({ from, to, excludeBookingId = null }) {
   const params = new URLSearchParams({ from, to })
-  if (excludeClassId) params.set('excludeClassId', excludeClassId)
+  if (excludeBookingId) params.set('excludeBookingId', excludeBookingId)
   return request(`/api/availability?${params}`)
 }
 
 /**
- * Las clases del usuario logueado que siguen en pie, para dibujar las líneas
- * del calendario del tablero de reservar.
+ * Las reservas del usuario logueado que siguen en pie, para dibujar las
+ * líneas del calendario del tablero de reservar y saber con qué se pisa.
  *
  * FILTRO: sin las canceladas (activeRows de utils/reservations.js; regla de
  * pantalla: una cancelada no ocupa lugar). Se traen todas y se filtra acá
  * porque "en pie" no se pide con un solo ?status.
  *
- * GET /api/classes?from&to -> [clase] sin las canceladas (misma forma que
- * fetchClasses). Backend: routes/classes/index.js.
+ * GET /api/bookings?from&to -> [reserva] sin las canceladas (misma forma que
+ * fetchBookings). Backend: routes/bookings/index.js.
  * Lo usa: pages/Booking/BookingBoard.jsx.
  */
-export function fetchMyLessons({ from, to }) {
-  return request(`/api/classes?from=${from}&to=${to}`).then(activeRows)
+export function fetchMyBookings({ from, to }) {
+  return request(`/api/bookings?from=${from}&to=${to}`).then(activeRows)
 }
 
 /**
- * Una clase propia (como alumno o como docente), con su estado.
- * GET /api/classes/:id -> la clase (forma de fetchClasses); 404 si no es propia.
- * Backend: routes/classes/index.js.
- * Lo usa: pages/Booking/BookingBoard.jsx (la clase de ?reprogramar=<id>).
+ * Una reserva propia (como alumno o como docente de su clase), con su estado.
+ * GET /api/bookings/:id -> la reserva (forma de fetchBookings); 404 si no es propia.
+ * Backend: routes/bookings/index.js.
+ * Lo usa: pages/Booking/BookingBoard.jsx (la reserva de ?reprogramar=<id>).
  */
-export function fetchClass(id) {
-  return request(`/api/classes/${id}`)
+export function fetchBooking(id) {
+  return request(`/api/bookings/${id}`)
 }
 
-// Las acciones sobre una reserva. Todas devuelven la clase ya actualizada; si
-// no se puede (la regla de 24 h, ya empezó, el otro la canceló), el backend
-// dice por qué en el message del error.
-// Backend: routes/classes/index.js; las reglas, checkAction de
-// backend/src/lib/classStates.js (espejadas en utils/classStates.js).
+// Las acciones sobre UNA reserva. Todas devuelven la reserva ya actualizada;
+// si no se puede (la regla de 24 h, ya empezó, el otro la canceló), el
+// backend dice por qué en el message del error.
+// Backend: routes/bookings/index.js; las reglas, checkAction de
+// backend/src/lib/bookingStates.js (espejadas en utils/bookingStates.js).
 
 /**
- * POST /api/classes/:id/accept, sin body -> la clase actualizada (aceptada, o
+ * POST /api/bookings/:id/accept, sin body -> la reserva actualizada (aceptada, o
  * confirmada si un paquete/canje la cubre entera). Solo el docente.
- * Lo usan: components/ClassActions.jsx, components/StudentsDialog.jsx.
+ * Lo usan: components/BookingActions.jsx, components/StudentsDialog.jsx.
  */
-export function acceptLesson(id) {
-  return request(`/api/classes/${id}/accept`, { method: 'POST' })
+export function acceptBooking(id) {
+  return request(`/api/bookings/${id}/accept`, { method: 'POST' })
 }
 
 /**
- * POST /api/classes/:id/cancel, sin body -> la clase cancelada (con cancelReason).
- * Lo usan: components/ClassActions.jsx, components/StudentsDialog.jsx.
+ * POST /api/bookings/:id/cancel, sin body -> la reserva cancelada (con cancelReason).
+ * Lo usan: components/BookingActions.jsx, components/StudentsDialog.jsx.
  */
-export function cancelLesson(id) {
-  return request(`/api/classes/${id}/cancel`, { method: 'POST' })
+export function cancelBooking(id) {
+  return request(`/api/bookings/${id}/cancel`, { method: 'POST' })
 }
 
 /**
- * Aceptar o cancelar la clase entera (en una grupal, todas las reservas del
- * turno), todo o nada. Devuelve la lista de reservas actualizadas.
- *
- * POST /api/classes/:id/turn/accept y /turn/cancel, sin body -> [clase]; 409
- * si alguna cambió en el medio, 403 si no es el docente.
- * Lo usa: components/TurnActions.jsx.
- */
-export function acceptTurn(id) {
-  return request(`/api/classes/${id}/turn/accept`, { method: 'POST' })
-}
-
-export function cancelTurn(id) {
-  return request(`/api/classes/${id}/turn/cancel`, { method: 'POST' })
-}
-
-/**
- * POST /api/classes/:id/pay, sin body -> la clase con `paidAt` (y confirmada
+ * POST /api/bookings/:id/pay, sin body -> la reserva con `paidAt` (y confirmada
  * si estaba aceptada). No se cobra nada de verdad. Solo el alumno.
- * Lo usa: components/ClassActions.jsx.
+ * Lo usa: components/BookingActions.jsx.
  */
-export function payLesson(id) {
-  return request(`/api/classes/${id}/pay`, { method: 'POST' })
+export function payBooking(id) {
+  return request(`/api/bookings/${id}/pay`, { method: 'POST' })
 }
 
 /**
- * POST /api/classes/:id/attendance, body { attended: boolean } -> la clase
+ * POST /api/bookings/:id/attendance, body { attended: boolean } -> la reserva
  * realizada (true) o no_presentada (false). Solo el docente, con la clase empezada.
- * Lo usan: components/AttendanceDialog.jsx, components/ClassActions.jsx.
+ * Lo usan: components/AttendanceDialog.jsx, components/BookingActions.jsx.
  */
 export function markAttendance(id, attended) {
-  return request(`/api/classes/${id}/attendance`, {
+  return request(`/api/bookings/${id}/attendance`, {
     method: 'POST',
     body: JSON.stringify({ attended }),
   })
 }
 
-// El material de una clase ya dada (resumen + archivos). Es del turno: en
-// una grupal, cualquier reserva lleva al mismo. Todas devuelven el material
-// entero, { summary, updatedAt, files: [{ id, name, mimeType, sizeBytes }] }.
+/**
+ * Aceptar o cancelar la CLASE entera (en una grupal, todas sus reservas en
+ * pie), todo o nada. `classId` es el `classId` de cualquiera de sus reservas.
+ * Devuelve la lista de reservas actualizadas.
+ *
+ * POST /api/classes/:classId/accept y /cancel, sin body -> [reserva]; 409 si
+ * alguna cambió en el medio, 403 si no es el docente.
+ * Backend: routes/classes/index.js. Lo usa: components/BookingActions.jsx.
+ */
+export function acceptClass(classId) {
+  return request(`/api/classes/${classId}/accept`, { method: 'POST' })
+}
+
+export function cancelClass(classId) {
+  return request(`/api/classes/${classId}/cancel`, { method: 'POST' })
+}
+
+// El material de una clase ya dada (resumen + archivos). Es de la CLASE: se
+// pide con el `classId` de la reserva, y en una grupal todos ven el mismo.
+// Todas devuelven el material entero, { summary, updatedAt, files: [{ id,
+// name, mimeType, sizeBytes }] }.
 // Backend: routes/classes/index.js (findMaterial de db/classMaterials.js; los
 // archivos van al bucket por backend/src/storage/files.js).
 // Lo usa: components/ClassMaterial.jsx.
 
-/** GET /api/classes/:id/material -> el material del turno. */
-export function fetchClassMaterial(id) {
-  return request(`/api/classes/${id}/material`)
+/** GET /api/classes/:classId/material -> el material de la clase. */
+export function fetchClassMaterial(classId) {
+  return request(`/api/classes/${classId}/material`)
 }
 
-/** PUT /api/classes/:id/material, body { summary } -> el material. Solo el docente. */
-export function saveClassSummary(id, summary) {
-  return request(`/api/classes/${id}/material`, {
+/** PUT /api/classes/:classId/material, body { summary } -> el material. Solo el docente. */
+export function saveClassSummary(classId, summary) {
+  return request(`/api/classes/${classId}/material`, {
     method: 'PUT',
     body: JSON.stringify({ summary }),
   })
 }
 
 /**
- * POST /api/classes/:id/material/files, multipart con un campo `files` por
- * archivo -> 201 con el material. Solo el docente.
+ * POST /api/classes/:classId/material/files, multipart con un campo `files`
+ * por archivo -> 201 con el material. Solo el docente.
  */
-export function uploadClassFiles(id, files) {
+export function uploadClassFiles(classId, files) {
   const body = new FormData()
   for (const file of files) body.append('files', file, file.name)
-  return request(`/api/classes/${id}/material/files`, { method: 'POST', body })
+  return request(`/api/classes/${classId}/material/files`, { method: 'POST', body })
 }
 
-/** DELETE /api/classes/:id/material/files/:fileId -> el material sin ese archivo. */
-export function deleteClassFile(id, fileId) {
-  return request(`/api/classes/${id}/material/files/${fileId}`, { method: 'DELETE' })
+/** DELETE /api/classes/:classId/material/files/:fileId -> el material sin ese archivo. */
+export function deleteClassFile(classId, fileId) {
+  return request(`/api/classes/${classId}/material/files/${fileId}`, { method: 'DELETE' })
 }
 
 /**
  * La URL de un archivo, para un link de descarga o un <img>: viaja con la cookie de sesión.
  * No hace pedido: GET a esa URL responde un 302 a un link firmado del bucket (5 min).
  */
-export function classFileUrl(id, fileId) {
-  return `/api/classes/${encodeURIComponent(id)}/material/files/${encodeURIComponent(fileId)}`
+export function classFileUrl(classId, fileId) {
+  return `/api/classes/${encodeURIComponent(classId)}/material/files/${encodeURIComponent(fileId)}`
 }
 
 /**
- * Reprogramar: mismo body que reservar, sin materia (es la de la clase
+ * Reprogramar: mismo body que reservar, sin materia (es la de la reserva
  * vieja). Devuelve la reserva nueva, que nace pendiente. Puede usar clases
  * de un paquete igual que una reserva (las de la vieja se liberan).
  *
- * POST /api/classes/:id/reschedule, body { windowId, date, startTime,
- * durationMinutes, packId, packTokens, rewardType } -> 201 con la clase nueva
- * (pendiente, con rescheduledFrom). Solo el alumno, clase confirmada, ≥24 h antes.
- * Backend: routes/classes/index.js. Lo usa: pages/Booking/BookingDialog.jsx.
+ * POST /api/bookings/:id/reschedule, body { windowId, date, startTime,
+ * durationMinutes, packId, packTokens, rewardType } -> 201 con la reserva nueva
+ * (pendiente, con rescheduledFrom). Solo el alumno, reserva confirmada, ≥24 h antes.
+ * Backend: routes/bookings/index.js. Lo usa: pages/Booking/BookingDialog.jsx.
  */
-export function rescheduleLesson(
+export function rescheduleBooking(
   id,
   { windowId, date, startTime, durationMinutes, packId, packTokens, rewardType },
 ) {
-  return request(`/api/classes/${id}/reschedule`, {
+  return request(`/api/bookings/${id}/reschedule`, {
     method: 'POST',
     body: JSON.stringify({ windowId, date, startTime, durationMinutes, packId, packTokens, rewardType }),
   })
 }
 
 /**
- * Reservar una clase en una ventana: qué día, a qué hora, de qué materia y
- * cuántos minutos. La modalidad sale de la ventana y el precio lo calcula el
+ * Reservar un lugar en una clase de una ventana: qué día, a qué hora, de qué
+ * materia y cuántos minutos. La modalidad sale de la ventana y el precio lo calcula el
  * backend con la tarifa del docente. Si a esa hora ya hay una grupal de la
- * misma materia y duración, es sumarse a ella. Devuelve la clase guardada,
+ * misma materia y duración, es sumarse a ella. Devuelve la reserva guardada,
  * sin envolver.
  *
  * `packId` + `packTokens` usan esa cantidad de clases de un paquete del
@@ -424,13 +427,13 @@ export function rescheduleLesson(
  * `rewardType` canjea neuronas en esta clase, si el docente acepta canjes. No se
  * combina con un paquete.
  *
- * POST /api/classes, body { windowId, date, startTime, subjectId,
- * durationMinutes, packId, packTokens, rewardType } -> 201 con la clase
- * (forma de fetchClasses). Solo alumnos. Backend: routes/classes/index.js
- * (validateBooking + insertClass de db/classes.js).
+ * POST /api/bookings, body { windowId, date, startTime, subjectId,
+ * durationMinutes, packId, packTokens, rewardType } -> 201 con la reserva
+ * (forma de fetchBookings). Solo alumnos. Backend: routes/bookings/index.js
+ * (validateBooking + insertBooking de db/bookings.js).
  * Lo usa: pages/Booking/BookingDialog.jsx.
  */
-export function bookLesson({
+export function createBooking({
   windowId,
   date,
   startTime,
@@ -440,7 +443,7 @@ export function bookLesson({
   packTokens,
   rewardType,
 }) {
-  return request('/api/classes', {
+  return request('/api/bookings', {
     method: 'POST',
     body: JSON.stringify({
       windowId,

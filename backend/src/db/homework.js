@@ -5,8 +5,9 @@ import { creditCorrection, removeHomeworkOnTimeCredit } from './neuronas.js';
 // qué lo decide la ruta con lib/homework.js; acá solo se lee y escribe.
 //
 // Tablas: homeworks, homework_submissions (una fila por alumno, creada vacía
-// al asignar) y homework_messages, de la migración 020; lee classes (destinos),
-// users y subjects. Las neuronas de entregas/correcciones las escribe
+// al asignar) y homework_messages, de la migración 020 (homeworks.class_id
+// desde la 024: una tarea a una grupal apunta a la clase). Lee classes y
+// class_bookings (destinos), users y subjects. Las neuronas de entregas/correcciones las escribe
 // db/neuronas.js (neurona_credits, 021).
 // Locks: ninguno; createHomework y saveFeedback (primera corrección) abren
 // transacción. La concurrencia de entregar/corregir se resuelve con UPDATE
@@ -19,17 +20,21 @@ const HOMEWORK_COLUMNS = `
   h.description,
   to_char(h.due_date, 'YYYY-MM-DD') AS "dueDate",
   to_char(h.due_time, 'HH24:MI') AS "dueTime",
-  to_char(h.class_date, 'YYYY-MM-DD') AS "classDate",
-  to_char(h.start_time, 'HH24:MI') AS "classStartTime",
+  h.class_id AS "classId",
+  to_char(cl.class_date, 'YYYY-MM-DD') AS "classDate",
+  to_char(cl.start_time, 'HH24:MI') AS "classStartTime",
   s.name AS "subjectName",
   t.nombre || ' ' || t.apellido AS "teacherName",
   h.created_at AS "createdAt"
 `;
 
+// Fecha, horario y materia de una tarea a una grupal salen de su clase; en
+// una tarea a un alumno (class_id NULL) quedan en null.
 const HOMEWORK_JOINS = `
   FROM homeworks h
   JOIN users t ON t.id = h.teacher_id
-  LEFT JOIN subjects s ON s.id = h.subject_id
+  LEFT JOIN classes cl ON cl.id = h.class_id
+  LEFT JOIN subjects s ON s.id = cl.subject_id
 `;
 
 const SUBMISSION_JSON = `
@@ -53,36 +58,38 @@ const SUBMISSION_JSON = `
  * @param {string} sinceDate - 'YYYY-MM-DD' desde el que cuentan las grupales
  *   (recentGroupSince de lib/homework.js: hoy menos 60 días).
  * @returns {Promise<{students: Array<{id, name}>, groups: Array<{classId, date,
- *   startTime, subjectName, enrolled}>}>}
- * Origen: classes no canceladas + users / subjects.
+ *   startTime, subjectName, enrolled}>}>} `classId` es classes.id: es lo que el
+ *   front manda de vuelta en POST /api/homework.
+ * Origen: class_bookings + classes (alumnos) y classes activas grupales (+ subjects,
+ *   reservas no canceladas contadas).
  * Lo usa: routes/homework/index.js (GET /api/homework/targets).
  */
 export async function findTargets(teacherId, sinceDate) {
   // FILTRO: alumnos = los que tienen o tuvieron una clase no cancelada con el
-  // docente; grupales = turnos no cancelados con cupo > 1 desde `sinceDate`
+  // docente; grupales = clases en pie (active) con cupo > 1 desde `sinceDate`
   // (recentGroupSince): a una de hace un año ya no tiene sentido asignarle.
   const pool = getPool();
   const [students, groups] = await Promise.all([
     pool.query(
       `SELECT DISTINCT u.id, u.nombre || ' ' || u.apellido AS name
-       FROM classes c
-       JOIN users u ON u.id = c.student_id
-       WHERE c.teacher_id = $1 AND c.status <> 'cancelada'
+       FROM class_bookings b
+       JOIN classes c ON c.id = b.class_id
+       JOIN users u ON u.id = b.student_id
+       WHERE c.teacher_id = $1 AND b.status <> 'cancelada'
        ORDER BY name`,
       [teacherId]
     ),
-    // Una grupal son varias filas: cualquiera de ellas identifica al turno.
     pool.query(
-      `SELECT (array_agg(c.id ORDER BY c.id))[1] AS "classId",
+      `SELECT c.id AS "classId",
               to_char(c.class_date, 'YYYY-MM-DD') AS date,
               to_char(c.start_time, 'HH24:MI') AS "startTime",
               s.name AS "subjectName",
-              count(*)::int AS enrolled
+              (SELECT count(*)::int FROM class_bookings b
+               WHERE b.class_id = c.id AND b.status <> 'cancelada') AS enrolled
        FROM classes c
        JOIN subjects s ON s.id = c.subject_id
-       WHERE c.teacher_id = $1 AND c.status <> 'cancelada' AND c.max_students > 1
+       WHERE c.teacher_id = $1 AND c.active AND c.max_students > 1
          AND c.class_date >= $2::date
-       GROUP BY c.class_date, c.start_time, s.name
        ORDER BY c.class_date DESC, c.start_time DESC`,
       [teacherId, sinceDate]
     ),
@@ -96,13 +103,14 @@ export async function findTargets(teacherId, sinceDate) {
  * @param {string} teacherId - request.user.id.
  * @param {string} studentId - body.studentId de POST /api/homework.
  * @returns {Promise<boolean>}
- * Origen: classes.
+ * Origen: class_bookings + classes.
  * Lo usa: routes/homework/index.js (resolveTarget).
  */
 export async function isStudentOf(teacherId, studentId) {
   const result = await getPool().query(
-    `SELECT 1 FROM classes
-     WHERE teacher_id = $1 AND student_id = $2 AND status <> 'cancelada' LIMIT 1`,
+    `SELECT 1 FROM class_bookings b
+     JOIN classes c ON c.id = b.class_id
+     WHERE c.teacher_id = $1 AND b.student_id = $2 AND b.status <> 'cancelada' LIMIT 1`,
     [teacherId, studentId]
   );
   return result.rowCount > 0;
@@ -113,7 +121,7 @@ export async function isStudentOf(teacherId, studentId) {
  *
  * @param {object} tarea - teacherId (request.user.id); title, description,
  *   dueDate, dueTime de validateHomework; studentIds y, si es a una grupal,
- *   subjectId/classDate/startTime de resolveTarget en la ruta.
+ *   classId (classes.id) de resolveTarget en la ruta.
  * @returns {Promise<string>} id de la tarea nueva.
  * Origen: INSERT en homeworks y homework_submissions.
  * Lo usa: routes/homework/index.js (POST /api/homework).
@@ -125,9 +133,7 @@ export async function createHomework({
   description,
   dueDate,
   dueTime,
-  subjectId = null,
-  classDate = null,
-  startTime = null,
+  classId = null,
   studentIds,
 }) {
   const client = await getPool().connect();
@@ -135,10 +141,10 @@ export async function createHomework({
     await client.query('BEGIN');
     const created = await client.query(
       `INSERT INTO homeworks
-         (teacher_id, title, description, due_date, due_time, subject_id, class_date, start_time)
-       VALUES ($1, $2, $3, $4::date, $5::time, $6, $7::date, $8::time)
+         (teacher_id, title, description, due_date, due_time, class_id)
+       VALUES ($1, $2, $3, $4::date, $5::time, $6)
        RETURNING id`,
-      [teacherId, title, description, dueDate, dueTime, subjectId, classDate, startTime]
+      [teacherId, title, description, dueDate, dueTime, classId]
     );
     const { id } = created.rows[0];
     await client.query(
@@ -181,9 +187,9 @@ async function queryTeacherHomeworks(where, params) {
  * Las tareas del docente, cada una con la entrega de todos sus alumnos.
  *
  * @param {string} teacherId - request.user.id.
- * @returns {Promise<Array<{id, title, description, dueDate, dueTime, classDate,
+ * @returns {Promise<Array<{id, title, description, dueDate, dueTime, classId, classDate,
  *   classStartTime, subjectName, teacherName, createdAt, submissions}>>}
- * Origen: homeworks + users + subjects + homework_submissions.
+ * Origen: homeworks + users + classes/subjects (si es a una grupal) + homework_submissions.
  * Lo usa: routes/homework/index.js (GET /api/homework como docente).
  */
 export function listTeacherHomeworks(teacherId) {
@@ -226,7 +232,7 @@ async function queryStudentHomeworks(where, params) {
  *
  * @param {string} studentId - request.user.id.
  * @returns {Promise<Array<object>>} HOMEWORK_COLUMNS + submission.
- * Origen: homeworks + homework_submissions + users + subjects.
+ * Origen: homeworks + homework_submissions + users + classes/subjects.
  * Lo usa: routes/homework/index.js (GET /api/homework como alumno).
  */
 export function listStudentHomeworks(studentId) {

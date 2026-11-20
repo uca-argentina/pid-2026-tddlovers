@@ -2,24 +2,24 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import ClassDetailDialog from './ClassDetailDialog.jsx'
-import { apiClass } from '../testing/fixtures.js'
+import { apiBooking } from '../testing/fixtures.js'
 
-const { acceptLesson, fetchClassMaterial, markAttendance } = vi.hoisted(() => ({
-  acceptLesson: vi.fn(),
+const { acceptBooking, fetchClassMaterial, markAttendance } = vi.hoisted(() => ({
+  acceptBooking: vi.fn(),
   fetchClassMaterial: vi.fn(),
   markAttendance: vi.fn(),
 }))
 
 vi.mock('../api/client.js', () => ({
-  acceptLesson,
-  acceptTurn: vi.fn(),
-  cancelTurn: vi.fn(),
-  cancelLesson: vi.fn(),
+  acceptBooking,
+  acceptClass: vi.fn(),
+  cancelClass: vi.fn(),
+  cancelBooking: vi.fn(),
   classFileUrl: () => '',
   deleteClassFile: vi.fn(),
   fetchClassMaterial,
   markAttendance,
-  payLesson: vi.fn(),
+  payBooking: vi.fn(),
   saveClassSummary: vi.fn(),
   uploadClassFiles: vi.fn(),
 }))
@@ -27,21 +27,21 @@ vi.mock('../api/client.js', () => ({
 const DESPUES = { iso: '2099-09-14', time: '15:00' }
 const ANTES = { iso: '2099-09-10', time: '10:00' }
 
-// Una grupal de dos: una reserva por alumno, mismo turno.
-const turno = { teacherId: 't1', date: '2099-09-14', startTime: '13:00', maxStudents: 3 }
-const sofia = apiClass({
-  ...turno,
+// Una grupal de dos: una reserva por alumno, misma clase.
+const clase = { teacherId: 't1', date: '2099-09-14', startTime: '13:00', maxStudents: 3 }
+const sofia = apiBooking({
+  ...clase,
   id: 'r1',
   status: 'confirmada',
   paidAt: '2099-09-01T12:00:00.000Z',
   studentName: 'Sofía Ramírez',
 })
-const ana = apiClass({ ...turno, id: 'r2', status: 'aceptada', studentName: 'Ana Pérez' })
+const ana = apiBooking({ ...clase, id: 'r2', status: 'aceptada', studentName: 'Ana Pérez' })
 
 function renderDialog(props) {
   return render(
     <MemoryRouter>
-      <ClassDetailDialog classes={[sofia, ana]} cls={sofia} viewRole="teacher" {...props} />
+      <ClassDetailDialog bookings={[sofia, ana]} cls={sofia} viewRole="teacher" {...props} />
     </MemoryRouter>,
   )
 }
@@ -85,10 +85,10 @@ describe('ClassDetailDialog', () => {
       { ...sofia, status: 'pendiente', paidAt: null },
       { ...ana, status: 'pendiente' },
     ]
-    acceptLesson.mockResolvedValue({ ...pendientes[1], status: 'aceptada' })
+    acceptBooking.mockResolvedValue({ ...pendientes[1], status: 'aceptada' })
     const onChange = vi.fn()
 
-    renderDialog({ cls: pendientes[0], classes: pendientes, now: ANTES, onChange })
+    renderDialog({ cls: pendientes[0], bookings: pendientes, now: ANTES, onChange })
 
     const dialogo = screen.getByRole('dialog', { name: 'Matemática' })
     expect(within(dialogo).getByRole('button', { name: 'Aceptar a los 2' })).toBeInTheDocument()
@@ -100,7 +100,7 @@ describe('ClassDetailDialog', () => {
     const [deAna] = within(alumnos).getAllByRole('listitem')
     await userEvent.click(within(deAna).getByRole('button', { name: 'Aceptar' }))
 
-    expect(acceptLesson).toHaveBeenCalledWith('r2')
+    expect(acceptBooking).toHaveBeenCalledWith('r2')
     expect(onChange).toHaveBeenCalledWith({ ...pendientes[1], status: 'aceptada' })
   })
 
@@ -113,7 +113,7 @@ describe('ClassDetailDialog', () => {
     expect(fetchClassMaterial).not.toHaveBeenCalled()
   })
 
-  it('el alumno ve su estado y el material, sin los otros del turno', async () => {
+  it('el alumno ve su estado y el material, sin los otros de la clase', async () => {
     renderDialog({ viewRole: 'student', now: DESPUES })
 
     expect(screen.getByText('Estado')).toBeInTheDocument()
@@ -125,7 +125,7 @@ describe('ClassDetailDialog', () => {
   })
 
   it('una cancelada no tiene sección de material', () => {
-    renderDialog({ cls: apiClass({ status: 'cancelada' }), classes: [], now: DESPUES })
+    renderDialog({ cls: apiBooking({ status: 'cancelada' }), bookings: [], now: DESPUES })
 
     expect(screen.queryByText('Material de la clase')).not.toBeInTheDocument()
   })
@@ -139,10 +139,10 @@ describe('ClassDetailDialog — dirección', () => {
   }
 
   it('sin pagar, el alumno ve la localidad y cuándo va a ver la dirección', () => {
-    const cls = apiClass({ ...presencial, address: null, status: 'aceptada' })
+    const cls = apiBooking({ ...presencial, address: null, status: 'aceptada' })
     render(
       <MemoryRouter>
-        <ClassDetailDialog cls={cls} classes={[cls]} viewRole="student" now={ANTES} />
+        <ClassDetailDialog cls={cls} bookings={[cls]} viewRole="student" now={ANTES} />
       </MemoryRouter>,
     )
 
@@ -151,7 +151,7 @@ describe('ClassDetailDialog — dirección', () => {
   })
 
   it('paga, ve la dirección completa', () => {
-    const cls = apiClass({
+    const cls = apiBooking({
       ...presencial,
       address: 'Honduras 4800 · CP 1414 · Palermo, CABA',
       status: 'confirmada',
@@ -159,7 +159,7 @@ describe('ClassDetailDialog — dirección', () => {
     })
     render(
       <MemoryRouter>
-        <ClassDetailDialog cls={cls} classes={[cls]} viewRole="student" now={ANTES} />
+        <ClassDetailDialog cls={cls} bookings={[cls]} viewRole="student" now={ANTES} />
       </MemoryRouter>,
     )
 
@@ -169,7 +169,7 @@ describe('ClassDetailDialog — dirección', () => {
 
   it('en una grupal el docente ve el rango de precios, sin el paquete de un alumno', () => {
     const conPaquete = { ...ana, priceCents: 0, packTokens: 1 }
-    renderDialog({ classes: [sofia, conPaquete], cls: sofia, now: ANTES })
+    renderDialog({ bookings: [sofia, conPaquete], cls: sofia, now: ANTES })
 
     const dialogo = screen.getByRole('dialog', { name: 'Matemática' })
     expect(within(dialogo).getByText(/^Sin cargo – \$\s5\.000 por alumno$/)).toBeInTheDocument()
@@ -183,7 +183,7 @@ describe('ClassDetailDialog — dirección', () => {
 
   it('el alumno de una grupal ve su paquete', () => {
     const suya = { ...ana, priceCents: 0, packTokens: 1 }
-    renderDialog({ classes: [suya], cls: suya, viewRole: 'student', now: ANTES })
+    renderDialog({ bookings: [suya], cls: suya, viewRole: 'student', now: ANTES })
     expect(screen.getByRole('dialog', { name: 'Matemática' })).toHaveTextContent('1 clase del paquete')
   })
 })

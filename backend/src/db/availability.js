@@ -15,7 +15,7 @@ import { hasRateInModality } from './rates.js';
 // La no-superposición entre ventanas se chequea acá bajo ese lock, no con
 // una constraint.
 // Lo usan: routes/teachers (/me/availability), routes/availability
-// (findPublishedWindows) y routes/classes (findWindowById).
+// (findPublishedWindows) y routes/bookings (findWindowById).
 
 // La ventana tal como la espera el front: fecha 'YYYY-MM-DD' y horas 'HH:MM'.
 // Se recorta acá y no en la ruta para que ningún endpoint tenga que acordarse.
@@ -151,7 +151,7 @@ export async function findPublishedWindows({ from, to, today }) {
  * @returns {Promise<object|null>} WINDOW_COLUMNS + teacherName,
  *   teacherApprovalStatus, teacherAcceptsRewards.
  * Origen: availability + teacher_addresses + users.
- * Lo usa: routes/classes/index.js (reservar y reprogramar).
+ * Lo usa: routes/bookings/index.js (reservar y reprogramar).
  */
 export async function findWindowById(id) {
   const result = await getPool().query(
