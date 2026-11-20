@@ -28,6 +28,9 @@ import { isTeacherOnVacation } from './vacations.js';
 // La fila tal como la espera el front (ver CLAUDE.md en la raíz): fechas
 // 'YYYY-MM-DD' y horas 'HH:MM', sin zona horaria. Mandar un timestamp UTC
 // correría el día para nuestros usuarios.
+// FILTRO: `hasMaterial` solo es true para reservas que pudieron darse
+// (aceptada/confirmada/realizada/no_presentada): una cancelada no muestra el
+// material que se cargó después para quien tomó ese mismo horario.
 const CLASS_COLUMNS = `
   c.id,
   to_char(c.class_date, 'YYYY-MM-DD') AS date,
@@ -108,6 +111,9 @@ const CLASS_JOINS = `
  * Lo usa: routes/classes/index.js (GET /api/classes).
  */
 export async function findClassesForUser({ userId, role, from, to, status }) {
+  // FILTRO: solo las del usuario de la sesión (como docente las que da, como
+  // alumno las que reservó), del rango y, si viene, del estado pedido. Nadie
+  // ve la agenda de otro.
   const ownerColumn = role === 'teacher' ? 'c.teacher_id' : 'c.student_id';
   const result = await getPool().query(
     `SELECT ${CLASS_COLUMNS}
@@ -128,12 +134,18 @@ export async function findClassesForUser({ userId, role, from, to, status }) {
  * hora, la misma materia y duración. Devuelve lo mínimo, no datos de nadie:
  * el nombre de la materia hace falta para ofrecer sumarse a una grupal.
  *
+ * `maxStudents` y `modality` son los COPIADOS en las filas del turno al
+ * reservar (todas tienen la misma copia, ver insertClass): sumarse se mide
+ * contra eso y no contra la ventana actual, que el docente pudo haber editado.
+ *
  * @param {{from: string, to: string}} rango - query de GET /api/availability.
- * @returns {Promise<Array<{teacherId, date, start, end, subjectId, subjectName, enrolled}>>}
+ * @returns {Promise<Array<{teacherId, date, start, end, subjectId, subjectName, enrolled,
+ *   maxStudents, modality}>>}
  * Origen: classes (no canceladas) + subjects, agrupadas por turno.
- * Lo usa: routes/availability/index.js (se le pasa a la expansión).
+ * Lo usa: routes/availability/index.js (se le pasa a bookableRows).
  */
 export async function findTakenSlots({ from, to }) {
+  // FILTRO: las canceladas no ocupan el horario del docente.
   const result = await getPool().query(
     `SELECT c.teacher_id AS "teacherId",
             to_char(c.class_date, 'YYYY-MM-DD') AS date,
@@ -141,11 +153,14 @@ export async function findTakenSlots({ from, to }) {
             to_char(c.end_time, 'HH24:MI') AS "end",
             c.subject_id AS "subjectId",
             s.name AS "subjectName",
-            count(*)::int AS enrolled
+            count(*)::int AS enrolled,
+            max(c.max_students)::int AS "maxStudents",
+            c.modality
      FROM classes c
      JOIN subjects s ON s.id = c.subject_id
      WHERE c.status <> 'cancelada' AND c.class_date BETWEEN $1::date AND $2::date
-     GROUP BY c.teacher_id, c.class_date, c.start_time, c.end_time, c.subject_id, s.name`,
+     GROUP BY c.teacher_id, c.class_date, c.start_time, c.end_time, c.subject_id, s.name,
+              c.modality`,
     [from, to]
   );
   return result.rows;
@@ -364,6 +379,15 @@ async function insertClass(
 
   if (group) {
     if (group.maxStudents <= 1) return { conflict: TAKEN_BY_SOMEONE_ELSE };
+    // La tarifa (y el precio) se buscó en la modalidad de la ventana, pero
+    // quien se suma copia la del turno: si el docente cambió la modalidad de
+    // la ventana, se pagaría una y se tomaría otra.
+    if (group.modality !== window.modality) {
+      return {
+        conflict:
+          'Esa clase grupal se da en otra modalidad que este horario del docente. Elegí otro horario.',
+      };
+    }
     if (String(group.subjectId) !== String(subjectId) || group.end !== endTime) {
       return {
         conflict:
@@ -524,6 +548,7 @@ export function transitionClass(id, change) {
  *   routes/homework/index.js (destinatarios de una tarea a una clase grupal).
  */
 export async function findTurnClasses({ teacherId, date, startTime }) {
+  // FILTRO: las canceladas ya no son parte del turno.
   const result = await getPool().query(
     `SELECT ${CLASS_COLUMNS} ${CLASS_JOINS}
      WHERE c.teacher_id = $1 AND c.class_date = $2::date AND c.start_time = $3::time

@@ -1,15 +1,8 @@
-import { packsForReschedule, quoteBooking, usablePackFor } from './packs.js'
+import { packsForReschedule, quoteBooking, unusablePackReason, usablePackFor } from './packs.js'
+import { apiStudentPack } from '../testing/fixtures.js'
 
-// Un paquete de clases de 1 h con 2 para reservar.
-const paquete = (overrides = {}) => ({
-  id: 'p1',
-  teacherId: 't1',
-  classMinutes: 60,
-  available: 2,
-  expiresOn: '2099-12-31',
-  expired: false,
-  ...overrides,
-})
+// Un paquete de clases de 1 h con 2 para reservar, como GET /api/packs/mine.
+const paquete = (overrides = {}) => apiStudentPack(overrides)
 
 const MATE = 500000
 
@@ -81,21 +74,70 @@ describe('quoteBooking', () => {
 
 describe('packsForReschedule', () => {
   it('le devuelve al paquete las clases que tenía apartadas la clase vieja', () => {
-    const packs = [paquete({ available: 0 }), paquete({ id: 'p2', available: 3 })]
+    const packs = [paquete({ available: 0, usable: false }), paquete({ id: 'p2', available: 3 })]
     const vieja = { studentPackId: 'p1', packTokens: 1 }
 
     const ajustados = packsForReschedule(packs, vieja)
 
     expect(ajustados.map((pack) => pack.available)).toEqual([1, 3])
+    expect(ajustados.map((pack) => pack.usable)).toEqual([true, true])
     // Con el paquete justo, recién así se puede volver a usar.
     expect(usablePackFor(packs, 't1', '2099-01-01').id).toBe('p2')
     expect(usablePackFor([packs[0]], 't1', '2099-01-01')).toBeNull()
     expect(usablePackFor(packsForReschedule([packs[0]], vieja), 't1', '2099-01-01').id).toBe('p1')
   })
 
+  it('devolverle clases no lo vuelve usable si el docente ya no está aprobado', () => {
+    const packs = [paquete({ available: 0, usable: false, teacherApproved: false })]
+
+    const [ajustado] = packsForReschedule(packs, { studentPackId: 'p1', packTokens: 1 })
+
+    expect(ajustado.available).toBe(1)
+    expect(ajustado.usable).toBe(false)
+  })
+
   it('sin reprogramar, o si la vieja no usó paquete, quedan igual', () => {
     const packs = [paquete()]
     expect(packsForReschedule(packs, null)).toBe(packs)
     expect(packsForReschedule(packs, { studentPackId: null, packTokens: 0 })).toBe(packs)
+  })
+})
+
+describe('usablePackFor', () => {
+  it('usa el `usable` del backend y no lo recalcula', () => {
+    // available > 0 pero el backend dice que no (docente dado de baja).
+    expect(usablePackFor([paquete({ usable: false })], 't1', '2099-01-01')).toBeNull()
+  })
+
+  it('el que vence primero entre los que llegan al día de la clase', () => {
+    const packs = [
+      paquete({ id: 'tarde', expiresOn: '2099-12-31' }),
+      paquete({ id: 'antes', expiresOn: '2099-01-01' }),
+      paquete({ id: 'justo', expiresOn: '2099-03-01' }),
+    ]
+    expect(usablePackFor(packs, 't1', '2099-03-01').id).toBe('justo')
+  })
+
+  it('solo los de ese docente', () => {
+    expect(usablePackFor([paquete()], 't2', '2099-01-01')).toBeNull()
+  })
+})
+
+describe('unusablePackReason', () => {
+  it('explica si vence antes o si ya reservó todas', () => {
+    expect(unusablePackReason([paquete({ expiresOn: '2099-01-01' })], 't1', '2099-02-01')).toBe(
+      'expires',
+    )
+    expect(
+      unusablePackReason([paquete({ available: 0, usable: false })], 't1', '2099-02-01'),
+    ).toBe('used')
+  })
+
+  it('nada que explicar si uno sirve, si no tiene o si están vencidos', () => {
+    expect(unusablePackReason([paquete()], 't1', '2099-02-01')).toBeNull()
+    expect(unusablePackReason([], 't1', '2099-02-01')).toBeNull()
+    expect(
+      unusablePackReason([paquete({ expired: true, usable: false })], 't1', '2099-02-01'),
+    ).toBeNull()
   })
 })

@@ -8,13 +8,8 @@ import { formatRangeLabel } from '../../utils/availability.js'
 import { formatDayLong, formatDuration, fromISODate, toISODate } from '../../utils/calendar.js'
 import { isFavorite } from '../../utils/favorites.js'
 import { formatMoney } from '../../utils/rates.js'
-import { turnPriceLabel } from '../../utils/reservations.js'
-import {
-  capacityLabel,
-  modalityLabel,
-  needsAddress,
-  needsMeetingUrl,
-} from '../../utils/windows.js'
+import { turnCapacityLabel, turnPriceLabel } from '../../utils/reservations.js'
+import { modalityLabel, needsAddress, needsMeetingUrl } from '../../utils/windows.js'
 import './DayAgenda.css'
 
 /**
@@ -106,23 +101,6 @@ class DayAgenda extends Component {
   }
 
   /**
-   * La pastilla de arriba a la derecha, como en las tarjetas de Reservar. En
-   * una grupal dice cuántos van. Nadie ve nombres en la tarjeta: el docente
-   * cuenta sus reservas en pie del turno (`rows`) y el alumno ve `enrolled`;
-   * a los alumnos el docente los ve en el detalle.
-   */
-  getCapacity(item) {
-    if (item.maxStudents <= 1) return capacityLabel(item.maxStudents)
-    const anotados =
-      this.props.viewRole === 'teacher'
-        ? item.rows.filter((row) => row.status !== 'cancelada').length
-        : item.enrolled
-    return anotados
-      ? `Grupal · ${anotados} de ${item.maxStudents}`
-      : capacityLabel(item.maxStudents)
-  }
-
-  /**
    * Dónde es la clase, un renglón por lugar: la videollamada con su link y/o
    * la dirección exacta con la localidad abajo (el alumno recién la ve acá,
    * después de reservar). La modalidad va adelante del primero.
@@ -130,7 +108,8 @@ class DayAgenda extends Component {
   renderPlace(item) {
     const link = needsMeetingUrl(item.modality) && item.meetingUrl
     const direccion = needsAddress(item.modality) && item.address
-    // El alumno ve la dirección exacta recién cuando pagó: el backend no la
+    // FILTRO: el alumno ve la dirección exacta recién cuando pagó. Regla del
+    // backend (canSeeExactAddress en backend/src/lib/classStates.js): no la
     // manda antes. Hasta entonces, la localidad y el aviso.
     const sinPagar = needsAddress(item.modality) && !item.address && item.locality
     const modalidad = <span className="day-agenda-modality">{modalityLabel(item.modality)}</span>
@@ -213,7 +192,10 @@ class DayAgenda extends Component {
     )
   }
 
-  /** El corazón del docente, solo para el alumno (favoriteIds null = no hay). */
+  /**
+   * FILTRO: el corazón del docente, solo para el alumno (regla de pantalla;
+   * favoriteIds null = no hay).
+   */
   renderFavorite(item) {
     const { viewRole, favoriteIds, onFavoriteChange, onFavoriteError } = this.props
     if (viewRole !== 'student' || !favoriteIds) return null
@@ -248,7 +230,7 @@ class DayAgenda extends Component {
           </button>
           <span className={`day-agenda-kind ${grupal ? 'is-group' : ''}`}>
             <UsersIcon />
-            {this.getCapacity(item)}
+            {turnCapacityLabel(item, item.rows, this.props.viewRole)}
           </span>
         </div>
         {alumno ? (
@@ -346,8 +328,9 @@ class DayAgenda extends Component {
   }
 
   /**
-   * Los días que van en la lista, en orden: los que tienen clases, más el
-   * elegido aunque esté vacío.
+   * FILTRO: los días que van en la lista, en orden: los que tienen clases,
+   * más el elegido aunque esté vacío (regla de pantalla; elegir un día no
+   * filtra, solo scrollea).
    */
   getDays() {
     const { classesByDate, selectedIso } = this.props

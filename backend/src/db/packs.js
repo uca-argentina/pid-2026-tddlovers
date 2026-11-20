@@ -32,6 +32,8 @@ const OFFER_COLUMNS = `
  * Lo usa: routes/teachers/index.js (GET /me/packs).
  */
 export async function listTeacherOffers(teacherId) {
+  // FILTRO: los desactivados no salen; siguen en la tabla porque los
+  // paquetes comprados los referencian.
   const result = await getPool().query(
     `SELECT ${OFFER_COLUMNS}
      FROM class_packs p
@@ -91,6 +93,8 @@ export async function deactivateOffer(teacherId, id) {
  * Lo usa: routes/packs/index.js.
  */
 export async function listOffers({ teacherId } = {}) {
+  // FILTRO: solo paquetes activos de docentes aprobados: uno pendiente o
+  // rechazado no vende nada, igual que no recibe reservas.
   const result = await getPool().query(
     `SELECT ${OFFER_COLUMNS},
             u.nombre || ' ' || u.apellido AS "teacherName"
@@ -138,6 +142,7 @@ const studentPackColumns = (exclude = 'NULL') => `
   sp.pack_id AS "packId",
   sp.teacher_id AS "teacherId",
   t.nombre || ' ' || t.apellido AS "teacherName",
+  t.approval_status = 'approved' AS "teacherApproved",
   sp.class_count AS "classCount",
   sp.class_minutes AS "classMinutes",
   sp.price_cents AS "priceCents",
@@ -163,13 +168,17 @@ const studentPackColumns = (exclude = 'NULL') => `
  * @param {string} args.studentId - request.user.id del alumno.
  * @param {string|null} [args.teacherId] - el docente de la ventana, al reservar.
  * @param {string|null} [args.excludeClassId] - la clase vieja, al reprogramar.
- * @returns {Promise<Array<{id, packId, teacherId, teacherName, classCount, classMinutes,
- *   priceCents, purchasedAt, expiresOn, attended, reserved}>>} sin `remaining`/
- *   `available`: esos los calcula StudentPack (lib/classPacks.js).
+ * @returns {Promise<Array<{id, packId, teacherId, teacherName, teacherApproved, classCount,
+ *   classMinutes, priceCents, purchasedAt, expiresOn, attended, reserved}>>} sin
+ *   `remaining`/`available`/`usable`: esos los calcula StudentPack (lib/classPacks.js).
  * Origen: student_packs JOIN users + sumas de classes.pack_tokens.
  * Lo usan: routes/packs/index.js (GET /mine) y routes/classes/index.js (priceBooking).
  */
 export async function listStudentPacks({ studentId, teacherId = null, excludeClassId = null }) {
+  // FILTRO: solo los paquetes del propio alumno (y del docente pedido, al
+  // reservar). NO se ocultan los vencidos, agotados o de docentes dados de
+  // baja: el alumno tiene que ver lo que compró; `usable` (StudentPack#summary)
+  // le dice al front cuáles sirven para reservar.
   const result = await getPool().query(
     `SELECT ${studentPackColumns('$3')}
      FROM student_packs sp

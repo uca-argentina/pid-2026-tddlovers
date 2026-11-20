@@ -170,6 +170,8 @@ class NeuronasPage extends Component {
 
   renderRewards() {
     const { data } = this.state
+    // FILTRO: los canjes son del alumno; la respuesta de docente trae
+    // `featured` (el backend contesta por el rol de la sesión).
     if (data.featured) return null
     return (
       <section className="neuronas-section">
@@ -190,7 +192,11 @@ class NeuronasPage extends Component {
     )
   }
 
-  /** Por qué no se puede comprar ahora, o null si se puede. */
+  /**
+   * FILTRO: por qué no se puede comprar Destacado ahora, o null si se puede.
+   * Espejo de lo que chequea POST /api/neuronas/featured (aprobado, lugares,
+   * saldo), que es el que decide.
+   */
   featuredProblem() {
     const { balance, featured } = this.state.data
     if (this.props.user?.approvalStatus !== 'approved') {
@@ -204,6 +210,7 @@ class NeuronasPage extends Component {
 
   renderFeatured() {
     const { featured } = this.state.data
+    // FILTRO: Destacado solo en la respuesta de docente (regla del backend).
     if (!featured) return null
     const problem = this.featuredProblem()
     const { buying } = this.state

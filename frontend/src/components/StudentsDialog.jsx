@@ -10,6 +10,7 @@ import {
   paymentStatus,
   statusLabel,
 } from '../utils/classStates.js'
+import { activeRows } from '../utils/reservations.js'
 import './ClassActions.css'
 import './AttendanceDialog.css'
 
@@ -142,7 +143,8 @@ class StudentsDialog extends Component {
             <span className={`class-status is-${STATUS_TONES[row.status] || 'muted'}`}>
               {statusLabel(row.status)}
             </span>
-            {row.status !== 'cancelada' ? (
+            {/* FILTRO: el pago solo en las reservas en pie (regla de pantalla). */}
+            {activeRows(this.props.rows).includes(row) ? (
               <span className={`class-status is-${pago.tone}`}>{pago.label}</span>
             ) : null}
           </div>
@@ -154,13 +156,13 @@ class StudentsDialog extends Component {
 
   render() {
     const { rows, onClose } = this.props
-    const pagaron = rows.filter((row) => row.status !== 'cancelada' && row.paidAt).length
-    const enPie = rows.filter((row) => row.status !== 'cancelada').length
+    const enPie = activeRows(rows)
+    const pagaron = enPie.filter((row) => row.paidAt).length
 
     return (
       <Modal title="Alumnos" onClose={onClose}>
         <p className="attendance-summary">
-          {enPie} {enPie === 1 ? 'anotado' : 'anotados'} · {pagaron}{' '}
+          {enPie.length} {enPie.length === 1 ? 'anotado' : 'anotados'} · {pagaron}{' '}
           {pagaron === 1 ? 'pagó' : 'pagaron'}
         </p>
         {this.state.error ? <Banner type="danger">{this.state.error}</Banner> : null}

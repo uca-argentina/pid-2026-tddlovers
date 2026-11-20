@@ -11,8 +11,13 @@ import { formatDayLongWithYear, formatDuration, fromISODate } from '../utils/cal
 import { canHaveMaterial } from '../utils/classMaterials.js'
 import { allowedActions, hasStarted, nowParts, paymentStatus } from '../utils/classStates.js'
 import { formatMoney } from '../utils/rates.js'
-import { turnPriceLabel, turnRows } from '../utils/reservations.js'
-import { capacityLabel, modalityLabel, needsAddress, needsMeetingUrl } from '../utils/windows.js'
+import {
+  activeRows,
+  turnCapacityLabel,
+  turnPriceLabel,
+  turnRows,
+} from '../utils/reservations.js'
+import { modalityLabel, needsAddress, needsMeetingUrl } from '../utils/windows.js'
 import { rewardLabel } from '../utils/neuronas.js'
 import './ClassDetailDialog.css'
 
@@ -63,8 +68,9 @@ class ClassDetailDialog extends Component {
   }
 
   /**
-   * Las reservas de la clase. El docente ve todas las del turno (una por
-   * alumno, las canceladas al final); el alumno, solo la suya.
+   * FILTRO: las reservas de la clase. El docente ve todas las del turno (una
+   * por alumno, las canceladas al final); el alumno, solo la suya (regla del
+   * backend: GET /api/classes no le manda las de otros alumnos).
    */
   getRows() {
     const { cls, classes, viewRole } = this.props
@@ -128,12 +134,10 @@ class ClassDetailDialog extends Component {
     )
   }
 
-  renderKind(active) {
+  renderKind(rows) {
     const { cls, viewRole } = this.props
     const persona = viewRole === 'teacher' ? '' : `Con ${cls.teacherName} · `
-    if (cls.maxStudents <= 1) return `${persona}${capacityLabel(cls.maxStudents)}`
-    const anotados = viewRole === 'teacher' ? active.length : cls.enrolled
-    return `${persona}Grupal · ${anotados} de ${cls.maxStudents}`
+    return `${persona}${turnCapacityLabel(cls, rows, viewRole)}`
   }
 
   /** El alumno: el estado de su reserva y sus botones (pagar, reprogramar, cancelar). */
@@ -158,7 +162,10 @@ class ClassDetailDialog extends Component {
     const { cls, onChange } = this.props
     const grupal = cls.maxStudents > 1
     const empezo = hasStarted(cls, this.now())
-    const active = rows.filter((row) => row.status !== 'cancelada')
+    const active = activeRows(rows)
+    // FILTRO: los alumnos (grupal: botón "Ver alumnos"; individual: nombre y
+    // pago) solo antes de que empiece y si queda alguien en pie; después
+    // queda tomar lista. Regla de pantalla.
 
     return (
       <>
@@ -212,7 +219,11 @@ class ClassDetailDialog extends Component {
     )
   }
 
-  /** "Tomar asistencia", solo si ya empezó y hay a quién tomarle lista. */
+  /**
+   * FILTRO: "Tomar asistencia", solo si ya empezó y hay a quién tomarle lista
+   * (allowedActions 'attend', espejo de checkAction en
+   * backend/src/lib/classStates.js, que es el que decide).
+   */
   renderAttendance(rows) {
     const now = this.now()
     const lista = rows.filter((row) => allowedActions(row, 'teacher', now).includes('attend'))
@@ -291,7 +302,7 @@ class ClassDetailDialog extends Component {
   render() {
     const { cls, viewRole, onClose } = this.props
     const rows = this.getRows()
-    const active = rows.filter((row) => row.status !== 'cancelada')
+    const active = activeRows(rows)
     const docente = viewRole === 'teacher'
 
     return (
@@ -313,7 +324,7 @@ class ClassDetailDialog extends Component {
             {this.renderPlace()}
             <li>
               <UsersIcon />
-              <span>{this.renderKind(active)}</span>
+              <span>{this.renderKind(rows)}</span>
             </li>
           </ul>
           {docente && cls.maxStudents > 1 ? this.renderGroupPrice(rows) : this.renderPrice()}
@@ -321,6 +332,8 @@ class ClassDetailDialog extends Component {
           {docente ? this.renderTeacherStatus(rows) : this.renderStudentStatus()}
           {docente ? this.renderAttendance(active) : null}
 
+          {/* FILTRO: el material solo si la clase pudo tenerlo (canHaveMaterial,
+              espejo de backend/src/lib/classMaterials.js). */}
           {canHaveMaterial(cls) ? (
             <ClassMaterial
               key={cls.id}

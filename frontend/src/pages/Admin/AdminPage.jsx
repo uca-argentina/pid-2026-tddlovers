@@ -60,6 +60,8 @@ class AdminPage extends Component {
     this.fetchToken += 1
   }
 
+  // FILTRO: la pantalla solo carga para el admin (regla del backend: 403
+  // para los demás en /api/admin).
   esAdmin() {
     return this.props.user?.role === 'admin'
   }
@@ -68,7 +70,11 @@ class AdminPage extends Component {
     return TABS.find((tab) => tab.key === this.state.tab) || TABS[0]
   }
 
-  /** Trae los docentes de la pestaña actual (GET /api/admin/teachers?status=) → `teachers`. */
+  /**
+   * FILTRO: los docentes de la pestaña que ELIGIÓ el admin (Pendientes,
+   * Aprobados, Rechazados, Todos); el filtro lo aplica el backend
+   * (GET /api/admin/teachers?status=) → `teachers`.
+   */
   load = () => {
     const token = ++this.fetchToken
     this.setState({ loading: true, error: null, errors: {} })
@@ -105,6 +111,8 @@ class AdminPage extends Component {
     }))
     call(teacher.id)
       .then((updated) => {
+        // FILTRO: el que cambió de estado sale de la pestaña elegida, igual
+        // que si se volviera a pedir al backend.
         const filtro = this.getTab().status
         this.setState((prev) => ({
           busy: { ...prev.busy, [id]: null },

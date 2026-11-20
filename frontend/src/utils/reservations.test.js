@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { apiClass } from '../testing/fixtures.js'
 import {
+  activeRows,
+  calendarTurns,
+  pendingTurnCount,
+  turnCapacityLabel,
   CATEGORIES,
   EMPTY_FILTERS,
   filterTurns,
@@ -196,5 +200,63 @@ describe('turnPriceLabel', () => {
       apiClass({ id: 'c', priceCents: 0, status: 'cancelada' }),
     ]
     expect(turnPriceLabel(rows)).toMatch(/^\$\s2\.500 – \$\s5\.000$/)
+  })
+})
+
+describe('activeRows', () => {
+  it('saca solo las canceladas', () => {
+    const filas = [
+      apiClass({ id: 'a', status: 'pendiente' }),
+      apiClass({ id: 'b', status: 'cancelada' }),
+      apiClass({ id: 'c', status: 'realizada' }),
+    ]
+    expect(activeRows(filas).map((row) => row.id)).toEqual(['a', 'c'])
+  })
+})
+
+describe('calendarTurns', () => {
+  it('una entrada por turno, sin los cancelados para todos', () => {
+    const grupal = { startTime: '10:00', maxStudents: 3 }
+    const clases = [
+      apiClass({ ...grupal, id: 'g1', studentName: 'Bea', status: 'confirmada' }),
+      apiClass({ ...grupal, id: 'g2', studentName: 'Ana', status: 'cancelada' }),
+      apiClass({ id: 'x', startTime: '15:00', status: 'cancelada' }),
+    ]
+    const turnos = calendarTurns(clases)
+    expect(turnos).toHaveLength(1)
+    expect(turnos[0]).toMatchObject({ id: 'g1', turnKey: 't1|2099-09-14|10:00' })
+    expect(turnos[0].rows.map((row) => row.id)).toEqual(['g1', 'g2'])
+  })
+})
+
+describe('pendingTurnCount', () => {
+  it('cuenta clases con alguna reserva pendiente, no reservas', () => {
+    const grupal = { startTime: '10:00', maxStudents: 3, status: 'pendiente' }
+    const clases = [
+      apiClass({ ...grupal, id: 'g1' }),
+      apiClass({ ...grupal, id: 'g2' }),
+      apiClass({ ...grupal, id: 'g3' }),
+      apiClass({ id: 'i', startTime: '15:00', status: 'pendiente' }),
+      apiClass({ id: 'c', startTime: '17:00', status: 'confirmada' }),
+    ]
+    expect(pendingTurnCount(clases)).toBe(2)
+  })
+})
+
+describe('turnCapacityLabel', () => {
+  it('individual', () => {
+    expect(turnCapacityLabel(apiClass(), null, 'teacher')).toBe('Individual')
+  })
+
+  it('el docente cuenta las reservas en pie del turno', () => {
+    const cls = apiClass({ maxStudents: 4 })
+    const filas = [cls, apiClass({ id: 'c2', maxStudents: 4, status: 'cancelada' })]
+    expect(turnCapacityLabel(cls, filas, 'teacher')).toBe('Grupal · 1 de 4')
+  })
+
+  it('el alumno ve `enrolled`', () => {
+    expect(turnCapacityLabel(apiClass({ maxStudents: 4, enrolled: 3 }), null, 'student')).toBe(
+      'Grupal · 3 de 4',
+    )
   })
 })

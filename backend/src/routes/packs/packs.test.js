@@ -70,6 +70,7 @@ const comprado = (over = {}) => ({
   packId: OFERTA,
   teacherId: DOCENTE,
   teacherName: 'Laura Gómez',
+  teacherApproved: true,
   classCount: 4,
   classMinutes: 60,
   priceCents: 1800000,
@@ -130,8 +131,24 @@ describe('packs routes', () => {
       expect(listStudentPacks).toHaveBeenCalledWith({ studentId: 'user-1' });
       const [activo, vencido] = res.json();
       // Una asistencia descontó una; la reservada todavía no.
-      expect(activo).toMatchObject({ remaining: 3, available: 2, expired: false });
-      expect(vencido.expired).toBe(true);
+      expect(activo).toMatchObject({ remaining: 3, available: 2, expired: false, usable: true });
+      expect(vencido).toMatchObject({ expired: true, usable: false });
+    });
+
+    it('keeps the packs that no longer serve, marked as not usable', async () => {
+      listStudentPacks.mockResolvedValue([
+        comprado({ id: 'agotado', attended: 2, reserved: 2 }),
+        comprado({ id: 'de-baja', teacherApproved: false }),
+      ]);
+      const headers = await authedHeaders(app);
+
+      const res = await app.inject({ method: 'GET', url: '/api/packs/mine', headers });
+
+      // El alumno los sigue viendo: se compraron. Solo no sirven para reservar.
+      expect(res.json().map((p) => [p.id, p.usable])).toEqual([
+        ['agotado', false],
+        ['de-baja', false],
+      ]);
     });
 
     it('is only for students', async () => {

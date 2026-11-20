@@ -7,8 +7,8 @@ import { formatRangeLabel } from '../utils/availability.js'
 import { formatDayLong, fromISODate } from '../utils/calendar.js'
 import { isFavorite } from '../utils/favorites.js'
 import { formatMoney } from '../utils/rates.js'
-import { turnPriceLabel } from '../utils/reservations.js'
-import { capacityLabel, modalityLabel } from '../utils/windows.js'
+import { turnCapacityLabel, turnPriceLabel } from '../utils/reservations.js'
+import { modalityLabel } from '../utils/windows.js'
 import { rewardLabel } from '../utils/neuronas.js'
 import './ClassCard.css'
 
@@ -51,20 +51,6 @@ class ClassCard extends Component {
 
   rows() {
     return this.props.rows && this.props.rows.length > 0 ? this.props.rows : [this.props.cls]
-  }
-
-  /**
-   * "Individual" o "Grupal · 2 de 3". El docente cuenta las reservas en pie
-   * del turno; el alumno no las tiene, ve `enrolled`.
-   */
-  getKind() {
-    const { cls, viewRole } = this.props
-    if (cls.maxStudents <= 1) return capacityLabel(cls.maxStudents)
-    const anotados =
-      viewRole === 'teacher'
-        ? this.rows().filter((row) => row.status !== 'cancelada').length
-        : cls.enrolled
-    return anotados ? `Grupal · ${anotados} de ${cls.maxStudents}` : capacityLabel(cls.maxStudents)
   }
 
   /**
@@ -111,10 +97,11 @@ class ClassCard extends Component {
         <div className="class-card-meta-row">
           <p className="class-card-meta">
             {viewRole === 'teacher' ? '' : `Docente: ${cls.teacherName} · `}
-            {this.getKind()}
+            {turnCapacityLabel(cls, this.rows(), viewRole)}
             {` · ${modalityLabel(cls.modality)}`}
             {` · ${this.getPrice()}`}
           </p>
+          {/* FILTRO: el corazón solo para el alumno (regla de pantalla). */}
           {viewRole === 'student' && favoriteIds ? (
             <FavoriteButton
               teacherId={cls.teacherId}

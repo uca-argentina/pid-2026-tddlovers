@@ -1,9 +1,9 @@
 import { normalizeText } from './booking.js'
 
-// Las sugerencias del buscador de la barra (solo alumnos): materias de
-// GET /api/subjects y docentes de GET /api/teachers. Lo usa
-// components/SearchBar.jsx. Lo que se elige termina en /disponibilidad?q=…,
-// y ahí lo interpreta resolveQuery de utils/booking.js.
+// El buscador de la barra (solo alumnos): las sugerencias (materias de
+// GET /api/subjects y docentes de GET /api/teachers, para
+// components/SearchBar.jsx) y qué significa lo buscado cuando llega a
+// /disponibilidad?q=… (resolveQuery, para pages/Booking/BookingBoard.jsx).
 
 /**
  * El nombre que se muestra y contra el que se busca un docente.
@@ -39,9 +39,13 @@ function rankBy(items, texto, getName) {
 }
 
 /**
- * Las sugerencias del buscador, separadas en materias y docentes. No corta
+ * FILTRO: las sugerencias del buscador, separadas en materias y docentes. No corta
  * en ninguna cantidad: que se vean solo tres por sección es cosa del CSS, el
  * resto queda a un scroll de distancia.
+ *
+ * Oculta lo que no pega con lo tipeado (lo eligió el usuario al tipear). El
+ * catálogo de docentes ya viene solo con los aprobados (regla del backend,
+ * listTeachers en backend/src/db/users.js).
  *
  * Los docentes se buscan por nombre y no por las materias que dan: para eso
  * está la sección de materias, y mezclarlo llenaría "Docentes" de gente que
@@ -61,4 +65,30 @@ export function suggest(query, { subjects = [], teachers = [] } = {}) {
     subjects: rankBy(subjects, texto, (subject) => subject.name),
     teachers: rankBy(teachers, texto, teacherFullName),
   }
+}
+
+/**
+ * Qué significa el `q` de la URL: si es EXACTAMENTE el nombre de una materia
+ * (sin acentos ni mayúsculas) es un filtro de materia, como si se hubiera
+ * tocado el chip; si no, es texto libre, que en el tablero pega con el nombre
+ * del docente o el de una materia (filterCards en utils/booking.js).
+ *
+ * Exacto y no "empieza con": con startsWith, "Ana" + Enter terminaba en
+ * Análisis y nunca buscaba a la docente Ana. Las sugerencias mandan el nombre
+ * completo de la materia, así que elegir una sigue siendo un filtro de materia,
+ * y "mate" a secas busca igual en las materias como texto.
+ *
+ * @param {string} q - el ?q= de /disponibilidad (lo pone components/SearchBar.jsx).
+ * @param {Array<{id, name}>} subjects - el catálogo de GET /api/subjects.
+ * @returns {{subjectId: string|null, teacherQuery: string}} `teacherQuery` es el texto libre.
+ * Lo usa: pages/Booking/BookingBoard.jsx.
+ */
+export function resolveQuery(q, subjects) {
+  const texto = normalizeText(q)
+  if (!texto) return { subjectId: null, teacherQuery: '' }
+
+  const materia = subjects.find((subject) => normalizeText(subject.name) === texto)
+  if (materia) return { subjectId: materia.id, teacherQuery: '' }
+
+  return { subjectId: null, teacherQuery: q.trim() }
 }

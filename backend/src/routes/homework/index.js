@@ -192,6 +192,8 @@ export default async function homeworkRoutes(app) {
     if (!isUuid(id)) return null;
     const submission = await findSubmission(id);
     if (!submission) return null;
+    // FILTRO: una entrega solo la ven su docente y su alumno; para cualquier
+    // otro es un 404, como si no existiera.
     if (String(submission.teacherId) === String(request.user.id)) {
       return { submission, role: 'teacher' };
     }

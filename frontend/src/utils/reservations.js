@@ -1,10 +1,14 @@
 import { normalizeText } from './booking.js'
 import { hasEnded, nowParts } from './classStates.js'
 import { formatMoney } from './rates.js'
+import { capacityLabel } from './windows.js'
 
 // Cómo se ordena "Mis reservas": las cinco categorías, la próxima clase, la
 // última y el turno de una grupal. Funciones puras para probarlas sin montar
 // la pantalla.
+//
+// Las clases que se ven ya las decidió el backend (GET /api/classes devuelve
+// solo las del usuario de la sesión); acá solo se ordenan, agrupan y cuentan.
 //
 // Todas trabajan sobre las reservas tal como las devuelve GET /api/classes
 // (fetchClasses): una fila por alumno, así que en una grupal el docente
@@ -41,13 +45,29 @@ const startKey = (cls) => `${cls.date} ${cls.startTime}`
 const byName = (a, b) => (a.studentName || '').localeCompare(b.studentName || '')
 
 /**
+ * FILTRO: las reservas que siguen en pie (todo lo que no está `cancelada`).
+ * Regla de pantalla, el mismo criterio que el backend para "ocupa el
+ * horario" (las exclusiones son WHERE status <> 'cancelada'). Es el único
+ * lugar del front que lo escribe.
+ *
+ * @param {object[]} rows - reservas de GET /api/classes.
+ * @returns {object[]}
+ * Lo usan: este archivo, api/client.js (fetchMyLessons), components/
+ * (ClassCard vía turnCapacityLabel, ClassDetailDialog, TurnActions,
+ * StudentsDialog) y pages/Calendar/DayAgenda.jsx (vía turnCapacityLabel).
+ */
+export function activeRows(rows) {
+  return rows.filter((row) => row.status !== 'cancelada')
+}
+
+/**
  * Las reservas de un mismo turno en el orden en que se muestran: las que
  * siguen en pie primero y las canceladas al final, cada grupo por nombre de
  * alumno. Así la primera es siempre la que representa a la clase.
  * Lo usan: groupTurns y turnRows (acá mismo).
  */
 export function orderTurnRows(rows) {
-  const active = rows.filter((row) => row.status !== 'cancelada').sort(byName)
+  const active = activeRows(rows).sort(byName)
   const canceladas = rows.filter((row) => row.status === 'cancelada').sort(byName)
   return [...active, ...canceladas]
 }
@@ -74,13 +94,61 @@ export function groupTurns(classes) {
   }
   return [...porTurno.entries()].map(([key, sinOrden]) => {
     const rows = orderTurnRows(sinOrden)
-    const active = rows.filter((row) => row.status !== 'cancelada')
-    return { key, cls: rows[0], rows, active }
+    return { key, cls: rows[0], rows, active: activeRows(rows) }
   })
 }
 
 /**
- * Si el turno va en la categoría: si alguna reserva en pie está en ese
+ * FILTRO: los turnos del calendario. Una clase cancelada para todos no ocupa
+ * lugar en el calendario (se ve en "Mis reservas"); regla de pantalla. Cada
+ * turno va una vez, como la reserva que lo representa, con `turnKey` y todas
+ * sus reservas en `rows` (las canceladas también, al final, como en el
+ * detalle de Mis reservas).
+ *
+ * @param {object[]} classes - las reservas de GET /api/classes.
+ * @returns {object[]} reservas planas (las que representan a cada turno) con turnKey y rows.
+ * Lo usa: pages/Calendar/CalendarPage.jsx.
+ */
+export function calendarTurns(classes) {
+  return groupTurns(classes)
+    .filter((turn) => turn.active.length > 0)
+    .map((turn) => ({ ...turn.cls, turnKey: turn.key, rows: turn.rows }))
+}
+
+/**
+ * Cuántas CLASES (turnos) tienen alguna reserva pendiente: una grupal con
+ * tres solicitudes es una clase que espera respuesta, igual que la cuenta
+ * Mis reservas (turnsIn de la categoría Pendientes).
+ *
+ * @param {object[]} classes - reservas de GET /api/classes.
+ * @returns {number}
+ * Lo usa: pages/Calendar/CalendarPage.jsx (el aviso del docente).
+ */
+export function pendingTurnCount(classes) {
+  const pendientes = CATEGORIES.find((category) => category.key === 'pendiente')
+  return turnsIn(pendientes, groupTurns(classes)).length
+}
+
+/**
+ * "Individual", "Grupal · hasta 4" o "Grupal · 2 de 4". El docente cuenta las
+ * reservas en pie del turno (`rows`); el alumno no las tiene y ve `enrolled`.
+ * Nadie ve nombres en la tarjeta.
+ *
+ * @param {object} cls - la reserva que representa al turno.
+ * @param {object[]|null} rows - todas las reservas del turno (o null: solo `cls`).
+ * @param {string} viewRole - 'teacher' | 'student'.
+ * @returns {string}
+ * Lo usan: components/ClassCard.jsx y pages/Calendar/DayAgenda.jsx.
+ */
+export function turnCapacityLabel(cls, rows, viewRole) {
+  if (cls.maxStudents <= 1) return capacityLabel(cls.maxStudents)
+  const filas = rows && rows.length > 0 ? rows : [cls]
+  const anotados = viewRole === 'teacher' ? activeRows(filas).length : cls.enrolled
+  return anotados ? `Grupal · ${anotados} de ${cls.maxStudents}` : capacityLabel(cls.maxStudents)
+}
+
+/**
+ * FILTRO: si el turno va en la categoría de Mis reservas (regla de pantalla): si alguna reserva en pie está en ese
  * estado. Una grupal con un alumno pendiente y otro confirmado aparece en las
  * dos, porque en cada una hay algo que ver. En Canceladas, solo la que se
  * canceló para todos: un alumno que se bajó no cancela la clase.
@@ -153,8 +221,9 @@ export function turnKey(cls) {
  * Lo usa: pages/Reservations/ReservationsPage.jsx ("Próxima clase").
  */
 export function nextClass(classes, now = nowParts()) {
-  const vienen = classes
-    .filter((cls) => cls.status !== 'cancelada' && !hasEnded(cls, now))
+  // FILTRO: solo las en pie que no terminaron (regla de pantalla).
+  const vienen = activeRows(classes)
+    .filter((cls) => !hasEnded(cls, now))
     .sort((a, b) => startKey(a).localeCompare(startKey(b)))
   return oneByTurn(vienen)[0] || null
 }
@@ -164,8 +233,9 @@ export function nextClass(classes, now = nowParts()) {
  * Mismos parámetros que nextClass. Lo usa: pages/Reservations/ReservationsPage.jsx ("Última clase").
  */
 export function lastClass(classes, now = nowParts()) {
-  const pasaron = classes
-    .filter((cls) => cls.status !== 'cancelada' && hasEnded(cls, now))
+  // FILTRO: solo las en pie que ya terminaron (regla de pantalla).
+  const pasaron = activeRows(classes)
+    .filter((cls) => hasEnded(cls, now))
     .sort((a, b) => startKey(b).localeCompare(startKey(a)))
   return oneByTurn(pasaron)[0] || null
 }
@@ -175,7 +245,7 @@ export function lastClass(classes, now = nowParts()) {
  * Lo usa: pages/Reservations/ReservationsPage.jsx.
  */
 export function turnSiblings(cls, classes) {
-  return turnRows(cls, classes).filter((row) => row.status !== 'cancelada')
+  return activeRows(turnRows(cls, classes))
 }
 
 /**
@@ -192,8 +262,9 @@ export function turnSiblings(cls, classes) {
  */
 export function withTurnMaterial(classes, cls, hasMaterial) {
   const key = turnKey(cls)
+  const enPie = new Set(activeRows(classes))
   return classes.map((item) =>
-    turnKey(item) === key && item.status !== 'cancelada' ? { ...item, hasMaterial } : item,
+    turnKey(item) === key && enPie.has(item) ? { ...item, hasMaterial } : item,
   )
 }
 
@@ -210,7 +281,7 @@ export function withTurnMaterial(classes, cls, hasMaterial) {
  * Lo usan: components/ClassCard.jsx, ClassDetailDialog.jsx, pages/Calendar/DayAgenda.jsx.
  */
 export function turnPriceLabel(rows) {
-  const enPie = rows.filter((row) => row.status !== 'cancelada')
+  const enPie = activeRows(rows)
   const precios = (enPie.length > 0 ? enPie : rows).map((row) => row.priceCents)
   const min = Math.min(...precios)
   const max = Math.max(...precios)
@@ -249,7 +320,8 @@ function namesOf(turn, viewRole) {
 }
 
 /**
- * Los turnos que pasan los filtros. Fechas 'YYYY-MM-DD', las dos puntas
+ * FILTRO: los turnos de una categoría según lo que ELIGIÓ el usuario en
+ * CategoryDialog (materia, desde/hasta, nombre). Fechas 'YYYY-MM-DD', las dos puntas
  * incluidas (se comparan como texto: el formato ordena bien). El nombre se
  * busca sin tildes ni mayúsculas y alcanza con una parte ("rami" encuentra
  * a Sofía Ramírez).

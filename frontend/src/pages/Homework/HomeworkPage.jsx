@@ -69,7 +69,14 @@ class HomeworkPage extends Component {
     return this.props.viewRole === 'teacher'
   }
 
-  /** Trae las tareas con fetchHomeworks (GET /api/homework) → `homeworks`. */
+  /**
+   * Trae las tareas con fetchHomeworks (GET /api/homework) → `homeworks`.
+   *
+   * FILTRO: solo docente o alumno (regla de pantalla). Qué tareas y qué
+   * entregas vienen lo decide el backend por el rol de la sesión
+   * (backend/src/routes/homework): el docente, las suyas con todas sus
+   * entregas; el alumno, solo la suya de cada tarea.
+   */
   load() {
     const token = ++this.fetchToken
     if (!['teacher', 'student'].includes(this.props.viewRole)) {

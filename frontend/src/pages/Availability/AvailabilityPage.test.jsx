@@ -252,7 +252,7 @@ describe('AvailabilityPage — vista de docente', () => {
     const modal = await abrirModalDelBloque()
 
     expect(
-      within(modal).getByText(/No tenés tarifas para clases híbridas: los alumnos no ven este horario/),
+      within(modal).getByText(/No se ofrece: no tenés tarifas para clases híbridas, así que los alumnos no ven este horario/),
     ).toBeInTheDocument()
   })
 

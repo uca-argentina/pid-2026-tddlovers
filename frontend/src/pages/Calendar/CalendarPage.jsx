@@ -6,7 +6,7 @@ import DayAgenda from './DayAgenda.jsx'
 import withFavorites from '../../routes/withFavorites.jsx'
 import { addDays, groupByDate, toISODate } from '../../utils/calendar.js'
 import { fetchClasses } from '../../api/client.js'
-import { groupTurns } from '../../utils/reservations.js'
+import { calendarTurns, pendingTurnCount } from '../../utils/reservations.js'
 import './CalendarPage.css'
 
 // Hasta dónde se buscan solicitudes pendientes para el aviso del docente.
@@ -47,7 +47,8 @@ const PENDING_LOOKAHEAD_DAYS = 90
  * Estado:
  *   - selectedIso: día elegido en MonthPane ("YYYY-MM-DD").
  *   - classes: filas de GET /api/classes del rango; classesLoading/Error.
- *   - pendingCount: reservas pendientes del docente en los próximos 90 días.
+ *   - pendingCount: clases (turnos) con alguna reserva pendiente del docente
+ *     en los próximos 90 días.
  */
 class CalendarPage extends Component {
   state = {
@@ -55,7 +56,7 @@ class CalendarPage extends Component {
     classes: [],
     classesLoading: false,
     classesError: null,
-    // Solo para el docente: cuántas reservas esperan que responda, en
+    // Solo para el docente: cuántas clases esperan que responda, en
     // cualquier mes (no solo el que se está mirando).
     pendingCount: 0,
   }
@@ -89,8 +90,10 @@ class CalendarPage extends Component {
   }
 
   /**
-   * Cuenta las solicitudes pendientes del docente: fetchClasses con
-   * status=pendiente (GET /api/classes) de hoy a hoy + 90 días → `pendingCount`.
+   * Cuenta las clases con solicitudes pendientes del docente: fetchClasses
+   * con status=pendiente (GET /api/classes) de hoy a hoy + 90 días →
+   * `pendingCount`. Cuenta TURNOS, como Mis reservas: una grupal con tres
+   * pendientes es una clase esperando respuesta, no tres.
    */
   loadPending = () => {
     const token = ++this.pendingToken
@@ -102,10 +105,9 @@ class CalendarPage extends Component {
     })
       .then((pendientes) => {
         if (token !== this.pendingToken) return
-        // Defensivo: no depender de que el backend respete el filtro.
-        this.setState({
-          pendingCount: pendientes.filter((item) => item.status === 'pendiente').length,
-        })
+        // FILTRO: el backend ya trae solo las pendientes (?status=pendiente);
+        // pendingTurnCount igual mira el estado y las agrupa por turno.
+        this.setState({ pendingCount: pendingTurnCount(pendientes) })
       })
       .catch(() => {
         // El aviso es un extra: si falla, el calendario sigue andando.
@@ -113,24 +115,16 @@ class CalendarPage extends Component {
   }
 
   /**
-   * Las clases agrupadas por fecha ISO, cada lista ordenada por hora.
-   *
-   * Esta pantalla es "mis clases": todo lo que sigue en pie, en cualquier
-   * estado. Una clase cancelada para todos no ocupa lugar en el calendario
-   * (se ve en "Mis reservas").
+   * FILTRO: las clases agrupadas por fecha ISO, cada lista ordenada por hora,
+   * sin los turnos cancelados para todos (calendarTurns en
+   * utils/reservations.js; regla de pantalla, se ven en "Mis reservas").
    *
    * Una grupal llega como una fila por alumno (así está en la base), pero es
-   * UNA clase: va una vez, como la reserva que representa al turno, con
-   * `turnKey` y todas sus reservas en `rows` (las canceladas también, al
-   * final, como en el detalle de Mis reservas). El docente acepta y toma
-   * lista de a uno desde el detalle. MonthPane solo mira id, startTime y
-   * subjectName, así que la forma plana le sirve igual.
+   * UNA clase: va una vez, como la reserva que representa al turno. MonthPane
+   * solo mira id, startTime y subjectName, así que la forma plana le sirve.
    */
   getClassesByDate() {
-    const clases = groupTurns(this.state.classes)
-      .filter((turn) => turn.active.length > 0)
-      .map((turn) => ({ ...turn.cls, turnKey: turn.key, rows: turn.rows }))
-    return groupByDate(clases)
+    return groupByDate(calendarTurns(this.state.classes))
   }
 
   /** MonthPane avisa qué rango abarca la grilla; recién ahí se pide. */
@@ -181,12 +175,13 @@ class CalendarPage extends Component {
 
   renderPending() {
     const { pendingCount } = this.state
+    // FILTRO: el aviso de solicitudes solo para el docente y si hay alguna.
     if (this.props.viewRole !== 'teacher' || pendingCount === 0) return null
     return (
       <p className="calendar-pending" role="status">
         {pendingCount === 1
-          ? 'Tenés 1 solicitud de clase esperando respuesta.'
-          : `Tenés ${pendingCount} solicitudes de clase esperando respuesta.`}{' '}
+          ? 'Tenés 1 clase con solicitudes esperando respuesta.'
+          : `Tenés ${pendingCount} clases con solicitudes esperando respuesta.`}{' '}
         <Link to="/reservas">Ver solicitudes</Link>
       </p>
     )

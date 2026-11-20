@@ -42,9 +42,10 @@ class AvailabilityPage extends Component {
   renderBody() {
     const { user, viewRole } = this.props
 
-    // La vista de alumno va PRIMERO y no pide usuario: es informativa y las
-    // rutas de la app no tienen portero (ver App.jsx). El login solo hace
-    // falta para editar.
+    // FILTRO: el docente ve su disponibilidad; cualquier otro rol, el
+    // tablero de reservar (regla de pantalla). La vista de alumno va PRIMERO
+    // y no pide usuario: es informativa y las rutas de la app no tienen
+    // portero (ver App.jsx). El login solo hace falta para editar.
     if (viewRole !== 'teacher') return this.renderStudentBooking()
 
     if (!user) {

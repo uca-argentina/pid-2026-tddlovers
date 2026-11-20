@@ -14,7 +14,9 @@ function toDate(iso) {
 }
 
 /**
- * ¿Ese día cae en alguno de los rangos? Los dos extremos cuentan.
+ * FILTRO: ¿ese día cae en alguno de los rangos? Los dos extremos cuentan. Es
+ * para que el docente vea sus días de licencia rayados; para el alumno lo
+ * decide el backend (`onVacation` en GET /api/availability).
  *
  * @param {Array<{startDate: string, endDate: string}>|null} vacations - de fetchMyVacations().
  * @param {string} iso - el día, 'YYYY-MM-DD'.

@@ -4,7 +4,8 @@ import Banner from '../../components/Banner.jsx'
 import { SpinnerIcon } from '../../components/icons.jsx'
 import { formatDayLong } from '../../utils/calendar.js'
 import { isFavorite } from '../../utils/favorites.js'
-import { packSummaryWith } from '../../utils/packs.js'
+import { countBookableByDate } from '../../utils/booking.js'
+import { usablePackFor } from '../../utils/packs.js'
 import './BookingResults.css'
 
 /**
@@ -18,8 +19,9 @@ import './BookingResults.css'
  *   - date: el día elegido (Date, de state.selectedIso).
  *   - cards: tarjetas de ese día ya filtradas (getFilteredByDate).
  *   - loading / filtered: si se está cargando el rango y si hay filtros activos.
- *   - packs: paquetes del alumno (GET /api/packs/mine); de acá sale el resumen
- *     por docente (packSummaryWith) que muestra cada BookingCard.
+ *   - packs: paquetes del alumno (GET /api/packs/mine, ya ajustados si se
+ *     reprograma); cada BookingCard muestra el que se puede usar con ESE
+ *     docente ESE día (usablePackFor), el mismo que ofrece el modal.
  *   - favoriteIds, favoriteError, onFavoriteChange, onFavoriteError: los de
  *     withFavorites, reenviados por BookingBoard.
  *   - onReservar(card) → handler: abre BookingDialog con esa tarjeta.
@@ -40,8 +42,9 @@ class BookingResults extends Component {
 
   render() {
     const { date, cards, loading } = this.props
-    // Las de vacaciones se muestran (en gris) pero no se pueden reservar.
-    const reservables = cards.filter((card) => !card.onVacation).length
+    // FILTRO: las de licencia se muestran (en gris) pero no cuentan como para
+    // reservar; mismo criterio que el número verde del calendario.
+    const reservables = countBookableByDate({ dia: cards }).dia || 0
 
     return (
       <section className="booking-results">
@@ -67,7 +70,7 @@ class BookingResults extends Component {
               <BookingCard
                 key={card.id}
                 card={card}
-                pack={packSummaryWith(this.props.packs, card.teacherId)}
+                pack={usablePackFor(this.props.packs, card.teacherId, card.date)}
                 favorite={isFavorite(this.props.favoriteIds, card.teacherId)}
                 showFavorite={Boolean(this.props.favoriteIds)}
                 onReservar={this.props.onReservar(card)}

@@ -1,6 +1,8 @@
 import { getPool } from './pool.js';
 import { ADDRESS_JSON, insertAddress, lockAddresses } from './addresses.js';
 import { todayIso } from '../lib/clock.js';
+import { featuredActiveOn } from './neuronas.js';
+import { hasRateInModality } from './rates.js';
 
 // Las ventanas de disponibilidad del docente (crudas; la expansión por fecha
 // la hace lib/availabilityExpansion.js).
@@ -105,14 +107,19 @@ export async function findTeacherWindows({ teacherId, from, to }) {
  * Ojo: devuelve meetingUrl y address completos; quien arma la respuesta al
  * alumno (lib/availabilityExpansion.js) se queda solo con `locality`.
  *
- * @param {{from: string, to: string}} rango - query de GET /api/availability, ya validado.
+ * @param {{from: string, to: string, today: string}} rango - query de GET
+ *   /api/availability, ya validado; today = now().iso de lib/clock.js.
  * @returns {Promise<Array<object>>} WINDOW_COLUMNS + teacherName,
  *   subjects: [{id, name, hourlyRateCents}], teacherAcceptsRewards, teacherFeatured
- *   (Destacado vigente hoy en hora argentina).
+ *   (Destacado vigente `today`, con la misma condición que el cupo: featuredActiveOn).
  * Origen: availability + teacher_addresses + users + teacher_rates/subjects + teacher_featured.
  * Lo usa: routes/availability/index.js.
  */
-export async function findPublishedWindows({ from, to }) {
+export async function findPublishedWindows({ from, to, today }) {
+  // FILTRO: solo docentes aprobados (uno pendiente o rechazado carga ventanas
+  // pero no se ofrece) y solo ventanas con alguna tarifa en su modalidad
+  // (hasRateInModality de db/rates.js): es el ÚNICO lugar donde se descarta una ventana sin
+  // tarifa; bookableRows (lib/availabilityExpansion.js) no lo repite.
   const result = await getPool().query(
     `SELECT ${WINDOW_COLUMNS},
             u.nombre || ' ' || u.apellido AS "teacherName",
@@ -120,20 +127,15 @@ export async function findPublishedWindows({ from, to }) {
             u.accepts_neurona_rewards AS "teacherAcceptsRewards",
             EXISTS (
               SELECT 1 FROM teacher_featured f
-              WHERE f.teacher_id = av.teacher_id
-                AND (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
-                    BETWEEN f.start_date AND f.end_date
+              WHERE f.teacher_id = av.teacher_id AND ${featuredActiveOn('f', '$3')}
             ) AS "teacherFeatured"
      FROM ${WINDOW_FROM}
      JOIN users u ON u.id = av.teacher_id
      WHERE ${OCCURS_IN_RANGE('$1', '$2')}
        AND u.approval_status = 'approved'
-       AND EXISTS (
-         SELECT 1 FROM teacher_rates r
-         WHERE r.teacher_id = av.teacher_id AND r.modality = av.modality
-       )
+       AND ${hasRateInModality('av.teacher_id', 'av.modality')}
      ORDER BY av.start_time, u.nombre, u.apellido`,
-    [from, to]
+    [from, to, today]
   );
   return result.rows;
 }

@@ -108,7 +108,10 @@ const RULES = {
 }
 
 /**
- * Lo que `role` puede hacer ahora con la clase: accept, cancel, pay, attend, reschedule.
+ * FILTRO: qué botones se muestran. Lo que `role` puede hacer ahora con la
+ * clase: accept, cancel, pay, attend, reschedule. Regla del backend
+ * (checkAction en backend/src/lib/classStates.js, que la vuelve a chequear);
+ * esto es solo su espejo para elegir botones.
  *
  * @param {object} cls - una clase de GET /api/classes.
  * @param {'teacher'|'student'} role - el rol de la sesión.

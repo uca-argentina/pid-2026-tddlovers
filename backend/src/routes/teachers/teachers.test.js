@@ -386,6 +386,8 @@ describe('teacher list', () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual(docentes);
+    // "Hoy" en hora argentina, para descartar a quien solo tiene ventanas pasadas.
+    expect(listTeachers).toHaveBeenCalledWith({ today: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) });
   });
 });
 

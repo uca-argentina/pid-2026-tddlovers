@@ -69,6 +69,8 @@ const VALUES = (a) => [
  * Lo usa: routes/teachers/index.js (GET /me/addresses).
  */
 export async function listSavedAddresses(teacherId) {
+  // FILTRO: solo las guardadas: las sueltas ("Otra dirección…" sin guardar)
+  // son de una sola ventana y no se listan en el perfil.
   const result = await getPool().query(
     `SELECT ${ADDRESS_COLUMNS}
      FROM teacher_addresses ta

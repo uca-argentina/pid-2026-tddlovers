@@ -147,7 +147,10 @@ class ReservationsPage extends Component {
     )
   }
 
-  /** Lo que el docente tiene pendiente con la última clase, si algo. */
+  /**
+   * FILTRO: el aviso "Falta tomar lista" de la última clase, solo para el
+   * docente (regla de pantalla).
+   */
   lastBadge(cls) {
     if (this.props.viewRole !== 'teacher') return null
     const sinLista = turnSiblings(cls, this.state.classes).some((row) =>
@@ -196,6 +199,8 @@ class ReservationsPage extends Component {
   }
 
   renderCategories() {
+    // FILTRO: cada categoría cuenta solo sus turnos (turnsIn en
+    // utils/reservations.js; regla de pantalla).
     const turns = groupTurns(this.state.classes)
     return (
       <ul className="reservations-categories" aria-label="Reservas por estado">

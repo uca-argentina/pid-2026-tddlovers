@@ -4,13 +4,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 // updateWindow) y con qué parámetros. La lógica de fechas vive en el SQL, así
 // que esto cuida que "hoy" llegue y que el recorte esté en la consulta.
 const client = { query: vi.fn(), release: vi.fn() };
-vi.mock('./pool.js', () => ({ getPool: () => ({ connect: async () => client }) }));
+const poolQuery = vi.fn();
+vi.mock('./pool.js', () => ({ getPool: () => ({ connect: async () => client, query: poolQuery }) }));
 vi.mock('../lib/clock.js', () => ({
   now: () => ({ iso: '2099-09-07', time: '10:00' }),
   todayIso: () => '2099-09-07',
 }));
 
-const { updateWindow } = await import('./availability.js');
+const { findPublishedWindows, updateWindow } = await import('./availability.js');
+const { featuredActiveOn } = await import('./neuronas.js');
 
 const DOCENTE_ID = '9f1c2d3e-4b5a-4c6d-8e7f-0a1b2c3d4e5f';
 const VENTANA_ID = 'f0f0f0f0-0000-4000-8000-000000000001';
@@ -57,5 +59,24 @@ describe('updateWindow overlap check', () => {
     // sueltas desde hoy aunque haya arrancado antes.
     expect(sql).toContain('(repeats_weekly OR start_date >= $7::date)');
     expect(sql).toContain('start_date >= GREATEST($3::date, $7::date)');
+  });
+});
+
+describe('findPublishedWindows', () => {
+  afterEach(() => vi.clearAllMocks());
+
+  it('decides "featured" with the Argentine today and the same condition as the cap', async () => {
+    poolQuery.mockResolvedValue({ rows: [] });
+
+    await findPublishedWindows({ from: '2099-09-07', to: '2099-09-13', today: '2099-09-07' });
+
+    const [sql, params] = poolQuery.mock.calls[0];
+    expect(params).toEqual(['2099-09-07', '2099-09-13', '2099-09-07']);
+    expect(sql).toContain(featuredActiveOn('f', '$3'));
+    // Nada de now() de Postgres, que corre en UTC.
+    expect(sql).not.toMatch(/now\(\)/);
+    // Solo aprobados y ventanas con tarifa en su modalidad.
+    expect(sql).toContain("u.approval_status = 'approved'");
+    expect(sql).toMatch(/r\.modality = av\.modality/);
   });
 });

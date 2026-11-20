@@ -117,7 +117,8 @@ export function occursOn(window, iso) {
 }
 
 /**
- * Las ventanas que caen ese día, de la más temprana a la más tarde.
+ * FILTRO: las ventanas del docente que caen ese día (occursOn, espejo del de
+ * backend/src/lib/availabilityExpansion.js), de la más temprana a la más tarde.
  * `windows` son las de fetchMyWindows. Lo usan: pages/Availability/WeekCalendar.jsx y
  * DayWindowsDialog.jsx.
  */
@@ -311,6 +312,20 @@ function isHttpUrl(text) {
 
 // Para "no tenés tarifas para clases ...".
 const MODALITY_PLURALS = { virtual: 'virtuales', in_person: 'presenciales', hybrid: 'híbridas' }
+
+/**
+ * FILTRO: ¿los alumnos ven esta ventana? Solo si el docente tiene alguna
+ * tarifa en su modalidad. Regla del backend (las filas de
+ * backend/src/lib/availabilityExpansion.js salen sin materias y no se
+ * ofrecen): acá solo se usa para avisarle al docente.
+ *
+ * @param {Array} modalityRates - ratesForModality(...) de utils/rates.js para la modalidad de la ventana.
+ * @returns {boolean}
+ * Lo usa: pages/Availability/WindowCard.jsx.
+ */
+export function windowOffered(modalityRates) {
+  return (modalityRates || []).length > 0
+}
 
 /** 'virtuales', 'presenciales', 'híbridas'. Lo usan: WindowForm.jsx, WindowCard.jsx. */
 export function modalityPlural(key) {

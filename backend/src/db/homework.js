@@ -58,6 +58,9 @@ const SUBMISSION_JSON = `
  * Lo usa: routes/homework/index.js (GET /api/homework/targets).
  */
 export async function findTargets(teacherId, sinceDate) {
+  // FILTRO: alumnos = los que tienen o tuvieron una clase no cancelada con el
+  // docente; grupales = turnos no cancelados con cupo > 1 desde `sinceDate`
+  // (recentGroupSince): a una de hace un año ya no tiene sentido asignarle.
   const pool = getPool();
   const [students, groups] = await Promise.all([
     pool.query(
@@ -184,6 +187,7 @@ async function queryTeacherHomeworks(where, params) {
  * Lo usa: routes/homework/index.js (GET /api/homework como docente).
  */
 export function listTeacherHomeworks(teacherId) {
+  // FILTRO: solo las tareas que asignó este docente.
   return queryTeacherHomeworks('h.teacher_id = $1', [teacherId]);
 }
 
@@ -226,6 +230,7 @@ async function queryStudentHomeworks(where, params) {
  * Lo usa: routes/homework/index.js (GET /api/homework como alumno).
  */
 export function listStudentHomeworks(studentId) {
+  // FILTRO: solo la propia entrega de cada tarea: el alumno no ve las de sus compañeros.
   return queryStudentHomeworks('e.student_id = $1', [studentId]);
 }
 

@@ -58,7 +58,8 @@ export default function withFavorites(Wrapped, { isStudent = byViewRole } = {}) 
       this.token += 1
     }
 
-    // Pide los favoritos si es alumno; si no, deja todo en null sin pedir nada.
+    // FILTRO: pide los favoritos solo si es alumno (regla de pantalla; el
+    // backend solo se los da a alumnos); si no, deja todo en null sin pedir nada.
     load() {
       const token = ++this.token
       if (!isStudent(this.props)) {

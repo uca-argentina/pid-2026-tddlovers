@@ -39,6 +39,8 @@ const CANCELLABLE = (teacher, from, to, nowIso, nowTime) => `
  * Lo usa: routes/teachers/index.js (GET /me/vacations).
  */
 export async function listTeacherVacations(teacherId, { today }) {
+  // FILTRO: solo las del docente que no terminaron: las pasadas ya no se
+  // pueden tocar y solo ensucian la lista.
   const result = await getPool().query(
     `SELECT ${VACATION_COLUMNS}
      FROM teacher_vacations v
@@ -56,9 +58,10 @@ export async function listTeacherVacations(teacherId, { today }) {
  * @param {{from: string, to: string}} rango - query de GET /api/availability.
  * @returns {Promise<Array<{id, teacherId, startDate, endDate}>>}
  * Origen: teacher_vacations.
- * Lo usa: routes/availability/index.js (se le pasa a expandAvailability).
+ * Lo usa: routes/availability/index.js (se le pasa a bookableRows).
  */
 export async function listVacationsInRange({ from, to }) {
+  // FILTRO: solo las que tocan el rango pedido (el tablero marca en gris esas fechas).
   const result = await getPool().query(
     `SELECT ${VACATION_COLUMNS}
      FROM teacher_vacations v

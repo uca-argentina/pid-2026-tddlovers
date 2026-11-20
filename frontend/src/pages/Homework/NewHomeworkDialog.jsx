@@ -22,6 +22,9 @@ import { homeworkEarns } from '../../utils/neuronas.js'
  * Datos (api/client.js):
  *   - fetchHomeworkTargets → GET /api/homework/targets al montar: { students,
  *     groups }, los destinos posibles.
+ *     FILTRO: a quién se le puede asignar lo decide el backend (findTargets
+ *     en backend/src/db/homework.js: sus alumnos y sus grupales de los
+ *     últimos 60 días en adelante); acá no se filtra.
  *   - createHomework → POST /api/homework al guardar, con { title,
  *     description, dueDate, dueTime } y studentId o classId.
  *

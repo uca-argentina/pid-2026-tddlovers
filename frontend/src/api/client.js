@@ -13,6 +13,8 @@
 // rechaza con un Error con `message` (en castellano, para mostrar), `status`,
 // `code` y `fields` (ver request()).
 
+import { activeRows } from '../utils/reservations.js'
+
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 
 // fetch NO manda cookies salvo que se le pida, y el backend guarda la sesión
@@ -231,20 +233,26 @@ export function deleteWindow(id) {
 /**
  * La disponibilidad YA con fecha y YA neta de lo reservado: una fila por
  * (ventana, fecha), con su modalidad, cupo, las materias que se pueden
- * reservar con su tarifa (`subjects`), los tramos libres (`free`) y las
- * grupales a las que sumarse (`groups`). La pantalla del alumno nunca ve una
- * ventana semanal — el backend la proyecta sobre el rango pedido.
+ * reservar con su tarifa (`subjects`), los inicios que ESTE alumno puede
+ * tomar con su duración máxima (`starts`, sin lo pasado ni lo que le choca
+ * con sus clases) y las grupales a las que se puede sumar (`groups`, cada una
+ * con su `maxStudents`). La pantalla del alumno nunca ve una ventana semanal
+ * — el backend la proyecta sobre el rango pedido.
+ *
+ * FILTRO: qué filas vienen lo decide el backend (bookableRows): no vienen
+ * las que no tienen nada reservable para este alumno, salvo las de licencia
+ * (`onVacation`, que se muestran en gris).
  *
  * `excludeClassId` es la clase propia que se está reprogramando: el backend
- * no la cuenta como ocupada, así se la puede correr media hora dentro del
- * mismo rato del docente.
+ * no la cuenta como ocupada, devuelve solo a ese docente con esa materia, y
+ * así se la puede correr media hora dentro del mismo rato del docente.
  *
  * GET /api/availability?from&to[&excludeClassId] -> [{ id, windowId, date,
  * dayKey, teacherId, teacherName, teacherAcceptsRewards, teacherFeatured,
- * start, end, modality, maxStudents, locality, subjects, free, groups,
+ * start, end, modality, maxStudents, locality, subjects, starts, groups,
  * onVacation }], sin las ventanas del propio usuario. Nunca trae el link ni
  * la dirección exacta. Backend: routes/availability/index.js (filas armadas
- * por expandAvailability de lib/availabilityExpansion.js).
+ * por bookableRows de lib/availabilityExpansion.js).
  * Lo usa: pages/Booking/BookingBoard.jsx.
  */
 export function fetchAvailability({ from, to, excludeClassId = null }) {
@@ -254,19 +262,19 @@ export function fetchAvailability({ from, to, excludeClassId = null }) {
 }
 
 /**
- * Las clases que ya reservó el alumno logueado y siguen en pie, para pintar
- * en gris los horarios que le chocan. Todo lo que no está cancelado ocupa el
- * horario (pendiente incluida), y eso ya no se pide con un solo ?status: se
- * traen todas y se filtra acá.
+ * Las clases del usuario logueado que siguen en pie, para dibujar las líneas
+ * del calendario del tablero de reservar.
+ *
+ * FILTRO: sin las canceladas (activeRows de utils/reservations.js; regla de
+ * pantalla: una cancelada no ocupa lugar). Se traen todas y se filtra acá
+ * porque "en pie" no se pide con un solo ?status.
  *
  * GET /api/classes?from&to -> [clase] sin las canceladas (misma forma que
  * fetchClasses). Backend: routes/classes/index.js.
- * Lo usa: pages/Booking/BookingBoard.jsx (para annotateClashes de utils/booking.js).
+ * Lo usa: pages/Booking/BookingBoard.jsx.
  */
 export function fetchMyLessons({ from, to }) {
-  return request(`/api/classes?from=${from}&to=${to}`).then((lessons) =>
-    lessons.filter((lesson) => lesson.status !== 'cancelada'),
-  )
+  return request(`/api/classes?from=${from}&to=${to}`).then(activeRows)
 }
 
 /**
@@ -546,7 +554,8 @@ export function fetchPackOffers(teacherId) {
  * Los paquetes que compró el alumno logueado, cada uno con su duración por
  * clase (`classMinutes`), `remaining` (las clases que le quedan: cada
  * asistencia descuenta las que usó), `available` (las que todavía puede
- * reservar) y `expired`.
+ * reservar), `expired`, `teacherApproved` y `usable` (no vencido, con
+ * clases disponibles y docente aprobado: lo decide el backend).
  *
  * GET /api/packs/mine -> [{ id, packId, teacherId, teacherName, classCount,
  * classMinutes, priceCents, purchasedAt, expiresOn, ...StudentPack.summary }]

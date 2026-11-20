@@ -1,4 +1,5 @@
 import { getPool } from './pool.js';
+import { ratedSubjectsJson } from './rates.js';
 
 // Los docentes favoritos del alumno. Solo se leen los aprobados: el favorito
 // de un docente pendiente o dado de baja queda guardado pero no se muestra,
@@ -21,17 +22,14 @@ import { getPool } from './pool.js';
  * Lo usa: routes/favorites/index.js (GET /api/favorites).
  */
 export async function listFavoriteTeachers(studentId) {
+  // FILTRO: solo los favoritos del propio alumno y de docentes aprobados; el
+  // de un docente pendiente o dado de baja queda guardado pero no sale (y
+  // vuelve si lo aprueban). Uno sin materias tarifadas sí sale, vacío.
   const result = await getPool().query(
     `SELECT u.id, u.nombre, u.apellido, COALESCE(subj.subjects, '[]'::json) AS subjects
      FROM favorite_teachers f
      JOIN users u ON u.id = f.teacher_id
-     LEFT JOIN LATERAL (
-       SELECT json_agg(json_build_object('id', s.id, 'name', s.name) ORDER BY s.name) AS subjects
-       FROM subjects s
-       WHERE EXISTS (
-         SELECT 1 FROM teacher_rates r WHERE r.teacher_id = u.id AND r.subject_id = s.id
-       )
-     ) subj ON true
+     LEFT JOIN LATERAL (${ratedSubjectsJson('u.id')}) subj ON true
      WHERE f.student_id = $1 AND u.role = 'teacher' AND u.approval_status = 'approved'
      ORDER BY u.nombre, u.apellido`,
     [studentId]

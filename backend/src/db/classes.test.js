@@ -21,8 +21,14 @@ vi.mock('./neuronas.js', () => ({
 }));
 vi.mock('../lib/clock.js', () => ({ now: () => ({ iso: '2099-09-01', time: '10:00' }) }));
 
-const { bookClass, findClassesForUser, rescheduleClass, transitionClass, transitionClasses } =
-  await import('./classes.js');
+const {
+  bookClass,
+  findClassesForUser,
+  findTakenSlots,
+  rescheduleClass,
+  transitionClass,
+  transitionClasses,
+} = await import('./classes.js');
 const { syncTurnCredits } = await import('./neuronas.js');
 
 const DOCENTE = '5b0e6c1a-2f3d-4a5b-8c7d-9e0f1a2b3c4d';
@@ -97,9 +103,9 @@ describe('bookClass y la licencia', () => {
 });
 
 describe('bookClass sumándose a una grupal', () => {
-  // La ventana se editó después de que el primero reservó: ahora dice cupo 6,
-  // híbrida y otro link. El turno ya tiene un alumno con la copia vieja.
-  const editada = { ...ventana, maxStudents: 6, modality: 'hybrid', meetingUrl: 'link-nuevo' };
+  // La ventana se editó después de que el primero reservó: ahora dice cupo 6
+  // y otro link. El turno ya tiene un alumno con la copia vieja.
+  const editada = { ...ventana, maxStudents: 6, meetingUrl: 'link-nuevo' };
   const turno = (over = {}) => ({
     end: '14:30',
     subjectId: 'mate',
@@ -134,6 +140,16 @@ describe('bookClass sumándose a una grupal', () => {
       conflict: 'La clase grupal ya se llenó.',
     });
     expect(indexOf(/INSERT INTO classes/)).toBe(-1);
+  });
+
+  it('rejects joining a group whose modality is not the window one (the price was for the window)', async () => {
+    handlers = [[/FROM classes\s+WHERE teacher_id = \$1 AND class_date/, () => ({ rows: [turno()] })]];
+
+    const result = await bookClass(reserva({ window: { ...editada, modality: 'hybrid' } }));
+
+    expect(result.conflict).toMatch(/otra modalidad/);
+    expect(indexOf(/INSERT INTO classes/)).toBe(-1);
+    expect(sqls()).toContain('ROLLBACK');
   });
 
   it('an individual turn already taken is taken, even if the window is now a group', async () => {
@@ -244,5 +260,29 @@ describe('hasMaterial', () => {
     expect(sqls()[0]).toMatch(
       /c\.status IN \('aceptada', 'confirmada', 'realizada', 'no_presentada'\) AND EXISTS \( SELECT 1 FROM class_materials/
     );
+  });
+});
+
+describe('findTakenSlots', () => {
+  it('brings the capacity and modality copied on the turn, not the window', async () => {
+    const fila = {
+      teacherId: DOCENTE,
+      date: '2099-09-14',
+      start: '13:00',
+      end: '14:00',
+      subjectId: 'mate',
+      subjectName: 'Matemática',
+      enrolled: 3,
+      maxStudents: 3,
+      modality: 'virtual',
+    };
+    handlers = [[/GROUP BY c\.teacher_id/, () => ({ rows: [fila] })]];
+
+    expect(await findTakenSlots({ from: '2099-09-14', to: '2099-09-20' })).toEqual([fila]);
+
+    const sql = sqls()[0];
+    expect(sql).toContain('max(c.max_students)::int AS "maxStudents"');
+    expect(sql).toContain('c.modality');
+    expect(sql).toContain("c.status <> 'cancelada'");
   });
 });

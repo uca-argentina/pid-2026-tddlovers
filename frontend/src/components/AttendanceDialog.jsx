@@ -57,7 +57,10 @@ class AttendanceDialog extends Component {
     this.mark([row], attended, row.id)
   }
 
-  /** Los que todavía no tienen marca, presentes de una: lo más común en una grupal. */
+  /**
+   * FILTRO: "Todos presentes" marca solo a los que todavía no tienen marca
+   * (regla de pantalla): lo más común en una grupal.
+   */
   handleAllPresent = () => {
     const sinMarca = this.props.rows.filter(
       (row) => !['realizada', 'no_presentada'].includes(row.status),

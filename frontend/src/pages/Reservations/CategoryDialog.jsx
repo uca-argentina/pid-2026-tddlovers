@@ -86,6 +86,8 @@ class CategoryDialog extends Component {
   render() {
     const { category, turns, viewRole, renderCard, onClose } = this.props
     const { filters } = this.state
+    // FILTRO: lo que ELIGIÓ el usuario (materia, fechas, nombre), con
+    // filterTurns de utils/reservations.js.
     const visibles = filterTurns(turns, filters, viewRole)
     const filtrando = hasFilters(filters)
 

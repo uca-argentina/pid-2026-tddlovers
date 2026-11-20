@@ -2,7 +2,7 @@ import { Component } from 'react'
 import FavoriteButton from '../../components/FavoriteButton.jsx'
 import { ClockIcon, PinIcon, UsersIcon, VideoIcon } from '../../components/icons.jsx'
 import { formatRangeLabel } from '../../utils/availability.js'
-import { formatClashes, formatEnrolled, lowestRate } from '../../utils/booking.js'
+import { formatEnrolled, lowestRate } from '../../utils/booking.js'
 import { formatHourlyRate } from '../../utils/rates.js'
 import { packClassesLabel } from '../../utils/packs.js'
 import { capacityLabel, modalityLabel, needsAddress } from '../../utils/windows.js'
@@ -17,25 +17,22 @@ import { capacityLabel, modalityLabel, needsAddress } from '../../utils/windows.
  * una clase que ya existe es distinto de abrir una nueva, y es justo lo que
  * vuelve útil una grupal.
  *
- * Una superposición con clases propias NO apaga la tarjeta mientras quede
- * algún horario libre: el modal deja elegir entre lo que queda. Recién sin
- * ninguno el botón va deshabilitado.
+ * Qué inicios y qué grupales trae la tarjeta lo decidió el backend para este
+ * alumno (sin lo completo, sin lo que le choca, sin las grupales en las que
+ * ya está): si la tarjeta llegó, tiene algo para reservar. La única que llega
+ * sin nada es la de licencia, que se muestra en gris.
  *
  * Los estilos están en BookingResults.css: fuera de la lista no significan
  * nada (misma excepción que DayCell con MonthGrid.css).
  *
  * Props (de BookingResults):
- *   - card: una fila de GET /api/availability anotada por annotateClashes.
- *   - pack: resumen del paquete del alumno con ese docente (packSummaryWith), o null.
+ *   - card: una fila de GET /api/availability.
+ *   - pack: el paquete del alumno que sirve con ese docente ese día (usablePackFor), o null.
  *   - favorite / showFavorite: si el docente es favorito y si mostrar el corazón.
  *   - onFavoriteChange, onFavoriteError: para FavoriteButton (de withFavorites).
  *   - onReservar: onClick del botón "Reservar" (abre BookingDialog).
  */
 class BookingCard extends Component {
-  getGroupsWithRoom() {
-    return this.props.card.groups.filter((group) => !group.joined)
-  }
-
   /**
    * '$ 5.000/h' si todas las materias cuestan lo mismo; si no, 'Desde
    * $ 5.000/h': el precio exacto depende de la materia y la duración.
@@ -67,14 +64,14 @@ class BookingCard extends Component {
   }
 
   /**
-   * Si el alumno tiene un paquete vigente con este docente: cuántas clases
-   * puede reservar todavía. Se cuentan las disponibles (no las que quedan) para
-   * no prometer clases que ya están apartadas por otras reservas; si no queda
-   * ninguna, no se muestra nada y el modal explica que se paga aparte.
+   * FILTRO: el resumen del paquete solo si hay uno que sirve con este docente
+   * ESTE día (usablePackFor: `usable` del backend + que no venza antes). Se
+   * cuentan las disponibles (no las que quedan) para no prometer clases que
+   * ya están apartadas por otras reservas.
    */
   renderPack() {
     const { pack } = this.props
-    if (!pack || pack.available <= 0) return null
+    if (!pack) return null
     const quedan = pack.available === 1 ? 'Te queda' : 'Te quedan'
     return (
       <p className="booking-card-pack">
@@ -85,7 +82,8 @@ class BookingCard extends Component {
 
   renderTags() {
     const { card } = this.props
-    const destacada = card.teacherFeatured && !card.onVacation
+    // De licencia el backend ya manda teacherFeatured en false.
+    const destacada = card.teacherFeatured
     if (!destacada && !card.teacherAcceptsRewards) return null
     return (
       <div className="booking-card-tags">
@@ -99,13 +97,14 @@ class BookingCard extends Component {
 
   renderGroups() {
     const { card } = this.props
-    const grupos = this.getGroupsWithRoom()
+    // Son solo las grupales a las que este alumno se puede sumar (backend).
+    const grupos = card.groups
     if (grupos.length === 0) return null
 
     const primero = grupos[0]
     const texto =
       grupos.length === 1
-        ? `Sumate a ${primero.subjectName} de las ${primero.start}: ${formatEnrolled(primero.enrolled, card.maxStudents)}.`
+        ? `Sumate a ${primero.subjectName} de las ${primero.start}: ${formatEnrolled(primero.enrolled, primero.maxStudents)}.`
         : `${grupos.length} clases grupales con lugar para sumarte.`
 
     return <p className="booking-card-groups">{texto}</p>
@@ -113,14 +112,11 @@ class BookingCard extends Component {
 
   render() {
     const { card } = this.props
-    // De vacaciones no hay nada que reservar: lo que importa es el motivo, no
-    // las superposiciones con clases propias.
-    const aviso = card.onVacation ? null : formatClashes(card.clashes, card.bookable)
     const materias = card.subjects.map((subject) => subject.name).join(' · ')
 
     return (
       <li
-        className={`booking-card ${card.bookable ? '' : 'is-blocked'} ${card.onVacation ? 'is-vacation' : ''}`}
+        className={`booking-card ${card.onVacation ? 'is-blocked is-vacation' : ''}`}
       >
         <div className="booking-card-head">
           <span className="booking-card-subject">{materias}</span>
@@ -160,19 +156,12 @@ class BookingCard extends Component {
         {this.renderPack()}
         {this.renderGroups()}
 
-        {card.joined.length > 0 ? (
-          <p className="booking-card-joined">
-            Ya estás anotado a las {card.joined.map((group) => group.start).join(' y ')}.
-          </p>
-        ) : null}
-        {aviso ? <p className="booking-card-clash">{aviso}</p> : null}
-
         <div className="booking-card-actions">
           <span className="booking-card-price">{this.renderRate()}</span>
           <button
             type="button"
             className="btn btn-primary"
-            disabled={!card.bookable}
+            disabled={card.onVacation}
             onClick={this.props.onReservar}
             // Los botones de todas las tarjetas dicen lo mismo: sin esto, leído
             // con un lector de pantalla no se sabe cuál es cuál.

@@ -25,9 +25,20 @@ import {
 // Locks (pg_advisory_xact_lock):
 //   'neuronas:' || userId  por usuario; orden siempre docente → alumno
 //   'neuronas-featured'    global, en buyFeatured (después del del docente)
-// Lo usan: db/classes.js (syncTurnCredits, hasBalanceFor), db/homework.js
+// Lo usan: db/availability.js (featuredActiveOn), db/classes.js (syncTurnCredits, hasBalanceFor), db/homework.js
 // (creditCorrection, removeHomeworkOnTimeCredit), routes/neuronas y
 // routes/classes (findBalance, settleHomeworkCredits).
+
+/**
+ * La condición de "Destacado vigente el día `today`" para una fila de
+ * teacher_featured con alias `alias`. Una sola definición para el cupo
+ * (findFeaturedStatus, buyFeatured) y para el tablero (findPublishedWindows en
+ * db/availability.js): si no, un docente podía contar como destacado en un
+ * lado y no en el otro. `today` es el placeholder ('$2') con now().iso de
+ * lib/clock.js, nunca now() de Postgres (que corre en UTC).
+ */
+export const featuredActiveOn = (alias, today) =>
+  `(${alias}.start_date <= ${today}::date AND ${alias}.end_date >= ${today}::date)`;
 
 /** Toma el lock 'neuronas:' || userId dentro de la transacción de `client`. */
 async function lockUser(client, userId) {
@@ -314,6 +325,7 @@ export async function removeHomeworkOnTimeCredit(client, submissionId, studentId
  * Lo usan: hasBalanceFor y buyFeatured (acá), routes/neuronas/index.js y routes/classes/index.js.
  */
 export async function findBalance(userId, db = getPool()) {
+  // FILTRO: los canjes de clases canceladas no restan: cancelar devuelve las neuronas.
   const result = await db.query(
     `SELECT earned, earned - spent_classes - spent_featured AS balance
      FROM (
@@ -376,6 +388,8 @@ export async function findCreditCounts(userId) {
  * Lo usa: routes/neuronas/index.js (GET /).
  */
 export async function listMovements(userId, limit = 50) {
+  // FILTRO: solo los del usuario, sin los canjes de clases canceladas (ya
+  // volvieron al saldo), los últimos `limit`.
   const result = await getPool().query(
     `SELECT id, reason, amount, detail, "createdAt" FROM (
        SELECT id, reason, amount, detail, created_at AS "createdAt"
@@ -408,11 +422,16 @@ export async function listMovements(userId, limit = 50) {
  * Lo usa: routes/neuronas/index.js (GET / como docente).
  */
 export async function findFeaturedStatus(teacherId, today) {
+  // FILTRO: el cupo global cuenta solo Destacados vigentes de docentes
+  // aprobados: uno dado de baja no se muestra en el tablero, así que no
+  // tiene por qué ocupar un lugar.
   const result = await getPool().query(
     `SELECT
-       (SELECT to_char(max(end_date), 'YYYY-MM-DD') FROM teacher_featured
-        WHERE teacher_id = $1 AND end_date >= $2::date) AS "activeUntil",
-       (SELECT count(*)::int FROM teacher_featured WHERE end_date >= $2::date) AS active`,
+       (SELECT to_char(max(f.end_date), 'YYYY-MM-DD') FROM teacher_featured f
+        WHERE f.teacher_id = $1 AND ${featuredActiveOn('f', '$2')}) AS "activeUntil",
+       (SELECT count(*)::int FROM teacher_featured f
+        JOIN users u ON u.id = f.teacher_id
+        WHERE ${featuredActiveOn('f', '$2')} AND u.approval_status = 'approved') AS active`,
     [teacherId, today]
   );
   const { activeUntil, active } = result.rows[0];
@@ -438,8 +457,13 @@ export async function buyFeatured(teacherId, today) {
     await lockUser(client, teacherId);
     await client.query(`SELECT pg_advisory_xact_lock(hashtext('neuronas-featured'))`);
 
+    // FILTRO: como findFeaturedStatus, solo los vigentes de docentes aprobados
+    // (quien compra lo es: la ruta lo exige).
     const active = await client.query(
-      `SELECT teacher_id AS "teacherId" FROM teacher_featured WHERE end_date >= $1::date`,
+      `SELECT f.teacher_id AS "teacherId"
+       FROM teacher_featured f
+       JOIN users u ON u.id = f.teacher_id
+       WHERE ${featuredActiveOn('f', '$1')} AND u.approval_status = 'approved'`,
       [today]
     );
     const conflict = async (message) => {

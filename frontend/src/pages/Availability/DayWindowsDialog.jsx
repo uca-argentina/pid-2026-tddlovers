@@ -112,6 +112,8 @@ class DayWindowsDialog extends Component {
   }
 
   /** Un día que ya pasó se mira, no se toca: esas clases ya fueron. */
+  // FILTRO: un día pasado se ve pero no se edita (regla de pantalla; el
+  // backend igual valida las fechas de la ventana).
   canEdit() {
     return this.props.iso >= this.props.today
   }

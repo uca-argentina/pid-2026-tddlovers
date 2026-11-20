@@ -27,6 +27,9 @@ const turnParams = ({ teacherId, date, startTime }) => [teacherId, date, startTi
  * Lo usa: routes/classes/index.js (todas las rutas de material lo devuelven).
  */
 export async function findMaterial(turn) {
+  // FILTRO: el material es del TURNO (docente, fecha, inicio), no de la fila:
+  // en una grupal todos los anotados ven lo mismo. Quién puede verlo lo decide
+  // antes checkViewMaterial (lib/classMaterials.js). Nunca sale storage_key.
   const pool = getPool();
   const [material, files] = await Promise.all([
     pool.query(

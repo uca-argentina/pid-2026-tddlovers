@@ -189,6 +189,8 @@ export function cancelReasonFor(cls, role) {
  * Lo usa: forViewer (este archivo).
  */
 export function canSeeExactAddress(cls, role) {
+  // FILTRO: el alumno no ve la dirección exacta hasta pagar (o si la clase es
+  // gratis / cubierta entera): antes alcanza con la localidad.
   if (role === 'teacher') return true;
   if (cls.status === 'pendiente' || cls.status === 'cancelada') return false;
   return Boolean(cls.paidAt) || cls.priceCents === 0;
@@ -206,6 +208,8 @@ export function canSeeExactAddress(cls, role) {
  * Lo usa: routes/classes/index.js.
  */
 export function forViewer(cls, role) {
+  // FILTRO: saca `address` de toda clase que va a un alumno que todavía no la
+  // puede ver (canSeeExactAddress).
   if (!cls || canSeeExactAddress(cls, role)) return cls;
   return { ...cls, address: null };
 }

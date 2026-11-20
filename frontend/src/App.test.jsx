@@ -230,7 +230,7 @@ describe('App', () => {
     // Llega la sesión de un docente: el calendario se monta ya como docente
     // y pide el aviso de solicitudes.
     contestar(user)
-    expect(await screen.findByText(/Tenés 1 solicitud de clase/)).toBeInTheDocument()
+    expect(await screen.findByText(/Tenés 1 clase con solicitudes/)).toBeInTheDocument()
   })
 
   it('el login no espera a la sesión', () => {

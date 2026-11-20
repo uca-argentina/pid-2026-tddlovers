@@ -55,6 +55,8 @@ function parseIntField(text) {
  *   - Docente: fetchMyPackOffers → GET /api/teachers/me/packs.
  *     Crear: createPackOffer → POST /api/teachers/me/packs.
  *     Dejar de ofrecer: deletePackOffer → DELETE /api/teachers/me/packs/:id.
+ *   FILTRO: el catálogo (GET /api/packs) trae solo ofertas activas de
+ *   docentes aprobados; lo decide el backend.
  *   - Alumno: fetchMyPacks → GET /api/packs/mine y fetchPackOffers →
  *     GET /api/packs (paquetes de docentes aprobados).
  *     Comprar: buyPack → POST /api/packs/:id/buy.
@@ -219,7 +221,10 @@ class PacksPage extends Component {
       })
   }
 
-  /** Desactiva una oferta (DELETE /api/teachers/me/packs/:id) y la saca de `offers`. */
+  /**
+   * Desactiva una oferta (DELETE /api/teachers/me/packs/:id) y la saca de `offers`.
+   * FILTRO: una desactivada no se lista más (regla del backend: solo manda las activas).
+   */
   handleRemove = (offer) => () => {
     if (this.state.removing) return
     this.setState({ removing: offer.id, error: null })
@@ -389,10 +394,17 @@ class PacksPage extends Component {
           </span>
           <span className={`pack-card-badge ${pack.expired ? 'is-muted' : ''}`}>{estado}</span>
         </div>
-        <p className="pack-card-remaining">
-          Te {pack.remaining === 1 ? 'queda' : 'quedan'} <strong>{classesLabel(pack.remaining)}</strong>{' '}
-          de {pack.classCount}
-        </p>
+        {/* Vencido ya no "le queda" nada: lo que no usó se perdió. */}
+        {pack.expired ? (
+          <p className="pack-card-remaining">
+            Sin usar: <strong>{classesLabel(pack.remaining)}</strong>
+          </p>
+        ) : (
+          <p className="pack-card-remaining">
+            Te {pack.remaining === 1 ? 'queda' : 'quedan'}{' '}
+            <strong>{classesLabel(pack.remaining)}</strong> de {pack.classCount}
+          </p>
+        )}
         <div
           className="pack-meter"
           role="img"
@@ -400,6 +412,7 @@ class PacksPage extends Component {
         >
           <span style={{ width: `${(usadas / pack.classCount) * 100}%` }} />
         </div>
+        {/* FILTRO: las apartadas solo en un paquete vigente (regla de pantalla). */}
         {pack.remaining > pack.available && !pack.expired ? (
           <p className="pack-card-meta">
             {classesLabel(pack.remaining - pack.available)} ya{' '}

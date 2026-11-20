@@ -111,6 +111,9 @@ class NavBar extends Component {
     // La pantalla es la misma para los dos roles, pero lo que se va a hacer
     // ahí no: el docente carga los horarios que da y el alumno busca uno para
     // reservar. El aria-label sí queda igual para los dos.
+    // FILTRO: qué ve cada rol en la barra (regla de pantalla; el backend
+    // igual rechaza lo que no le toca): el buscador solo el alumno, el admin
+    // solo /admin, y Favoritos no lo ve el docente.
     const esDocente = this.props.viewRole === 'teacher'
     const esAdmin = this.props.viewRole === 'admin'
     const etiquetaDisponibilidad = esDocente ? 'Disponibilidad' : 'Reservar'

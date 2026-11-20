@@ -10,6 +10,7 @@ import {
   nowParts,
   statusLabel,
 } from '../utils/classStates.js'
+import { activeRows } from '../utils/reservations.js'
 import './ClassActions.css'
 
 // El orden de las pastillas: lo que espera algo primero.
@@ -43,8 +44,10 @@ class TurnActions extends Component {
     return this.props.now || nowParts()
   }
 
+  // FILTRO: solo las reservas en pie del turno reciben las acciones (regla
+  // de pantalla; el backend re-chequea cada una con checkAction).
   active() {
-    return this.props.rows.filter((row) => row.status !== 'cancelada')
+    return activeRows(this.props.rows)
   }
 
   withAction(action) {

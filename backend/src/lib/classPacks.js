@@ -129,10 +129,20 @@ export class StudentPack {
    * ya lo descontaron). `reserved`: las que usan las reservas en curso
    * (pendiente, aceptada o confirmada), que todavía no descontaron pero ya
    * tienen su lugar apartado. Una ausente o una cancelada no cuenta para
-   * ninguna de las dos.
+   * ninguna de las dos. `teacherApproved`: si el docente sigue aprobado (sin
+   * eso no se le puede reservar, y el paquete no sirve aunque le queden clases).
    */
-  constructor({ id, classCount, classMinutes, expiresOn, attended = 0, reserved = 0 }) {
+  constructor({
+    id,
+    classCount,
+    classMinutes,
+    expiresOn,
+    attended = 0,
+    reserved = 0,
+    teacherApproved = false,
+  }) {
     this.id = id;
+    this.teacherApproved = Boolean(teacherApproved);
     this.classCount = classCount;
     this.classMinutes = classMinutes;
     this.expiresOn = expiresOn;
@@ -210,15 +220,19 @@ export class StudentPack {
   /**
    * Lo que viaja por la API, con las cuentas ya hechas.
    * @param {string} today - todayIso() de lib/clock.js.
-   * @returns {{remaining: number, available: number, expired: boolean}} se
-   *   mezcla con la fila del paquete.
+   * @returns {{remaining: number, available: number, expired: boolean, usable: boolean}}
+   *   se mezcla con la fila del paquete. `usable`: si hoy sirve para reservar
+   *   (no venció, le quedan clases sin reservar y el docente está aprobado),
+   *   así el front no tiene que re-decidirlo.
    * Lo usa: routes/packs/index.js (withSummary).
    */
   summary(today) {
+    const expired = this.isExpired(today);
     return {
       remaining: this.remaining(),
       available: this.available(),
-      expired: this.isExpired(today),
+      expired,
+      usable: !expired && this.available() > 0 && this.teacherApproved,
     };
   }
 }

@@ -1,37 +1,133 @@
-// Lo que hace la pantalla del alumno con las filas que manda el backend. Cada
-// fila es UNA ventana de un docente en UNA fecha (ver
+// Lo que hace la pantalla del alumno con las filas que manda el backend, y el
+// ÚNICO lugar de los filtros que ELIGE el usuario en el tablero (día, materia,
+// modalidad, individual/grupal, horario, texto, solo favoritos).
+//
+// Cada fila es UNA ventana de un docente en UNA fecha (ver
 // lib/availabilityExpansion.js en el backend): modalidad, cupo, las materias
-// que se pueden reservar con su tarifa (`subjects`), los tramos libres
-// (`free`) y las grupales a las que sumarse (`groups`). Lo que ya está
-// reservado con ese docente ya viene restado; acá solo se cruza con las
-// clases PROPIAS del alumno y se filtra.
+// que se pueden reservar con su tarifa (`subjects`), los inicios que ESTE
+// alumno puede reservar con su duración máxima (`starts`) y las grupales a
+// las que se puede sumar (`groups`). Qué se ve y qué no (lo completo, lo que
+// le choca con sus clases, lo pasado, lo ya anotado, el destacado de
+// licencia) lo decide el backend: acá no se vuelve a calcular.
 //
-// No hay turnos cerrados: la duración la elige el alumno. De cada tramo libre
-// salen inicios en :00/:30, cada uno con la clase más larga que entra.
-//
-// Es el primer archivo de utils/ que importa de otro utils/: la dirección es
-// siempre booking -> {calendar, availability} y nunca al revés, así que no
-// hay ciclo posible. (windows.js importa de acá, y acá no se importa de
-// windows.js por lo mismo.) También importa de rates.js, que no importa de nadie.
+// La dirección de imports es siempre booking -> {calendar, availability} y
+// nunca al revés, así que no hay ciclo posible. (windows.js y search.js
+// importan de acá, y acá no se importa de ellos por lo mismo.)
 //
 // Origen de los datos: las filas ("cards") son la respuesta de
 // GET /api/availability (fetchAvailability), cada una { id, windowId, date,
 // dayKey, teacherId, teacherName, teacherAcceptsRewards, teacherFeatured,
-// start, end, modality, maxStudents, locality, subjects, free, groups,
-// onVacation } — la arma expandAvailability de
-// backend/src/lib/availabilityExpansion.js. Las clases propias del alumno
-// salen de fetchMyLessons (GET /api/classes, sin las canceladas).
+// start, end, modality, maxStudents, locality, subjects, starts, groups,
+// onVacation } — la arma bookableRows de
+// backend/src/lib/availabilityExpansion.js.
 //
 // Lo usan: pages/Booking/ (BookingBoard, BookingCard, BookingDialog,
-// BookingFilters), utils/windows.js, utils/search.js y utils/reservations.js
-// (normalizeText).
+// BookingFilters, BookingResults), utils/windows.js, utils/search.js y
+// utils/reservations.js (normalizeText).
+//
+// ---------------------------------------------------------------------------
+// ÍNDICE: Filtros del frontend. Cada uno lleva un comentario `FILTRO:` que
+// dice qué oculta, si lo eligió el usuario o es regla, y quién decide.
+//
+// Reservar (tablero del alumno)
+//   utils/booking.js:filterCards — los filtros que elige el alumno (día, materia, modalidad,
+//     tipo, horario, texto, favoritos).
+//   utils/booking.js:countBookableByDate — el número verde / "N para reservar" sin licencias.
+//   utils/booking.js:filterSubjectsFor — chips de materia: solo las del rango cargado.
+//   pages/Booking/BookingBoard.jsx:getFilters — "Solo favoritos" pasa a lista de docentes.
+//   pages/Booking/BookingBoard.jsx:getFilteredByDate — aplica filterCards y agrupa por día.
+//   pages/Booking/BookingBoard.jsx:getFreeByDate — número verde (countBookableByDate).
+//   pages/Booking/BookingBoard.jsx:getFilterSubjects — chips de materia (filterSubjectsFor).
+//   pages/Booking/BookingBoard.jsx:componentDidUpdate — apaga "Solo favoritos" si no es alumno.
+//   pages/Booking/BookingBoard.jsx:renderQuickFilters — chip de favoritos solo para alumnos.
+//   pages/Booking/BookingBoard.jsx:renderMobile — buscador solo para alumnos.
+//   pages/Booking/BookingFilters.jsx:BookingFilters — el panel donde se eligen los filtros.
+//   pages/Booking/BookingFilters.jsx:renderFavorites — "Solo favoritos" solo para alumnos.
+//   pages/Booking/BookingResults.jsx:render — "N clases para reservar" sin licencias.
+//   pages/Booking/BookingCard.jsx:renderPack — resumen del paquete solo si sirve ese día.
+//   utils/packs.js:usablePackFor — el paquete usable con ese docente ese día (`usable` del back).
+//   api/client.js:fetchAvailability — qué filas vienen lo decide el backend (bookableRows).
+//
+// Búsqueda y sugerencias
+//   utils/search.js:suggest — sugerencias que pegan con lo tipeado.
+//   components/SearchBar.jsx:getSuggestions — usa suggest; docentes aprobados del backend.
+//
+// Calendario
+//   pages/Calendar/CalendarPage.jsx:getClassesByDate — sin turnos cancelados para todos.
+//   pages/Calendar/CalendarPage.jsx:loadPending — clases (turnos) con solicitudes pendientes.
+//   pages/Calendar/CalendarPage.jsx:renderPending — el aviso solo para el docente.
+//   utils/reservations.js:calendarTurns — un turno por clase, sin los cancelados para todos.
+//   pages/Calendar/DayAgenda.jsx:renderPlace — dirección exacta solo pagada (la decide el back).
+//   pages/Calendar/DayAgenda.jsx:renderFavorite — corazón solo para alumnos.
+//   pages/Calendar/DayAgenda.jsx:getDays — días con clases más el elegido.
+//   api/client.js:fetchMyLessons — clases propias en pie (líneas del calendario del tablero).
+//
+// Mis reservas
+//   utils/reservations.js:activeRows — reservas en pie (sin canceladas).
+//   utils/reservations.js:turnInCategory — en qué categoría va cada turno.
+//   utils/reservations.js:nextClass — próxima: en pie y sin terminar.
+//   utils/reservations.js:lastClass — última: en pie y terminada.
+//   utils/reservations.js:filterTurns — filtros que elige el usuario en la categoría.
+//   pages/Reservations/ReservationsPage.jsx:lastBadge — "Falta tomar lista" solo al docente.
+//   pages/Reservations/ReservationsPage.jsx:renderCategories — cuenta los turnos de cada una.
+//   pages/Reservations/CategoryDialog.jsx:render — aplica filterTurns.
+//   components/ClassCard.jsx:render — corazón solo para alumnos.
+//
+// Detalle, acciones y asistencia
+//   utils/classStates.js:allowedActions — qué botones (espejo de checkAction del backend).
+//   components/ClassActions.jsx:render — botones de allowedActions menos `exclude`.
+//   components/TurnActions.jsx:active — acciones solo sobre las reservas en pie.
+//   components/StudentsDialog.jsx:renderRow — el pago solo en reservas en pie.
+//   components/AttendanceDialog.jsx:handleAllPresent — "Todos presentes" solo a los sin marca.
+//   components/ClassDetailDialog.jsx:getRows — el alumno ve solo su reserva.
+//   components/ClassDetailDialog.jsx:renderTeacherStatus — alumnos solo antes de empezar.
+//   components/ClassDetailDialog.jsx:renderAttendance — "Tomar asistencia" si ya empezó.
+//   components/ClassDetailDialog.jsx:render — material solo si la clase pudo tenerlo.
+//
+// Material
+//   utils/classMaterials.js:canHaveMaterial — clase dada (espejo del backend).
+//   components/ClassMaterial.jsx:renderBody — se ve con la clase dada y terminada.
+//
+// Disponibilidad del docente
+//   pages/Availability/AvailabilityPage.jsx:renderBody — docente: su disponibilidad; otro: tablero.
+//   pages/Availability/DayWindowsDialog.jsx:canEdit — un día pasado no se edita.
+//   utils/windows.js:windowsOn — las ventanas que caen ese día.
+//   utils/windows.js:windowOffered — si los alumnos la ven (tiene tarifa en esa modalidad).
+//   utils/vacations.js:isOnVacation — días de licencia rayados para el docente.
+//
+// Paquetes
+//   pages/Packs/PacksPage.jsx:PacksPage — el catálogo solo trae activas de aprobados (backend).
+//   pages/Packs/PacksPage.jsx:handleRemove — la oferta desactivada sale de la lista.
+//   pages/Packs/PacksPage.jsx:renderMyPack — "ya reservadas" solo en paquetes vigentes.
+//
+// Neuronas
+//   pages/Neuronas/NeuronasPage.jsx:renderRewards — canjes solo para el alumno.
+//   pages/Neuronas/NeuronasPage.jsx:featuredProblem — por qué no se puede comprar Destacado.
+//   pages/Neuronas/NeuronasPage.jsx:renderFeatured — Destacado solo para el docente.
+//
+// Tareas
+//   pages/Homework/HomeworkPage.jsx:load — qué tareas y entregas vienen (backend, por rol).
+//   pages/Homework/NewHomeworkDialog.jsx:NewHomeworkDialog — destinos posibles (backend).
+//
+// Favoritos
+//   pages/Favorites/FavoritesPage.jsx:load — solo alumnos; solo docentes aprobados (backend).
+//   routes/withFavorites.jsx:load — pide favoritos solo si es alumno.
+//
+// Admin
+//   pages/Admin/AdminPage.jsx:esAdmin — la pantalla solo carga para el admin.
+//   pages/Admin/AdminPage.jsx:load — los docentes de la pestaña elegida (backend ?status=).
+//   pages/Admin/AdminPage.jsx:handleDecision — el que cambió de estado sale de la pestaña.
+//
+// Navbar
+//   components/NavBar.jsx:render — qué links/buscador ve cada rol.
+//
+// El índice del backend está en backend/src/lib/availabilityExpansion.js, y
+// `grep -rn "FILTRO:"` los encuentra todos (front y back).
+// ---------------------------------------------------------------------------
 
-import { DAY_KEYS, formatRangeLabel } from './availability.js'
+import { DAY_KEYS } from './availability.js'
 import { fromISODate, mondayIndex } from './calendar.js'
-import { CLASS_MINUTES_STEP, MIN_CLASS_MINUTES } from './rates.js'
-
-// Los inicios van de a media hora, igual que en el backend.
-const START_STEP = 30
+import { MIN_CLASS_MINUTES } from './rates.js'
 
 /** '2026-09-14' -> 'lunes' (null si la fecha no es válida). Lo usa: utils/windows.js. */
 export function dayKeyFromIso(iso) {
@@ -52,143 +148,6 @@ export function toMinutes(time) {
 }
 
 /**
- * { start, end } -> { from, to } en MINUTOS, no en medias horas: la duración
- * de las clases es libre, así que una puede terminar 13:45. null si no sirve.
- */
-function toSpan(range) {
-  const from = toMinutes(range?.start)
-  const to = toMinutes(range?.end)
-  if (from < 0 || to < 0 || to <= from) return null
-  return { from, to }
-}
-
-/**
- * ¿Se pisan aunque sea un minuto? Los extremos que se tocan NO se pisan: una
- * clase de 14:00 a 15:00 y otra de 15:00 a 16:00 conviven sin problema.
- *
- * @param {{start: string, end: string}} a - 'HH:MM'.
- * @param {{start: string, end: string}} b
- * @returns {boolean} false también si alguno no es un rango válido.
- * Lo usa: annotateClashes (acá mismo).
- */
-export function rangesOverlap(a, b) {
-  const spanA = toSpan(a)
-  const spanB = toSpan(b)
-  if (!spanA || !spanB) return false
-  return spanA.from < spanB.to && spanB.from < spanA.to
-}
-
-function lessonRange(lesson) {
-  return { start: lesson.startTime, end: lesson.endTime }
-}
-
-function toTime(minutes) {
-  const h = Math.floor(minutes / 60)
-  const m = minutes % 60
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
-}
-
-/**
- * ¿Esta clase propia ES esta grupal? Pasa cuando el alumno ya se anotó y la
- * grupal sigue ofreciéndose porque queda lugar para otros.
- */
-function isSameClass(lesson, card, group) {
-  return String(lesson.teacherId) === String(card.teacherId) && lesson.startTime === group.start
-}
-
-/**
- * Los inicios que salen de los tramos libres, cada uno con la clase más larga
- * que entra (`maxMinutes`, de a 5): hasta el fin del tramo o hasta la
- * próxima clase propia, lo que llegue primero. `blocked` si ni la clase más
- * corta entra sin pisarse con una clase propia.
- *
- * `busy` son las clases propias del día, { start, end }. Sin ellas (sin
- * usuario) son todos los inicios del tramo.
- *
- * @param {Array<{start: string, end: string}>} free - el `free` de una fila de GET /api/availability.
- * @param {Array<{start: string, end: string}>} [busy] - las clases propias del alumno ese día.
- * @returns {Array<{start: string, maxMinutes: number, blocked: boolean}>}
- * Lo usan: annotateClashes y offersStartBetween (acá mismo); el resultado llega a
- * pages/Booking/BookingDialog.jsx como `card.starts`.
- */
-export function startOptions(free, busy = []) {
-  const ocupado = busy.map(toSpan).filter(Boolean)
-  const opciones = []
-
-  for (const tramo of free || []) {
-    const span = toSpan(tramo)
-    if (!span) continue
-
-    for (let inicio = span.from; inicio + MIN_CLASS_MINUTES <= span.to; inicio += START_STEP) {
-      let limite = span.to
-      let blocked = false
-      for (const clase of ocupado) {
-        if (clase.from < inicio + MIN_CLASS_MINUTES && inicio < clase.to) blocked = true
-        else if (clase.from >= inicio + MIN_CLASS_MINUTES) limite = Math.min(limite, clase.from)
-      }
-      const maxMinutes = Math.floor((limite - inicio) / CLASS_MINUTES_STEP) * CLASS_MINUTES_STEP
-      opciones.push({ start: toTime(inicio), maxMinutes, blocked })
-    }
-  }
-
-  return opciones
-}
-
-/**
- * Cruza cada fila con las clases que el alumno ya tiene ese día. No se resta
- * nada: el rato del docente sigue existiendo, lo que pasa es que este alumno
- * no lo puede tomar. Queda:
- *   - `groups`, cada una con `joined` (ya está anotado) y `blocked` (se le
- *     pisa con otra clase suya, o es la misma);
- *   - `starts`: los inicios posibles (ver startOptions), ya recortados por
- *     las clases propias;
- *   - `clashes`: las clases propias que se pisan con la ventana, sin contar
- *     aquellas en las que ya está anotado ahí mismo (esas se avisan aparte).
- * Además `joined` (las grupales en las que ya está) y `bookable` (si le queda
- * algo para reservar).
- *
- * @param {object[]} cards - las filas de GET /api/availability.
- * @param {object[]} myLessons - las clases propias de fetchMyLessons (GET /api/classes, sin canceladas).
- * @returns {object[]} las mismas filas con groups/starts/clashes/joined/bookable agregados.
- * Lo usan: pages/Booking/BookingBoard.jsx (y BookingDialog.jsx lo menciona en comentarios).
- */
-export function annotateClashes(cards, myLessons) {
-  return cards.map((card) => {
-    const delDia = myLessons.filter((lesson) => lesson.date === card.date)
-
-    const groups = (card.groups || []).map((group) => {
-      const joined = delDia.some((lesson) => isSameClass(lesson, card, group))
-      const blocked = joined || delDia.some((lesson) => rangesOverlap(group, lessonRange(lesson)))
-      return { ...group, joined, blocked }
-    })
-
-    const starts = startOptions(card.free, delDia.map(lessonRange))
-
-    const window = { start: card.start, end: card.end }
-    const clashes = delDia
-      .filter((lesson) => rangesOverlap(window, lessonRange(lesson)))
-      .filter((lesson) => !groups.some((group) => group.joined && isSameClass(lesson, card, group)))
-      .map((lesson) => ({
-        id: lesson.id,
-        subjectName: lesson.subjectName,
-        teacherName: lesson.teacherName,
-        startTime: lesson.startTime,
-        endTime: lesson.endTime,
-      }))
-
-    return {
-      ...card,
-      groups,
-      starts,
-      clashes,
-      joined: groups.filter((group) => group.joined),
-      bookable:
-        groups.some((group) => !group.blocked) || starts.some((option) => !option.blocked),
-    }
-  })
-}
-
-/**
  * La tarifa más baja de la ventana, para el "desde $ X/h" de la tarjeta.
  * Mira los `subjects` de la fila (con hourlyRateCents). null si no hay ninguna.
  * Lo usa: pages/Booking/BookingCard.jsx.
@@ -200,11 +159,10 @@ export function lowestRate(card) {
 
 /**
  * { [iso]: Card[] }, cada lista ordenada por hora y docente, con los destacados
- * primero. Uno de licencia no va adelante: compró que lo vean para reservarlo,
- * y ese día no se puede.
+ * primero. `teacherFeatured` ya viene en false si el docente está de licencia
+ * ese día (lo decide el backend): acá no se vuelve a mirar.
  *
- * @param {object[]} cards - filas ya cruzadas y filtradas (teacherFeatured y onVacation
- *   vienen de GET /api/availability).
+ * @param {object[]} cards - filas ya filtradas (filterCards).
  * @returns {Object<string, object[]>}
  * Lo usa: pages/Booking/BookingBoard.jsx.
  */
@@ -217,7 +175,7 @@ export function groupCardsByDate(cards) {
   }
 
   for (const iso of Object.keys(porFecha)) {
-    const destacada = (card) => (card.teacherFeatured && !card.onVacation ? 0 : 1)
+    const destacada = (card) => (card.teacherFeatured ? 0 : 1)
     porFecha[iso].sort((a, b) => {
       const prioridad = destacada(a) - destacada(b)
       if (prioridad !== 0) return prioridad
@@ -231,34 +189,81 @@ export function groupCardsByDate(cards) {
 }
 
 /**
+ * FILTRO: el número verde de cada día del calendario y el "N clases para
+ * reservar" cuentan solo las tarjetas que se pueden reservar. Regla: las de
+ * licencia (`onVacation`, del backend) se ven en gris pero no cuentan.
+ *
+ * @param {Object<string, object[]>} cardsByDate - lo de groupCardsByDate.
+ * @returns {Object<string, number>}
+ * Lo usan: pages/Booking/BookingBoard.jsx (getFreeByDate) y BookingResults.jsx.
+ */
+export function countBookableByDate(cardsByDate) {
+  const counts = {}
+  for (const [iso, cards] of Object.entries(cardsByDate)) {
+    counts[iso] = cards.filter((card) => !card.onVacation).length
+  }
+  return counts
+}
+
+/**
  * Minúsculas y sin acentos, para comparar lo tipeado contra nombres con tilde.
  * Lo usan: este archivo, utils/search.js y utils/reservations.js.
  */
 export function normalizeText(text) {
   return String(text || '')
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
     .trim()
 }
 
 /**
+ * Los inicios de la fila: los de clases nuevas (`starts`) y los de grupales a
+ * las que sumarse (`groups`), cada uno con su materia (null = cualquiera de
+ * `subjects`). Una fila de licencia no tiene ninguno.
+ */
+function rowStarts(card) {
+  return [
+    ...(card.starts || []).map((option) => ({ start: option.start, subjectId: null })),
+    ...(card.groups || []).map((group) => ({ start: group.start, subjectId: group.subjectId })),
+  ]
+}
+
+/**
  * ¿Alguna clase puede ARRANCAR entre `fromTime` y `toTime`? Cualquiera de
- * los dos puede venir vacío (sin límite). Cuenta sumarse a una grupal y
- * cualquier inicio de un tramo libre.
+ * los dos puede venir vacío (sin límite). Cuenta los inicios de clases nuevas
+ * (`starts`) y sumarse a una grupal (`groups`). Una fila de licencia no tiene
+ * inicios: se mira su rango, para que siga apareciendo en gris donde
+ * aparecería si no estuviera de licencia.
  * Lo usa: filterCards (acá mismo), para el filtro de horario.
  */
 export function offersStartBetween(card, fromTime, toTime) {
   const desde = fromTime ? toMinutes(fromTime) : 0
   const hasta = toTime ? toMinutes(toTime) : Infinity
-  const inicios = [
-    ...(card.groups || []).map((group) => group.start),
-    ...(card.starts || startOptions(card.free)).map((option) => option.start),
-  ]
-  return inicios.some((start) => {
+  if (card.onVacation) {
+    const inicio = toMinutes(card.start)
+    const ultimo = toMinutes(card.end) - MIN_CLASS_MINUTES
+    return inicio <= hasta && ultimo >= desde
+  }
+  return rowStarts(card).some(({ start }) => {
     const inicio = toMinutes(start)
     return inicio >= desde && inicio <= hasta
   })
+}
+
+/**
+ * ¿Se puede reservar alguna de `subjectIds` en la fila? Pasa si la materia
+ * está entre las de la fila y hay algún inicio nuevo (que se puede tomar en
+ * cualquier materia tarifada), o si hay una grupal DE ESA materia: una grupal
+ * de otra materia no sirve para tomar esta. En una de licencia se miran las
+ * materias que ofrecería. Los ids se comparan como string: pueden venir de la URL.
+ */
+function offersSubject(card, subjectIds) {
+  const elegidas = new Set(subjectIds.map(String))
+  const tieneTarifa = (card.subjects || []).some((subject) => elegidas.has(String(subject.id)))
+  if (card.onVacation) return tieneTarifa
+  if (tieneTarifa && (card.starts || []).length > 0) return true
+  return (card.groups || []).some((group) => elegidas.has(String(group.subjectId)))
 }
 
 /**
@@ -272,7 +277,9 @@ export function cardKind(card) {
 /**
  * Los filtros del tablero sin nada elegido. Listas vacías y strings vacíos son
  * "no filtra"; `onlyFavorites` se traduce a `teacherIds` al filtrar, porque
- * los favoritos los conoce el tablero y no el filtro.
+ * los favoritos los conoce el tablero y no el filtro. `teacherQuery` es el
+ * texto libre de la búsqueda (el ?q= que no resultó ser una materia): pega
+ * con el nombre del docente o con el de una materia.
  * Lo usan: pages/Booking/BookingBoard.jsx (estado inicial) y BookingFilters.jsx.
  */
 export const EMPTY_BOOKING_FILTERS = Object.freeze({
@@ -304,18 +311,32 @@ export function countBookingFilters(filters) {
 }
 
 /**
- * Aplica los filtros. Se combinan con Y: una lista vacía o un string vacío
- * significa "no filtra". Dentro de un mismo grupo de chips es O (Virtual o
- * Presencial).
+ * ¿El texto libre pega con la fila? Con el nombre del docente o con el de
+ * alguna materia que se reserva ahí, sin acentos ni mayúsculas.
+ */
+function matchesText(card, texto) {
+  if (normalizeText(card.teacherName).includes(texto)) return true
+  return (card.subjects || []).some((subject) => normalizeText(subject.name).includes(texto))
+}
+
+/**
+ * FILTRO: las tarjetas del tablero según lo que ELIGIÓ el alumno (día,
+ * materia, modalidad, individual/grupal, horario de arranque, texto libre,
+ * solo favoritos). Es el único filtro del tablero que corre en el front: lo
+ * que NO se ve por regla (lo completo, lo que le choca, lo pasado, lo que no
+ * tiene tarifa) ya lo sacó el backend (lib/availabilityExpansion.js).
  *
- * El filtro de materia deja pasar la ventana si el docente da ALGUNA de las
- * elegidas en esa modalidad: la materia se elige recién al reservar.
+ * Se combinan con Y: una lista vacía o un string vacío significa "no
+ * filtra". Dentro de un mismo grupo de chips es O (Virtual o Presencial).
  *
- * OJO: el filtro de horas elige qué TARJETAS entran, pero NO esconde horarios.
- * La tarjeta dice la verdad sobre la ventana del docente; recortarla sería
- * inventar una disponibilidad más chica de la que hay.
+ * El filtro de materia deja pasar la ventana si se puede reservar ALGUNA de
+ * las elegidas: un inicio nuevo con tarifa en esa materia, o una grupal de
+ * esa materia (ver offersSubject).
  *
- * @param {object[]} cards - las filas (ya pasadas por annotateClashes).
+ * OJO: el filtro de horas elige qué TARJETAS entran, pero NO esconde horarios
+ * adentro de la tarjeta.
+ *
+ * @param {object[]} cards - las filas de GET /api/availability.
  * @param {object} [filters] - los de EMPTY_BOOKING_FILTERS más `teacherIds`
  *   (los favoritos de withFavorites cuando está "Solo favoritos", o null).
  * @returns {object[]}
@@ -332,25 +353,17 @@ export function filterCards(cards, filters = {}) {
     teacherQuery = '',
     teacherIds = null,
   } = filters
-  const docente = normalizeText(teacherQuery)
+  const texto = normalizeText(teacherQuery)
   // null = sin filtro por docente; un array (aunque esté vacío) = solo esos.
   // Vacío no muestra nada a propósito: "Solo favoritos" sin favoritos es eso.
   const docentes = teacherIds ? new Set(teacherIds.map(String)) : null
 
   return cards.filter((card) => {
     if (dayKeys.length > 0 && !dayKeys.includes(card.dayKey)) return false
-    // El id se compara como string: puede venir de la URL.
-    if (
-      subjectIds.length > 0 &&
-      !(card.subjects || []).some((subject) =>
-        subjectIds.some((id) => String(id) === String(subject.id)),
-      )
-    ) {
-      return false
-    }
+    if (subjectIds.length > 0 && !offersSubject(card, subjectIds)) return false
     if (modalities.length > 0 && !modalities.includes(card.modality)) return false
     if (kinds.length > 0 && !kinds.includes(cardKind(card))) return false
-    if (docente && !normalizeText(card.teacherName).includes(docente)) return false
+    if (texto && !matchesText(card, texto)) return false
     if (docentes && !docentes.has(String(card.teacherId))) return false
     if ((fromTime || toTime) && !offersStartBetween(card, fromTime, toTime)) return false
     return true
@@ -358,73 +371,33 @@ export function filterCards(cards, filters = {}) {
 }
 
 /**
- * Qué significa el `q` de la URL: si pega con una materia es un filtro de
- * materia (como si se hubiera tocado el chip), y si no es un pedazo de nombre
- * de docente. Nunca las dos cosas a la vez.
+ * FILTRO: los chips de materia del tablero muestran solo las del catálogo que
+ * se pueden reservar en algún horario del rango cargado (en `subjects` o en
+ * una grupal de alguna fila). Regla de pantalla, no del backend: un chip que
+ * no deja nada sería ruido. Las ya elegidas se agregan igual: si no, un chip
+ * seleccionado que se queda sin resultados desaparecería y no habría forma de
+ * sacarlo.
  *
- * startsWith y no includes: así "mate" encuentra Matemática pero "gómez" no
- * pega de casualidad con ninguna materia.
- *
- * @param {string} q - el ?q= de /disponibilidad (lo pone components/SearchBar.jsx).
- * @param {Array<{id, name}>} subjects - el catálogo de GET /api/subjects.
- * @returns {{subjectId: string|null, teacherQuery: string}}
+ * @param {object[]} cards - las filas de GET /api/availability (sin filtrar).
+ * @param {Array<{id, name}>} catalog - GET /api/subjects.
+ * @param {Array<string|number>} selectedIds - `filters.subjectIds`.
+ * @returns {Array<{id, name}>} en el orden del catálogo.
  * Lo usa: pages/Booking/BookingBoard.jsx.
  */
-export function resolveQuery(q, subjects) {
-  const texto = normalizeText(q)
-  if (!texto) return { subjectId: null, teacherQuery: '' }
-
-  // El nombre exacto gana: el buscador predictivo manda el nombre completo de
-  // la materia elegida, y "Física" no puede terminar en "Física II" solo
-  // porque esa vino primero en el catálogo.
-  const materia =
-    subjects.find((subject) => normalizeText(subject.name) === texto) ||
-    subjects.find((subject) => normalizeText(subject.name).startsWith(texto))
-  if (materia) return { subjectId: materia.id, teacherQuery: '' }
-
-  return { subjectId: null, teacherQuery: q.trim() }
-}
-
-// Cuántos choques se nombran antes de cortar.
-const MAX_CLASHES_LISTED = 2
-
-function joinWithY(items) {
-  if (items.length <= 1) return items[0] || ''
-  return `${items.slice(0, -1).join(', ')} y ${items[items.length - 1]}`
+export function filterSubjectsFor(cards, catalog, selectedIds = []) {
+  // Todo se normaliza a string: el id elegido puede venir de la URL (siempre
+  // string) y el de las tarjetas del backend, y un Set compara con ===.
+  const presentes = new Set(selectedIds.map(String))
+  for (const card of cards) {
+    for (const subject of card.subjects || []) presentes.add(String(subject.id))
+    for (const group of card.groups || []) presentes.add(String(group.subjectId))
+  }
+  return catalog.filter((subject) => presentes.has(String(subject.id)))
 }
 
 /**
- * 'Se superpone con Matemática con Laura Gómez (14:00 – 15:00).'
- *
- * @param {object[]} clashes - el `clashes` que agrega annotateClashes.
- * @param {boolean} [bookable] - el `bookable` de la misma fila: cambia la frase.
- * @returns {string|null} null si no hay choques.
- * Lo usa: pages/Booking/BookingCard.jsx.
- */
-export function formatClashes(clashes, bookable = true) {
-  if (clashes.length === 0) return null
-
-  const listados = clashes
-    .slice(0, MAX_CLASHES_LISTED)
-    .map((clash) => `${clash.subjectName} con ${clash.teacherName}`)
-
-  const resto = clashes.length - listados.length
-  if (resto > 0) listados.push(`${resto} ${resto === 1 ? 'clase más' : 'clases más'}`)
-
-  const detalle =
-    clashes.length === 1
-      ? ` (${formatRangeLabel(clashes[0].startTime, clashes[0].endTime)})`
-      : ''
-
-  // Se arma por partes y NO con toLowerCase sobre la frase entera: eso le
-  // comía las mayúsculas a los nombres propios.
-  return bookable
-    ? `Se superpone con ${joinWithY(listados)}${detalle}.`
-    : `No te queda ningún horario libre: se superpone con ${joinWithY(listados)}${detalle}.`
-}
-
-/**
- * '2 de 5 anotados'. `enrolled` es el de un elemento de `groups` de la fila.
+ * '2 de 5 anotados'. `enrolled` y `maxStudents` son los de un elemento de
+ * `groups` de la fila (el cupo del turno, no el de la ventana).
  * Lo usan: pages/Booking/BookingCard.jsx, BookingDialog.jsx.
  */
 export function formatEnrolled(enrolled, maxStudents) {

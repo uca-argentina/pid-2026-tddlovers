@@ -1,189 +1,48 @@
 import {
   EMPTY_BOOKING_FILTERS,
-  annotateClashes,
   cardKind,
+  countBookableByDate,
   countBookingFilters,
   dayKeyFromIso,
   filterCards,
-  formatClashes,
+  filterSubjectsFor,
   formatEnrolled,
   groupCardsByDate,
   lowestRate,
   normalizeText,
   offersStartBetween,
-  rangesOverlap,
-  resolveQuery,
-  startOptions,
   toMinutes,
 } from './booking.js'
 import { toMinutes as toMinutesDeWindows } from './windows.js'
-import { apiClass } from '../testing/fixtures.js'
+import { apiAvailabilityRow, startsBetween } from '../testing/fixtures.js'
 
-// 2026-09-14 es lunes. Una fila tal como la manda /api/availability.
-const tarjeta = (over = {}) => ({
-  id: 'w1|2026-09-14',
-  windowId: 'w1',
-  date: '2026-09-14',
-  dayKey: 'lunes',
-  teacherId: 't1',
-  teacherName: 'Laura Gómez',
-  start: '13:00',
-  end: '16:00',
-  modality: 'virtual',
-  maxStudents: 1,
-  locality: null,
-  subjects: [
-    { id: 's1', name: 'Matemática', hourlyRateCents: 500000 },
-    { id: 's3', name: 'Química', hourlyRateCents: 450000 },
-  ],
-  free: [{ start: '13:00', end: '16:00' }],
-  groups: [],
+// Una fila tal como la manda /api/availability: Laura da Matemática y
+// Química, virtual, de 13 a 16.
+const tarjeta = (over = {}) =>
+  apiAvailabilityRow({
+    subjects: [
+      { id: 's1', name: 'Matemática', hourlyRateCents: 500000 },
+      { id: 's3', name: 'Química', hourlyRateCents: 450000 },
+    ],
+    ...over,
+  })
+
+const grupal = (over = {}) => ({
+  start: '09:00',
+  end: '10:00',
+  subjectId: 's1',
+  subjectName: 'Matemática',
+  enrolled: 1,
+  maxStudents: 4,
   ...over,
 })
 
-const inicios = (options) => options.map((option) => option.start)
-
-const clase = (over = {}) =>
-  apiClass({
-    date: '2026-09-14',
-    startTime: '14:00',
-    endTime: '15:00',
-    teacherId: 't2',
-    teacherName: 'Carla Benítez',
-    subjectName: 'Física',
-    ...over,
-  })
+const ids = (cards) => cards.map((card) => card.id)
 
 describe('dayKeyFromIso', () => {
   it('traduce la fecha al día de la semana', () => {
     expect(dayKeyFromIso('2026-09-14')).toBe('lunes')
     expect(dayKeyFromIso('2026-09-20')).toBe('domingo')
-  })
-})
-
-describe('rangesOverlap', () => {
-  it('tocarse en el borde no es pisarse', () => {
-    expect(rangesOverlap({ start: '14:00', end: '15:00' }, { start: '15:00', end: '16:00' })).toBe(
-      false,
-    )
-    expect(rangesOverlap({ start: '14:00', end: '15:00' }, { start: '14:30', end: '15:30' })).toBe(
-      true,
-    )
-  })
-
-  it('entiende clases que terminan fuera de la media hora', () => {
-    expect(rangesOverlap({ start: '13:00', end: '13:45' }, { start: '13:30', end: '14:30' })).toBe(
-      true,
-    )
-    expect(rangesOverlap({ start: '13:00', end: '13:45' }, { start: '13:45', end: '14:30' })).toBe(
-      false,
-    )
-  })
-
-  it('entiende 24:00', () => {
-    expect(rangesOverlap({ start: '23:00', end: '24:00' }, { start: '23:30', end: '24:00' })).toBe(
-      true,
-    )
-  })
-})
-
-describe('startOptions', () => {
-  it('cada :00/:30 del tramo donde entra una clase de 30 min, con la más larga posible', () => {
-    expect(startOptions([{ start: '13:00', end: '14:15' }])).toEqual([
-      { start: '13:00', maxMinutes: 75, blocked: false },
-      { start: '13:30', maxMinutes: 45, blocked: false },
-    ])
-  })
-
-  it('la duración máxima va de a 5 minutos', () => {
-    // 13:00 a 13:47: entran 45, no 47.
-    expect(startOptions([{ start: '13:00', end: '13:47' }])[0].maxMinutes).toBe(45)
-  })
-
-  it('una clase propia bloquea lo que pisa y corta lo que viene antes', () => {
-    const opciones = startOptions([{ start: '13:00', end: '16:00' }], [{ start: '14:10', end: '15:00' }])
-    expect(opciones.find((o) => o.start === '13:00')).toEqual({
-      start: '13:00',
-      maxMinutes: 70,
-      blocked: false,
-    })
-    // 13:30 + 30 min = 14:00, antes de las 14:10: entra, hasta 40 min.
-    expect(opciones.find((o) => o.start === '13:30').maxMinutes).toBe(40)
-    // 14:00 + 30 min se pisa con la de 14:10.
-    expect(opciones.find((o) => o.start === '14:00').blocked).toBe(true)
-    expect(opciones.find((o) => o.start === '14:30').blocked).toBe(true)
-    expect(opciones.find((o) => o.start === '15:00')).toEqual({
-      start: '15:00',
-      maxMinutes: 60,
-      blocked: false,
-    })
-  })
-
-  it('recorre varios tramos', () => {
-    const tramos = [
-      { start: '09:00', end: '09:30' },
-      { start: '11:00', end: '12:00' },
-    ]
-    expect(inicios(startOptions(tramos))).toEqual(['09:00', '11:00', '11:30'])
-  })
-})
-
-describe('annotateClashes', () => {
-  it('sin clases propias todo se puede reservar', () => {
-    const [card] = annotateClashes([tarjeta()], [])
-    expect(card.bookable).toBe(true)
-    expect(card.clashes).toEqual([])
-    expect(card.starts.every((option) => !option.blocked)).toBe(true)
-    expect(inicios(card.starts)).toEqual(['13:00', '13:30', '14:00', '14:30', '15:00', '15:30'])
-  })
-
-  it('bloquea solo los inicios que se pisan con otra clase propia', () => {
-    const [card] = annotateClashes([tarjeta()], [clase({ startTime: '14:30', endTime: '15:30' })])
-    expect(card.starts.map((option) => option.blocked)).toEqual([
-      false,
-      false,
-      false,
-      true,
-      true,
-      false,
-    ])
-    expect(card.bookable).toBe(true)
-    expect(card.clashes).toHaveLength(1)
-  })
-
-  it('sin ningún horario libre la tarjeta no se puede reservar', () => {
-    const [card] = annotateClashes([tarjeta()], [clase({ startTime: '13:00', endTime: '16:00' })])
-    expect(card.bookable).toBe(false)
-  })
-
-  it('ignora las clases de otro día', () => {
-    const [card] = annotateClashes([tarjeta()], [clase({ date: '2026-09-15' })])
-    expect(card.clashes).toEqual([])
-  })
-
-  it('una grupal en la que ya está anotado se marca aparte, no como choque', () => {
-    const grupal = tarjeta({
-      teacherId: 't1',
-      maxStudents: 4,
-      free: [],
-      groups: [{ start: '14:00', end: '15:00', subjectId: 's1', subjectName: 'Matemática', enrolled: 2 }],
-    })
-    const mia = clase({ teacherId: 't1', teacherName: 'Laura Gómez', subjectName: 'Matemática' })
-    const [card] = annotateClashes([grupal], [mia])
-
-    expect(card.groups[0]).toMatchObject({ joined: true, blocked: true })
-    expect(card.joined).toHaveLength(1)
-    expect(card.clashes).toEqual([])
-    expect(card.bookable).toBe(false)
-  })
-
-  it('una grupal con lugar alcanza para que se pueda reservar', () => {
-    const grupal = tarjeta({
-      maxStudents: 4,
-      free: [],
-      groups: [{ start: '14:00', end: '15:00', subjectId: 's1', subjectName: 'Matemática', enrolled: 2 }],
-    })
-    expect(annotateClashes([grupal], [])[0].bookable).toBe(true)
   })
 })
 
@@ -201,16 +60,17 @@ describe('groupCardsByDate', () => {
       tarjeta({ id: 'a', start: '09:00', teacherName: 'Zoe' }),
       tarjeta({ id: 'c', start: '09:00', teacherName: 'Ana' }),
     ])
-    expect(porFecha['2026-09-14'].map((card) => card.id)).toEqual(['c', 'a', 'b'])
+    expect(porFecha['2099-09-14'].map((card) => card.id)).toEqual(['c', 'a', 'b'])
   })
 
-  it('pone primero a los destacados, salvo si están de licencia', () => {
+  it('pone primero a los destacados tal como los marca el backend', () => {
+    // De licencia el backend ya manda teacherFeatured en false.
     const porFecha = groupCardsByDate([
       tarjeta({ id: 'temprano', start: '09:00' }),
-      tarjeta({ id: 'licencia', start: '08:00', teacherFeatured: true, onVacation: true }),
+      tarjeta({ id: 'licencia', start: '08:00', teacherFeatured: false, onVacation: true }),
       tarjeta({ id: 'destacado', start: '18:00', teacherFeatured: true }),
     ])
-    expect(porFecha['2026-09-14'].map((card) => card.id)).toEqual([
+    expect(porFecha['2099-09-14'].map((card) => card.id)).toEqual([
       'destacado',
       'licencia',
       'temprano',
@@ -218,8 +78,18 @@ describe('groupCardsByDate', () => {
   })
 })
 
+describe('countBookableByDate', () => {
+  it('cuenta las tarjetas de cada día sin las de licencia', () => {
+    const porFecha = {
+      '2099-09-14': [tarjeta({ id: 'a' }), tarjeta({ id: 'b', onVacation: true, starts: [] })],
+      '2099-09-15': [tarjeta({ id: 'c', onVacation: true, starts: [] })],
+    }
+    expect(countBookableByDate(porFecha)).toEqual({ '2099-09-14': 1, '2099-09-15': 0 })
+  })
+})
+
 describe('offersStartBetween', () => {
-  it('mira dónde puede ARRANCAR una clase: hasta 30 min antes del fin del tramo', () => {
+  it('mira los inicios que manda el backend', () => {
     expect(offersStartBetween(tarjeta(), '14:00', '')).toBe(true)
     expect(offersStartBetween(tarjeta(), '15:30', '')).toBe(true)
     expect(offersStartBetween(tarjeta(), '16:00', '')).toBe(false)
@@ -227,13 +97,21 @@ describe('offersStartBetween', () => {
     expect(offersStartBetween(tarjeta(), '', '12:00')).toBe(false)
   })
 
+  it('no inventa inicios que el backend no mandó', () => {
+    const recortada = tarjeta({ starts: [{ start: '15:00', maxMinutes: 60 }] })
+    expect(offersStartBetween(recortada, '', '14:30')).toBe(false)
+  })
+
   it('cuenta también sumarse a una grupal', () => {
-    const grupal = tarjeta({
-      free: [],
-      groups: [{ start: '09:00', end: '10:00', subjectId: 's1', subjectName: 'Matemática', enrolled: 1 }],
-    })
-    expect(offersStartBetween(grupal, '', '09:00')).toBe(true)
-    expect(offersStartBetween(grupal, '10:00', '')).toBe(false)
+    const soloGrupal = tarjeta({ starts: [], groups: [grupal()] })
+    expect(offersStartBetween(soloGrupal, '', '09:00')).toBe(true)
+    expect(offersStartBetween(soloGrupal, '10:00', '')).toBe(false)
+  })
+
+  it('una de licencia se ubica por su rango', () => {
+    const licencia = tarjeta({ onVacation: true, starts: [] })
+    expect(offersStartBetween(licencia, '14:00', '')).toBe(true)
+    expect(offersStartBetween(licencia, '16:00', '')).toBe(false)
   })
 })
 
@@ -249,7 +127,6 @@ describe('filterCards', () => {
     ],
     teacherName: 'Carla Benítez',
   })
-  const ids = (cards) => cards.map((card) => card.id)
 
   it('sin filtros pasan todas', () => {
     expect(ids(filterCards([virtual, presencial]))).toEqual(['v', 'p'])
@@ -259,6 +136,20 @@ describe('filterCards', () => {
     expect(ids(filterCards([virtual, presencial], { subjectIds: ['s2'] }))).toEqual(['p'])
     expect(ids(filterCards([virtual, presencial], { subjectIds: ['s3'] }))).toEqual(['v', 'p'])
     expect(ids(filterCards([virtual, presencial], { subjectIds: ['s1', 's2'] }))).toEqual(['v', 'p'])
+  })
+
+  it('por materia: una tarjeta cuya única grupal es de otra materia no pasa', () => {
+    // Bug: antes alcanzaba con que la materia estuviera tarifada, aunque lo
+    // único reservable fuera una grupal de otra.
+    const soloGrupalDeMate = tarjeta({ id: 'g', starts: [], groups: [grupal()] })
+    expect(ids(filterCards([soloGrupalDeMate], { subjectIds: ['s3'] }))).toEqual([])
+    expect(ids(filterCards([soloGrupalDeMate], { subjectIds: ['s1'] }))).toEqual(['g'])
+  })
+
+  it('por materia: una de licencia pasa por las materias que ofrecería', () => {
+    const licencia = tarjeta({ id: 'l', onVacation: true, starts: [] })
+    expect(ids(filterCards([licencia], { subjectIds: ['s3'] }))).toEqual(['l'])
+    expect(ids(filterCards([licencia], { subjectIds: ['s2'] }))).toEqual([])
   })
 
   it('compara los ids de materia como string', () => {
@@ -278,13 +169,46 @@ describe('filterCards', () => {
     expect(ids(filterCards([virtual, presencial], { kinds: ['individual'] }))).toEqual(['v'])
   })
 
-  it('por día y por docente, sin importar acentos', () => {
+  it('por día', () => {
     expect(ids(filterCards([virtual], { dayKeys: ['martes'] }))).toEqual([])
+    expect(ids(filterCards([virtual], { dayKeys: ['lunes'] }))).toEqual(['v'])
+  })
+
+  it('el texto libre pega con el docente o con una materia, sin importar acentos', () => {
     expect(ids(filterCards([virtual, presencial], { teacherQuery: 'gomez' }))).toEqual(['v'])
+    expect(ids(filterCards([virtual, presencial], { teacherQuery: 'fisi' }))).toEqual(['p'])
+    expect(ids(filterCards([virtual, presencial], { teacherQuery: 'quimica' }))).toEqual(['v', 'p'])
+    expect(ids(filterCards([virtual, presencial], { teacherQuery: 'zzz' }))).toEqual([])
+  })
+
+  it('por favoritos', () => {
+    expect(ids(filterCards([virtual, presencial], { teacherIds: ['t1'] }))).toEqual(['v', 'p'])
+    expect(ids(filterCards([virtual, presencial], { teacherIds: [] }))).toEqual([])
   })
 
   it('por horario de arranque', () => {
     expect(ids(filterCards([virtual], { fromTime: '17:00' }))).toEqual([])
+    const tarde = tarjeta({ id: 't', starts: startsBetween('15:00', '16:00') })
+    expect(ids(filterCards([virtual, tarde], { toTime: '14:00' }))).toEqual(['v'])
+  })
+})
+
+describe('filterSubjectsFor', () => {
+  const catalogo = [
+    { id: 's1', name: 'Matemática' },
+    { id: 's2', name: 'Física' },
+    { id: 's3', name: 'Química' },
+    { id: 's4', name: 'Historia' },
+  ]
+
+  it('solo las materias que aparecen en las filas, en el orden del catálogo', () => {
+    const filas = [tarjeta({ subjects: [{ id: 's3', name: 'Química', hourlyRateCents: 1 }] })]
+    expect(filterSubjectsFor(filas, catalogo, []).map((s) => s.id)).toEqual(['s3'])
+  })
+
+  it('suma las de las grupales y las ya elegidas aunque no queden', () => {
+    const filas = [tarjeta({ subjects: [], groups: [grupal({ subjectId: 's2' })] })]
+    expect(filterSubjectsFor(filas, catalogo, ['s4']).map((s) => s.id)).toEqual(['s2', 's4'])
   })
 })
 
@@ -303,98 +227,6 @@ describe('normalizeText', () => {
   it('aguanta valores vacíos', () => {
     expect(normalizeText(null)).toBe('')
     expect(normalizeText(undefined)).toBe('')
-  })
-})
-
-describe('resolveQuery', () => {
-  const subjects = [
-    { id: 1, name: 'Matemática' },
-    { id: 2, name: 'Física' },
-  ]
-
-  it('una materia se resuelve como filtro de materia', () => {
-    expect(resolveQuery('mate', subjects)).toEqual({ subjectId: 1, teacherQuery: '' })
-  })
-
-  it('no le importan los acentos', () => {
-    expect(resolveQuery('matematica', subjects)).toEqual({ subjectId: 1, teacherQuery: '' })
-    expect(resolveQuery('fisica', subjects)).toEqual({ subjectId: 2, teacherQuery: '' })
-  })
-
-  it('el nombre exacto gana sobre otro que empieza igual', () => {
-    const conSegunda = [
-      { id: 5, name: 'Física II' },
-      { id: 2, name: 'Física' },
-    ]
-    expect(resolveQuery('Física', conSegunda)).toEqual({ subjectId: 2, teacherQuery: '' })
-  })
-
-  it('lo que no es materia es nombre de docente', () => {
-    // startsWith y no includes: si no, 'gómez' podría pegar con una materia.
-    expect(resolveQuery('gómez', subjects)).toEqual({ subjectId: null, teacherQuery: 'gómez' })
-  })
-
-  it('vacío no filtra nada', () => {
-    expect(resolveQuery('', subjects)).toEqual({ subjectId: null, teacherQuery: '' })
-    expect(resolveQuery('   ', subjects)).toEqual({ subjectId: null, teacherQuery: '' })
-  })
-})
-
-describe('formatClashes', () => {
-  const conLaura = {
-    subjectName: 'Matemática',
-    teacherName: 'Laura Gómez',
-    startTime: '14:00',
-    endTime: '15:00',
-  }
-  const conCarla = {
-    subjectName: 'Física',
-    teacherName: 'Carla Benítez',
-    startTime: '16:00',
-    endTime: '17:00',
-  }
-
-  it('sin choques no dice nada', () => {
-    expect(formatClashes([])).toBeNull()
-  })
-
-  it('uno solo nombra materia, docente y horario', () => {
-    expect(formatClashes([conLaura])).toBe(
-      'Se superpone con Matemática con Laura Gómez (14:00 – 15:00).',
-    )
-  })
-
-  it('dos se unen con "y" y sin el horario', () => {
-    expect(formatClashes([conLaura, conCarla])).toBe(
-      'Se superpone con Matemática con Laura Gómez y Física con Carla Benítez.',
-    )
-  })
-
-  it('más de dos se cortan', () => {
-    const cuatro = [conLaura, conCarla, conLaura, conCarla]
-    expect(formatClashes(cuatro)).toContain('y 2 clases más')
-  })
-
-  it('si no queda hora libre lo dice adelante', () => {
-    expect(formatClashes([conLaura], false)).toMatch(/^No te queda ningún horario libre:/)
-  })
-
-  it('los nombres propios no pierden las mayúsculas', () => {
-    // El prefijo de "no queda hora libre" se armaba con toLowerCase sobre la
-    // frase entera y dejaba "base de datos con martín sosa".
-    const texto = formatClashes(
-      [
-        {
-          subjectName: 'Base de Datos',
-          teacherName: 'Martín Sosa',
-          startTime: '09:00',
-          endTime: '10:00',
-        },
-      ],
-      false,
-    )
-    expect(texto).toContain('Base de Datos')
-    expect(texto).toContain('Martín Sosa')
   })
 })
 

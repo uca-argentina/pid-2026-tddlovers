@@ -9,7 +9,8 @@
 // backend vuelve a chequear todo cuando se reserva.
 //
 // Los paquetes del alumno llegan de GET /api/packs/mine (fetchMyPacks): cada
-// uno con teacherId, classMinutes, expiresOn, expired, remaining y available.
+// uno con teacherId, classMinutes, expiresOn, expired, remaining, available y
+// `usable` (no vencido, available > 0 y docente aprobado: lo decide el backend).
 // Lo usan: pages/Booking/ (BookingDialog, BookingCard, BookingResults),
 // pages/Packs/PacksPage.jsx y pages/Neuronas/NeuronasPage.jsx (formatPackDate).
 
@@ -32,45 +33,46 @@ export function formatPackDate(iso) {
   return DATE_FORMAT.format(new Date(y, m - 1, d))
 }
 
-/**
- * Los paquetes vigentes del alumno con ese docente, el que vence primero arriba.
- *
- * @param {Array|null} packs - de GET /api/packs/mine.
- * @param {string} teacherId - el `teacherId` de la fila/tarjeta de disponibilidad.
- * @returns {Array} filtrados (no vencidos) y ordenados por expiresOn.
- * Lo usa: pages/Booking/BookingDialog.jsx.
- */
-export function activePacksWith(packs, teacherId) {
-  return (packs || [])
-    .filter((pack) => String(pack.teacherId) === String(teacherId) && !pack.expired)
-    .sort((a, b) => a.expiresOn.localeCompare(b.expiresOn))
+function deTeacher(pack, teacherId) {
+  return String(pack.teacherId) === String(teacherId)
 }
 
-/**
- * Lo que se le muestra al alumno de su paquete con un docente (el que vence
- * primero), o null si no tiene ninguno vigente. Para el "Te quedan N clases…"
- * de la tarjeta. Lo usa: pages/Booking/BookingResults.jsx.
- */
-export function packSummaryWith(packs, teacherId) {
-  return activePacksWith(packs, teacherId)[0] || null
-}
+const byExpiry = (a, b) => a.expiresOn.localeCompare(b.expiresOn)
 
 /**
- * El paquete con el que se podría reservar una clase de ese docente ese día:
- * el que vence primero entre los que tienen clases para reservar, o null.
+ * FILTRO: el paquete con el que se puede reservar una clase de ese docente ese
+ * día: el que vence primero entre los usables. Si se puede usar lo decide el
+ * backend (`usable`: no vencido, con clases disponibles y docente aprobado;
+ * GET /api/packs/mine, backend/src/lib/classPacks.js); acá solo se suma lo que
+ * depende de la clase: que el día no pase el vencimiento. Es el MISMO paquete
+ * para la tarjeta del tablero y para el modal.
  *
  * @param {Array|null} packs - de GET /api/packs/mine (o packsForReschedule).
  * @param {string} teacherId - el docente de la ventana.
- * @param {string} date - el día de la clase, 'YYYY-MM-DD' (no puede pasarse de expiresOn).
+ * @param {string} date - el día de la clase, 'YYYY-MM-DD'.
  * @returns {object|null}
- * Lo usa: pages/Booking/BookingDialog.jsx.
+ * Lo usan: pages/Booking/BookingDialog.jsx y BookingResults.jsx.
  */
 export function usablePackFor(packs, teacherId, date) {
   return (
-    activePacksWith(packs, teacherId).find(
-      (pack) => pack.available > 0 && date <= pack.expiresOn,
-    ) || null
+    (packs || [])
+      .filter((pack) => pack.usable && deTeacher(pack, teacherId) && date <= pack.expiresOn)
+      .sort(byExpiry)[0] || null
   )
+}
+
+/**
+ * Por qué ningún paquete del alumno con ese docente sirve para ese día, para
+ * explicarlo en el modal en vez de esconderlo: 'expires' si alguno usable
+ * vence antes de la clase, 'used' si los que no vencieron ya tienen todas sus
+ * clases reservadas, o null (no tiene ninguno vigente, o hay uno que sirve).
+ * Mira `usable` y `expired` del backend, no los recalcula.
+ * Lo usa: pages/Booking/BookingDialog.jsx.
+ */
+export function unusablePackReason(packs, teacherId, date) {
+  const conDocente = (packs || []).filter((pack) => deTeacher(pack, teacherId) && !pack.expired)
+  if (conDocente.length === 0 || usablePackFor(packs, teacherId, date)) return null
+  return conDocente.some((pack) => pack.usable) ? 'expires' : 'used'
 }
 
 /**
@@ -93,17 +95,22 @@ export function maxTokensFor(pack, minutes) {
  * @param {Array|null} packs - de GET /api/packs/mine.
  * @param {object|null} rescheduleOf - la clase que se reprograma (GET /api/classes/:id,
  *   de ?reprogramar=<id>), con studentPackId y packTokens.
- * @returns {Array} copia con `available` ajustado en el paquete de esa clase.
- * Lo usa: pages/Booking/BookingDialog.jsx.
+ * @returns {Array} copia con `available` y `usable` ajustados en el paquete de esa clase.
+ * Lo usa: pages/Booking/BookingBoard.jsx (para la tarjeta y el modal).
  */
 export function packsForReschedule(packs, rescheduleOf) {
   const lista = packs || []
   if (!rescheduleOf?.studentPackId || !rescheduleOf.packTokens) return lista
-  return lista.map((pack) =>
-    String(pack.id) === String(rescheduleOf.studentPackId)
-      ? { ...pack, available: pack.available + rescheduleOf.packTokens }
-      : pack,
-  )
+  return lista.map((pack) => {
+    if (String(pack.id) !== String(rescheduleOf.studentPackId)) return pack
+    const available = pack.available + rescheduleOf.packTokens
+    // `usable` lo calcula el backend sin saber que se reprograma: si era
+    // false solo por no tener clases disponibles, ahora sí tiene. Se repite
+    // su regla entera (también que el docente siga aprobado), no solo la parte
+    // que cambia.
+    const usable = !pack.expired && available > 0 && pack.teacherApproved !== false
+    return { ...pack, available, usable }
+  })
 }
 
 /**

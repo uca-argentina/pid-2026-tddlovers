@@ -46,6 +46,8 @@ const TEACHER_REVIEW_COLUMNS = `
  * Lo usa: routes/admin/index.js (GET /teachers).
  */
 export async function listTeachersForReview({ status } = {}) {
+  // FILTRO: solo docentes (ni alumnos ni el admin) y, si viene, del estado
+  // pedido: es la bandeja de revisión del admin.
   const result = await getPool().query(
     `SELECT ${TEACHER_REVIEW_COLUMNS}
      FROM users u

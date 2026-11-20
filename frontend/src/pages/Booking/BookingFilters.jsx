@@ -14,6 +14,10 @@ const KINDS = [
 ]
 
 /**
+ * FILTRO: el panel de los filtros que ELIGE el alumno en el tablero (días,
+ * materias, modalidad, individual o grupal, horario, solo favoritos). Acá
+ * solo se eligen; se aplican en filterCards (utils/booking.js).
+ *
  * El panel de filtros: días, materias, modalidad, individual o grupal, y el
  * horario. Todo se combina con Y, y también con lo que se haya buscado en la
  * barra de arriba.
@@ -47,12 +51,12 @@ const KINDS = [
  *
  * Props (de BookingBoard):
  *   - subjects: materias del catálogo (GET /api/subjects) que aparecen en
- *     alguna tarjeta del rango cargado (BookingBoard.getFilterSubjects).
+ *     alguna tarjeta del rango cargado (filterSubjectsFor en utils/booking.js).
  *   - filters: el state.filters de BookingBoard (forma EMPTY_BOOKING_FILTERS).
  *   - showFavorites: si mostrar "Solo favoritos" (alumno logueado).
  *   - hasFilters: si hay algún filtro activo (para habilitar "Limpiar").
  *   - onToggle(clave, valor) → onClick; onChangeRange(fromTime, toTime) del
- *     slider; onClearTeacher() saca la búsqueda por docente; onClear() limpia
+ *     slider; onClearTeacher() saca el texto buscado; onClear() limpia
  *     todo.
  *   - inSheet: true dentro de la hoja del teléfono.
  *
@@ -232,6 +236,7 @@ class BookingFilters extends Component {
    */
   renderFavorites() {
     const { showFavorites, onToggle } = this.props
+    // FILTRO: el chip "Solo favoritos" solo para un alumno logueado (regla de pantalla).
     const { onlyFavorites } = this.props.filters
     if (!showFavorites) return null
     return (
@@ -265,18 +270,18 @@ class BookingFilters extends Component {
         {this.renderChoices('tipo', 'Tipo de clase', KINDS, 'kinds')}
         {this.renderHours()}
 
-        {/* El docente buscado no es una sección: viene de la barra de la
-            izquierda y lo único que se puede hacer acá es sacarlo. */}
+        {/* El texto buscado no es una sección: viene del buscador y lo único
+            que se puede hacer acá es sacarlo. Pega con docente o materia. */}
         {teacherQuery ? (
           <div className="booking-filters-foot">
             <button
               type="button"
               className="subject-chip selected"
               onClick={onClearTeacher}
-              aria-label="Quitar el filtro por docente"
+              aria-label="Quitar la búsqueda"
             >
               <ErrorIcon />
-              Docente: {teacherQuery}
+              Búsqueda: {teacherQuery}
             </button>
           </div>
         ) : null}

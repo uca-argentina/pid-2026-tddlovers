@@ -20,7 +20,9 @@ const GIVEN_STATUSES = ['aceptada', 'confirmada', 'realizada', 'no_presentada']
 const PREVIEW_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp'])
 
 /**
- * Si la clase pudo tener material: no cancelada ni pendiente (que se vence al empezar).
+ * FILTRO: si la clase pudo tener material: no cancelada ni pendiente (que se
+ * vence al empezar). Regla del backend (backend/src/lib/classMaterials.js);
+ * esto es su espejo para no mostrar la sección.
  *
  * @param {object} cls - una clase de GET /api/classes.
  * @returns {boolean}

@@ -6,8 +6,40 @@ import { getPool } from './pool.js';
 //
 // Tablas: teacher_rates (migración 009; FK a teacher_subjects, así que sacar
 // una materia del perfil borra sus tarifas). Sin locks.
-// Lo usan: lib/publicUser.js, routes/classes (precio al reservar) y
-// routes/teachers (validar la modalidad de una ventana).
+// Lo usan: lib/publicUser.js, routes/classes (precio al reservar),
+// routes/teachers (validar la modalidad de una ventana) y, por los fragmentos
+// SQL, db/availability.js, db/users.js y db/favorites.js.
+
+// Fragmentos SQL compartidos: "qué cuenta como ofrecido" tiene que ser lo
+// mismo en el tablero, el buscador y favoritos, o uno sugiere a alguien que
+// el otro no muestra.
+
+/**
+ * ¿El docente (`teacherCol`) tarifa alguna materia en la modalidad
+ * `modalityCol`? Una ventana sin tarifa en su modalidad queda guardada pero no
+ * se ofrece: sin tarifa no hay precio.
+ * Lo usan: db/availability.js (findPublishedWindows) y db/users.js (listTeachers).
+ */
+export const hasRateInModality = (teacherCol, modalityCol) => `
+  EXISTS (
+    SELECT 1 FROM teacher_rates r
+    WHERE r.teacher_id = ${teacherCol} AND r.modality = ${modalityCol}
+  )
+`;
+
+/**
+ * Las materias que ofrece el docente (`teacherCol`): las que tienen tarifa en
+ * alguna modalidad, como json [{ id, name }] ordenado por nombre, o NULL si
+ * no tiene ninguna. Es una subconsulta escalar para un LATERAL.
+ * Lo usan: db/users.js (listTeachers) y db/favorites.js (listFavoriteTeachers).
+ */
+export const ratedSubjectsJson = (teacherCol) => `
+  SELECT json_agg(json_build_object('id', s.id, 'name', s.name) ORDER BY s.name) AS subjects
+  FROM subjects s
+  WHERE EXISTS (
+    SELECT 1 FROM teacher_rates r WHERE r.teacher_id = ${teacherCol} AND r.subject_id = s.id
+  )
+`;
 
 /**
  * Todas las tarifas de un docente, ordenadas para que el perfil las muestre

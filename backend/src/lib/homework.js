@@ -28,6 +28,8 @@ const invalid = (message, field) => ({ error: { message, fields: { [field]: 'inv
  * Lo usa: routes/homework/index.js (GET /targets → findTargets de db/homework.js).
  */
 export function recentGroupSince(today) {
+  // FILTRO: desde cuándo una grupal se puede elegir como destino (hoy menos
+  // RECENT_GROUP_DAYS); lo usan findTargets y la validación del POST.
   const [y, m, d] = today.split('-').map(Number);
   return new Date(Date.UTC(y, m - 1, d - RECENT_GROUP_DAYS)).toISOString().slice(0, 10);
 }

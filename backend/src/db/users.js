@@ -1,4 +1,5 @@
 import { getPool } from './pool.js';
+import { hasRateInModality, ratedSubjectsJson } from './rates.js';
 
 // Usuarios: alta, perfil (con materias y tarifas del docente) y buscador.
 // Tablas: users (migración 001; nombre/apellido/telefono de 002,
@@ -90,33 +91,36 @@ export async function findSubjectIdsByTeacher(teacherId) {
 
 /**
  * Los docentes para el buscador, con las materias que ofrecen. Una materia
- * cuenta si el docente le puso tarifa en alguna modalidad: es el mismo
- * criterio con el que findPublishedWindows ofrece una ventana, así que el
- * buscador no sugiere a nadie a quien no se le pueda reservar nada. Solo
- * nombre y materias — el buscador no tiene por qué ver el mail ni el
- * teléfono de nadie.
+ * cuenta si el docente le puso tarifa en alguna modalidad (ratedSubjectsJson
+ * de db/rates.js, el mismo fragmento que favoritos). Solo nombre y materias —
+ * el buscador no tiene por qué ver el mail ni el teléfono de nadie.
  *
- * Solo docentes aprobados: un pendiente o rechazado no se ofrece (ver
- * TeacherApproval.canReceiveBookings).
- *
+ * @param {{today: string}} args - today = now().iso de lib/clock.js.
  * @returns {Promise<Array<{id, nombre, apellido, subjects: Array<{id, name}>}>>}
- *   docentes sin ninguna materia tarifada no aparecen (JOIN LATERAL ... IS NOT NULL).
- * Origen: users JOIN subjects filtradas por teacher_rates.
+ * Origen: users JOIN subjects filtradas por teacher_rates; availability para
+ *   saber si tiene algo publicado.
  * Lo usa: routes/teachers/index.js (GET /api/teachers).
  */
-export async function listTeachers() {
+export async function listTeachers({ today }) {
+  // FILTRO: el buscador no sugiere a nadie a quien no se le pueda reservar
+  // nada. Solo docentes aprobados (ver TeacherApproval.canReceiveBookings),
+  // con alguna materia tarifada (JOIN LATERAL ... IS NOT NULL) y con al menos
+  // una ventana publicable que no haya terminado: semanal, o suelta desde hoy
+  // ($1, hora argentina), en una modalidad con tarifa (el mismo
+  // hasRateInModality que findPublishedWindows).
   const result = await getPool().query(
     `SELECT u.id, u.nombre, u.apellido, subj.subjects
      FROM users u
-     JOIN LATERAL (
-       SELECT json_agg(json_build_object('id', s.id, 'name', s.name) ORDER BY s.name) AS subjects
-       FROM subjects s
-       WHERE EXISTS (
-         SELECT 1 FROM teacher_rates r WHERE r.teacher_id = u.id AND r.subject_id = s.id
-       )
-     ) subj ON subj.subjects IS NOT NULL
+     JOIN LATERAL (${ratedSubjectsJson('u.id')}) subj ON subj.subjects IS NOT NULL
      WHERE u.role = 'teacher' AND u.approval_status = 'approved'
-     ORDER BY u.nombre, u.apellido`
+       AND EXISTS (
+         SELECT 1 FROM availability av
+         WHERE av.teacher_id = u.id
+           AND (av.repeats_weekly OR av.start_date >= $1::date)
+           AND ${hasRateInModality('av.teacher_id', 'av.modality')}
+       )
+     ORDER BY u.nombre, u.apellido`,
+    [today]
   );
   return result.rows;
 }

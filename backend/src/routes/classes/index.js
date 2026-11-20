@@ -362,6 +362,7 @@ export default async function classesRoutes(app) {
     await expireStartedPending(now());
     const cls = await findClassById(id);
     if (!cls) return null;
+    // FILTRO: una clase solo la ven su docente y su alumno; ajena = 404.
     if (String(cls.teacherId) === String(request.user.id)) return { cls, role: 'teacher' };
     if (String(cls.studentId) === String(request.user.id)) return { cls, role: 'student' };
     return null;

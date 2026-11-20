@@ -188,8 +188,9 @@ class ClassActions extends Component {
   render() {
     const { cls, viewRole } = this.props
     const now = this.props.now || nowParts()
-    // `exclude` saca acciones que se hacen en otro lado: en las tarjetas,
-    // tomar lista va en el detalle de la clase (ClassDetailDialog).
+    // FILTRO: los botones salen de allowedActions (espejo de checkAction del
+    // backend); `exclude` saca acciones que se hacen en otro lado: en las
+    // tarjetas, tomar lista va en el detalle de la clase (ClassDetailDialog).
     const actions = allowedActions(cls, viewRole, now).filter((a) => !this.props.exclude.includes(a))
     const motivo = cancelDescription(cls, viewRole)
     const hint = viewRole === 'student' ? cancelDeadlineHint(cls, now) : null

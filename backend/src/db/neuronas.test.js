@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('./pool.js', () => ({ getPool: vi.fn() }));
 
-const { creditCorrection, syncTurnCredits } = await import('./neuronas.js');
+const { buyFeatured, creditCorrection, featuredActiveOn, findFeaturedStatus, syncTurnCredits } =
+  await import('./neuronas.js');
+const { getPool } = await import('./pool.js');
 
 const DOCENTE = 'docente-1';
 
@@ -168,5 +170,51 @@ describe('creditCorrection', () => {
     expect(locks.map((call) => call.params[0])).toEqual([DOCENTE, 'alumno-1']);
     const weeklyCount = calls.findIndex((call) => call.sql.includes('homework_on_time'));
     expect(locks[1].index).toBeLessThan(weeklyCount);
+  });
+});
+
+describe('Destacados: cupo global', () => {
+  const HOY = '2099-09-07';
+
+  it('the status counts only active featured slots of approved teachers', async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [{ activeUntil: null, active: 4 }] });
+    getPool.mockReturnValue({ query });
+
+    expect(await findFeaturedStatus(DOCENTE, HOY)).toEqual({ activeUntil: null, slotsLeft: 1 });
+
+    const [sql, params] = query.mock.calls[0];
+    expect(sql).toContain("u.approval_status = 'approved'");
+    expect(sql).toContain(featuredActiveOn('f', '$2'));
+    expect(params).toEqual([DOCENTE, HOY]);
+  });
+
+  it('buying measures the cap with the same condition (approved, active today)', async () => {
+    const client = {
+      query: vi.fn(async (sql) => {
+        if (sql.includes('FROM teacher_featured f')) {
+          // 5 activos, pero la consulta ya deja afuera a los no aprobados:
+          // acá llegan 4 y queda un lugar.
+          return { rows: [1, 2, 3, 4].map((n) => ({ teacherId: `otro-${n}` })) };
+        }
+        if (sql.includes('earned - spent_classes')) return { rows: [{ earned: 2000, balance: 2000 }] };
+        if (sql.includes('INSERT INTO teacher_featured')) return { rows: [{ endDate: '2099-09-13' }] };
+        return { rows: [] };
+      }),
+      release: vi.fn(),
+    };
+    getPool.mockReturnValue({ connect: async () => client });
+
+    expect(await buyFeatured(DOCENTE, HOY)).toEqual({ endDate: '2099-09-13' });
+
+    const [sql, params] = client.query.mock.calls.find(([q]) => q.includes('FROM teacher_featured f'));
+    expect(sql).toContain("u.approval_status = 'approved'");
+    expect(sql).toContain(featuredActiveOn('f', '$1'));
+    expect(params).toEqual([HOY]);
+  });
+
+  it('a featured slot is active from its start date to its end date, inclusive', () => {
+    expect(featuredActiveOn('f', '$3')).toBe(
+      '(f.start_date <= $3::date AND f.end_date >= $3::date)'
+    );
   });
 });

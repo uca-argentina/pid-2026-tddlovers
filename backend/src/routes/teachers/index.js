@@ -61,10 +61,10 @@ export default async function teachersRoutes(app) {
    * docente logueado: la usa cualquiera con sesión.
    *
    * Respuesta: 200 [{ id, nombre, apellido, subjects }] (listTeachers: solo aprobados
-   *   con alguna materia tarifada).
+   *   con alguna materia tarifada y alguna ventana publicable que no terminó).
    */
   app.get('/', { onRequest: app.requireAuth }, async (request, reply) => {
-    return reply.send(await listTeachers());
+    return reply.send(await listTeachers({ today: todayIso() }));
   });
 
   /**

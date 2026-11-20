@@ -52,7 +52,13 @@ class FavoritesPage extends Component {
     this.fetchToken += 1
   }
 
-  /** Trae los favoritos del alumno (GET /api/favorites) → `teachers`. */
+  /**
+   * Trae los favoritos del alumno (GET /api/favorites) → `teachers`.
+   *
+   * FILTRO: solo para alumnos (regla de pantalla) y solo los docentes
+   * aprobados: los que dejaron de estarlo no vienen (regla del backend,
+   * listFavoriteTeachers en backend/src/db/favorites.js).
+   */
   load() {
     const token = ++this.fetchToken
     if (this.props.viewRole !== 'student') {

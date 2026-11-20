@@ -67,6 +67,8 @@ export function checkEditMaterial(cls, { role, now }) {
  * Espejo: frontend/src/utils/classMaterials.js (canViewMaterial).
  */
 export function checkViewMaterial(cls, { role, now }) {
+  // FILTRO: el material se ve solo de una clase que se dio (aceptada,
+  // confirmada, realizada o ausente) y que ya terminó.
   if (role === 'teacher') return checkEditMaterial(cls, { role, now });
   if (!GIVEN_STATUSES.includes(cls.status)) {
     return { status: 409, message: 'Esta clase no se dio: no tiene material.' };

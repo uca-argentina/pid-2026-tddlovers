@@ -87,7 +87,7 @@ export class VacationRange {
    * @param {string} iso - el día, 'YYYY-MM-DD'.
    * @param {string|null} [teacherId] - si viene, solo cuentan los rangos de ese docente.
    * @returns {boolean}
-   * Lo usa: lib/availabilityExpansion.js (expandAvailability).
+   * Lo usa: lib/availabilityExpansion.js (bookableRows).
    */
   static covers(ranges, iso, teacherId = null) {
     return ranges.some(

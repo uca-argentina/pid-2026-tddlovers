@@ -114,6 +114,8 @@ class SearchBar extends Component {
     })
   }
 
+  // FILTRO: las sugerencias que pegan con lo tipeado (suggest en
+  // utils/search.js); los docentes ya vienen solo aprobados del backend.
   getSuggestions() {
     const { subjects, teachers } = suggest(this.state.query, this.state.catalog)
     const options = [
@@ -140,9 +142,9 @@ class SearchBar extends Component {
 
   select(option) {
     this.setState({ query: option.label, open: false, activeIndex: -1 })
-    // Las dos van por ?q=: resolveQuery ya distingue materia de docente y
-    // pisa también el filtro de docente que hubiera quedado de una búsqueda
-    // anterior.
+    // Las dos van por ?q=: resolveQuery (utils/search.js) ya distingue
+    // materia (nombre exacto) de texto libre y pisa también el texto que
+    // hubiera quedado de una búsqueda anterior.
     this.goTo(option.label)
   }
 
@@ -204,7 +206,7 @@ class SearchBar extends Component {
     //
     // Lo buscado lo interpreta la pantalla de reservar: si es una materia
     // queda elegida como si se hubiera tocado el chip, y si no se toma como
-    // nombre de docente (ver resolveQuery en utils/booking.js).
+    // texto libre que pega con docente o materia (resolveQuery, utils/search.js).
     this.goTo(q)
   }
 

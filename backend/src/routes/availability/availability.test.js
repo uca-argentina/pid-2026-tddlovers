@@ -7,6 +7,7 @@ vi.mock('../../db/availability.js', () => ({
 vi.mock('../../db/classes.js', () => ({
   expireStartedPending: vi.fn(),
   findClassById: vi.fn(),
+  findClassesForUser: vi.fn(),
   findTakenSlots: vi.fn(),
 }));
 
@@ -28,7 +29,7 @@ vi.mock('../../lib/clock.js', () => ({
 }));
 
 const { findPublishedWindows } = await import('../../db/availability.js');
-const { expireStartedPending, findClassById, findTakenSlots } = await import(
+const { expireStartedPending, findClassById, findClassesForUser, findTakenSlots } = await import(
   '../../db/classes.js'
 );
 const { listVacationsInRange } = await import('../../db/vacations.js');
@@ -41,12 +42,12 @@ const MATE = 'a1b2c3d4-0000-4000-8000-000000000001';
 const CLASE_ID = 'c0ffee00-1111-4222-8333-444455556666';
 const LUNES = '2099-09-14';
 
-async function authedHeaders(app, userId = ALUMNO_ID) {
+async function authedHeaders(app, userId = ALUMNO_ID, role = 'student') {
   findValidSession.mockResolvedValue({
     session_id: 'session-1',
     user_id: userId,
     email: 'a@example.com',
-    role: 'student',
+    role,
   });
   await app.ready();
   return { cookie: `sid=${app.signCookie('session-1')}` };
@@ -71,7 +72,7 @@ const ventana = {
   teacherFeatured: false,
 };
 
-// Como la devuelve findTakenSlots: un turno.
+// Como la devuelve findTakenSlots: un turno, con cupo y modalidad copiados.
 const turno = {
   teacherId: DOCENTE_ID,
   date: LUNES,
@@ -80,6 +81,8 @@ const turno = {
   subjectId: MATE,
   subjectName: 'Matemática',
   enrolled: 1,
+  maxStudents: 1,
+  modality: 'virtual',
 };
 
 // Como la devuelve findClassById (CLASS_COLUMNS), con lo que importa acá.
@@ -125,8 +128,11 @@ describe('GET /api/availability', () => {
     findPublishedWindows.mockResolvedValue([ventana]);
     findTakenSlots.mockResolvedValue([turno]);
     listVacationsInRange.mockResolvedValue([]);
+    findClassesForUser.mockResolvedValue([]);
     expireStartedPending.mockResolvedValue(undefined);
   });
+
+  const startsOf = (row) => row.starts.map((option) => option.start);
 
   afterEach(async () => {
     vi.clearAllMocks();
@@ -137,8 +143,82 @@ describe('GET /api/availability', () => {
     const headers = await authedHeaders(app);
     const res = await app.inject({ method: 'GET', url: URL, headers });
     expect(res.statusCode).toBe(200);
-    expect(res.json()[0].free).toEqual([{ start: '15:00', end: '17:00' }]);
+    expect(res.json()[0].starts).toEqual([
+      { start: '15:00', maxMinutes: 120 },
+      { start: '15:30', maxMinutes: 90 },
+      { start: '16:00', maxMinutes: 60 },
+      { start: '16:30', maxMinutes: 30 },
+    ]);
+    expect(res.json()[0]).not.toHaveProperty('free');
     expect(findClassById).not.toHaveBeenCalled();
+  });
+
+  it('passes "today" from the Argentine clock to findPublishedWindows', async () => {
+    const headers = await authedHeaders(app);
+    await app.inject({ method: 'GET', url: URL, headers });
+    expect(findPublishedWindows).toHaveBeenCalledWith({ from: LUNES, to: LUNES, today: '2099-09-07' });
+  });
+
+  it('subtracts the student\'s own classes with any teacher, and hides what becomes empty', async () => {
+    findClassesForUser.mockResolvedValue([
+      clase({ id: 'otra', teacherId: 'otro', startTime: '16:00', endTime: '17:00' }),
+      clase({ id: 'cancelada', teacherId: 'otro', startTime: '15:00', endTime: '16:00', status: 'cancelada' }),
+    ]);
+    const headers = await authedHeaders(app);
+    const res = await app.inject({ method: 'GET', url: URL, headers });
+    expect(findClassesForUser).toHaveBeenCalledWith({
+      userId: ALUMNO_ID,
+      role: 'student',
+      from: LUNES,
+      to: LUNES,
+    });
+    expect(res.json()[0].starts).toEqual([
+      { start: '15:00', maxMinutes: 60 },
+      { start: '15:30', maxMinutes: 30 },
+    ]);
+
+    // Ocupado toda la tarde: la fila no sale.
+    findClassesForUser.mockResolvedValue([
+      clase({ id: 'otra', teacherId: 'otro', startTime: '15:00', endTime: '17:00' }),
+    ]);
+    const full = await app.inject({ method: 'GET', url: URL, headers });
+    expect(full.json()).toEqual([]);
+  });
+
+  it('does not cross own classes for a teacher, and never offers their own windows', async () => {
+    findPublishedWindows.mockResolvedValue([
+      ventana,
+      { ...ventana, id: 'f0f0f0f0-0000-4000-8000-000000000002', teacherId: ALUMNO_ID },
+    ]);
+    const headers = await authedHeaders(app, ALUMNO_ID, 'teacher');
+    const res = await app.inject({ method: 'GET', url: URL, headers });
+    expect(findClassesForUser).not.toHaveBeenCalled();
+    expect(res.json().map((row) => row.teacherId)).toEqual([DOCENTE_ID]);
+  });
+
+  it('does not offer a full group whose window was raised (B1)', async () => {
+    findPublishedWindows.mockResolvedValue([{ ...ventana, maxStudents: 5 }]);
+    findTakenSlots.mockResolvedValue([{ ...turno, enrolled: 3, maxStudents: 3 }]);
+    const headers = await authedHeaders(app);
+    const res = await app.inject({ method: 'GET', url: URL, headers });
+    expect(res.json()[0].groups).toEqual([]);
+  });
+
+  it('offers a group with room with the turn capacity', async () => {
+    findPublishedWindows.mockResolvedValue([{ ...ventana, maxStudents: 5 }]);
+    findTakenSlots.mockResolvedValue([{ ...turno, enrolled: 2, maxStudents: 3 }]);
+    const headers = await authedHeaders(app);
+    const res = await app.inject({ method: 'GET', url: URL, headers });
+    expect(res.json()[0].groups).toEqual([
+      {
+        start: '14:00',
+        end: '15:00',
+        subjectId: MATE,
+        subjectName: 'Matemática',
+        enrolled: 2,
+        maxStudents: 3,
+      },
+    ]);
   });
 
   it('expires started pendings before reading what is taken', async () => {
@@ -161,7 +241,7 @@ describe('GET /api/availability', () => {
       });
       expect(res.statusCode).toBe(200);
       // 14:00-15:00 → 14:30-15:30 tiene que poder elegirse.
-      expect(res.json()[0].free).toEqual([{ start: '14:00', end: '17:00' }]);
+      expect(res.json()[0].starts[0]).toEqual({ start: '14:00', maxMinutes: 180 });
       expect(findClassById).toHaveBeenCalledWith(CLASE_ID);
     });
 
@@ -174,7 +254,7 @@ describe('GET /api/availability', () => {
         headers,
       });
       expect(res.statusCode).toBe(200);
-      expect(res.json()[0].free).toEqual([{ start: '15:00', end: '17:00' }]);
+      expect(startsOf(res.json()[0])[0]).toBe('15:00');
     });
 
     it('is ignored for a class that is not confirmed', async () => {
@@ -186,7 +266,7 @@ describe('GET /api/availability', () => {
           url: `${URL}&excludeClassId=${CLASE_ID}`,
           headers,
         });
-        expect(res.json()[0].free).toEqual([{ start: '15:00', end: '17:00' }]);
+        expect(startsOf(res.json()[0])[0]).toBe('15:00');
       }
     });
 
@@ -199,7 +279,23 @@ describe('GET /api/availability', () => {
         headers,
       });
       expect(res.statusCode).toBe(200);
-      expect(res.json()[0].free).toEqual([{ start: '15:00', end: '17:00' }]);
+      expect(startsOf(res.json()[0])[0]).toBe('15:00');
+    });
+
+    it('only keeps the teacher and subject of that class', async () => {
+      findClassById.mockResolvedValueOnce(clase());
+      findPublishedWindows.mockResolvedValue([
+        { ...ventana, subjects: [...ventana.subjects, { id: 'fisica', name: 'Física', hourlyRateCents: 1 }] },
+        { ...ventana, id: 'f0f0f0f0-0000-4000-8000-000000000003', teacherId: 'otro-docente' },
+      ]);
+      const headers = await authedHeaders(app);
+      const res = await app.inject({
+        method: 'GET',
+        url: `${URL}&excludeClassId=${CLASE_ID}`,
+        headers,
+      });
+      expect(res.json()).toHaveLength(1);
+      expect(res.json()[0].subjects.map((subject) => subject.id)).toEqual([MATE]);
     });
 
     it('is a 400 when it is not a UUID', async () => {

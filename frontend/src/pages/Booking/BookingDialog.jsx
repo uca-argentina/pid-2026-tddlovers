@@ -22,12 +22,11 @@ import {
   needsMeetingUrl,
 } from '../../utils/windows.js'
 import {
-  activePacksWith,
   classesLabel,
   formatPackDate,
   packClassesLabel,
-  packsForReschedule,
   quoteBooking,
+  unusablePackReason,
   usablePackFor,
 } from '../../utils/packs.js'
 import { REWARDS, formatNeuronas, rewardFits, rewardsOffered } from '../../utils/neuronas.js'
@@ -65,21 +64,22 @@ const DEFAULT_MINUTES = 60
  * utils/packs.js), que se les pasa a las partes que la muestran.
  *
  * Acá NO se vuelve a calcular qué está libre: la tarjeta ya trae los inicios
- * posibles con su duración máxima (del backend, recortados por las clases
- * propias en annotateClashes). Una segunda cuenta sería una segunda verdad.
+ * que este alumno puede tomar con su duración máxima (`starts`, recortados
+ * por el backend con sus clases propias) y las grupales a las que se puede
+ * sumar (`groups`). Una segunda cuenta sería una segunda verdad.
  *
  * Rol: alumno. Lo abre BookingBoard (renderDialog) al tocar "Reservar" en una
  * tarjeta.
  *
  * Props (todas de BookingBoard):
- *   - card: la tarjeta elegida, una fila de GET /api/availability ya pasada
- *     por annotateClashes (utils/booking.js): windowId, date, teacherId,
- *     teacherName, teacherAcceptsRewards, modality, maxStudents,
- *     subjects [{id, name, hourlyRateCents}], starts [{start, maxMinutes,
- *     blocked}] y groups [{start, end, subjectId, subjectName, enrolled,
- *     blocked, joined}].
+ *   - card: la tarjeta elegida, una fila de GET /api/availability: windowId,
+ *     date, teacherId, teacherName, teacherAcceptsRewards, modality,
+ *     maxStudents, subjects [{id, name, hourlyRateCents}], starts [{start,
+ *     maxMinutes}] y groups [{start, end, subjectId, subjectName, enrolled,
+ *     maxStudents}].
  *   - rescheduleOf: la clase que se reprograma (GET /api/classes/:id), o null.
- *   - packs: paquetes del alumno (GET /api/packs/mine).
+ *   - packs: paquetes del alumno (GET /api/packs/mine), ya ajustados por
+ *     BookingBoard si se reprograma (packsForReschedule).
  *   - neuronasBalance: saldo de GET /api/neuronas.
  *   - onClose(): cerrar sin reservar.
  *   - onBooked({ date, subjectName, teacherName, rescheduled, usedPack,
@@ -101,9 +101,7 @@ class BookingDialog extends Component {
     const { subjects, starts, groups } = props.card
     // Si hay una sola materia, o un solo horario posible, no tiene sentido
     // hacerlos elegir. La duración sí queda a la vista para cambiarla.
-    const libres = starts.filter((option) => !option.blocked)
-    const unico =
-      libres.length === 1 && !groups.some((group) => !group.blocked) ? libres[0] : null
+    const unico = starts.length === 1 && groups.length === 0 ? starts[0] : null
     this.state = {
       subjectId: subjects.length === 1 ? subjects[0].id : null,
       groupStart: null,
@@ -118,15 +116,10 @@ class BookingDialog extends Component {
     }
   }
 
-  /** Al reprogramar, las clases del paquete que usaba la vieja vuelven a estar. */
-  getPacks() {
-    return packsForReschedule(this.props.packs, this.props.rescheduleOf)
-  }
-
   /** El paquete del alumno que sirve con este docente ese día (usablePackFor), o null. */
   getUsablePack() {
     const { card } = this.props
-    return usablePackFor(this.getPacks(), card.teacherId, card.date)
+    return usablePackFor(this.props.packs, card.teacherId, card.date)
   }
 
   /** Cuántas neuronas tiene para gastar. Al reprogramar, el canje de la vieja le vuelve. */
@@ -343,15 +336,12 @@ class BookingDialog extends Component {
     )
   }
 
-  /** Por qué una grupal no se puede tomar, para el lector de pantalla. */
+  /** La grupal, para el lector de pantalla. */
   describeGroup(group) {
-    const base = `${group.subjectName}, ${group.start} a ${group.end}, ${formatEnrolled(
+    return `${group.subjectName}, ${group.start} a ${group.end}, ${formatEnrolled(
       group.enrolled,
-      this.props.card.maxStudents,
+      group.maxStudents,
     )}`
-    if (group.joined) return `${base}, ya estás anotado`
-    if (group.blocked) return `${base}, ya tenés otra clase`
-    return base
   }
 
   renderGroups() {
@@ -372,12 +362,11 @@ class BookingDialog extends Component {
                 aria-pressed={elegida}
                 aria-label={this.describeGroup(group)}
                 onClick={this.handleGroup(group)}
-                disabled={group.blocked || this.state.saving}
+                disabled={this.state.saving}
               >
                 <span className="booking-slot-time">{formatRangeLabel(group.start, group.end)}</span>
                 <span className="booking-slot-note">
-                  {group.subjectName} ·{' '}
-                  {group.joined ? 'ya estás anotado' : formatEnrolled(group.enrolled, card.maxStudents)}
+                  {group.subjectName} · {formatEnrolled(group.enrolled, group.maxStudents)}
                 </span>
               </button>
             )
@@ -403,11 +392,8 @@ class BookingDialog extends Component {
                 type="button"
                 className={`booking-slot ${elegido ? 'is-selected' : ''}`}
                 aria-pressed={elegido}
-                aria-label={
-                  option.blocked ? `${option.start}, ya tenés otra clase` : option.start
-                }
                 onClick={this.handleStart(option)}
-                disabled={option.blocked || this.state.saving}
+                disabled={this.state.saving}
               >
                 <span className="booking-slot-time">{option.start}</span>
               </button>
@@ -497,19 +483,19 @@ class BookingDialog extends Component {
   /**
    * Cuántas clases del paquete usa, y qué cubren. Si tiene un paquete vigente
    * con este docente pero no sirve para este día (vence antes, o ya reservó
-   * todas las que le quedan), se explica en vez de esconderlo.
+   * todas las que le quedan), se explica en vez de esconderlo
+   * (unusablePackReason, que mira `usable` del backend).
    */
   renderPack(selection, quote) {
     const { card } = this.props
     const usable = this.getUsablePack()
 
     if (!usable) {
-      const activos = activePacksWith(this.getPacks(), card.teacherId)
-      if (activos.length === 0) return null
-      const vencenAntes = activos.every((pack) => card.date > pack.expiresOn)
+      const motivo = unusablePackReason(this.props.packs, card.teacherId, card.date)
+      if (!motivo) return null
       return (
         <p className="booking-dialog-pack-note">
-          {vencenAntes
+          {motivo === 'expires'
             ? 'Tu paquete con este docente vence antes de este día: esta clase se paga aparte.'
             : 'Ya reservaste todas las clases de tu paquete con este docente: esta clase se paga aparte.'}
         </p>

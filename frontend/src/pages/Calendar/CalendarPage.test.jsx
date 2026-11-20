@@ -189,8 +189,30 @@ describe('CalendarPage', () => {
 
     render(<CalendarPage viewRole="teacher" />)
 
-    expect(await screen.findByText(/Tenés 2 solicitudes de clase esperando respuesta/)).toBeInTheDocument()
+    expect(await screen.findByText(/Tenés 2 clases con solicitudes esperando respuesta/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Ver solicitudes' })).toHaveAttribute('href', '/reservas')
+  })
+
+  it('cuenta clases y no reservas: una grupal con tres pendientes es una solicitud', async () => {
+    // Bug: decía "3 solicitudes" mientras Mis reservas contaba 1 clase pendiente.
+    const grupal = { startTime: '10:00', maxStudents: 3, status: 'pendiente' }
+    fetchClasses.mockImplementation(({ status }) =>
+      Promise.resolve(
+        status === 'pendiente'
+          ? [
+              classOn('2099-01-01', { ...grupal, id: 'g1', studentId: 'a1' }),
+              classOn('2099-01-01', { ...grupal, id: 'g2', studentId: 'a2' }),
+              classOn('2099-01-01', { ...grupal, id: 'g3', studentId: 'a3' }),
+            ]
+          : [],
+      ),
+    )
+
+    render(<CalendarPage viewRole="teacher" />)
+
+    expect(
+      await screen.findByText(/Tenés 1 clase con solicitudes esperando respuesta/),
+    ).toBeInTheDocument()
   })
 
   it('defensivo: una clase sin alumno no rompe la vista de docente', async () => {
@@ -355,7 +377,7 @@ describe('CalendarPage', () => {
         <CalendarPage viewRole="teacher" />
       </MemoryRouter>,
     )
-    expect(await screen.findByText(/Tenés 1 solicitud de clase/)).toBeInTheDocument()
+    expect(await screen.findByText(/Tenés 1 clase con solicitudes/)).toBeInTheDocument()
 
     // Y si vuelve a ser alumno, el aviso se va.
     rerender(

@@ -285,6 +285,8 @@ class ClassMaterial extends Component {
     const { material, loading, uploading } = this.state
     const now = this.now()
 
+    // FILTRO: el material se ve recién con la clase dada y terminada (espejo
+    // de backend/src/lib/classMaterials.js, que es el que decide).
     if (!canHaveMaterial(cls)) {
       return <p className="class-material-empty">Esta clase no se dio, así que no tiene material.</p>
     }
