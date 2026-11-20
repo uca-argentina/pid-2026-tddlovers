@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../db/classes.js', () => ({
-  findClassById: vi.fn(),
-  findTurnClasses: vi.fn(),
+  findClass: vi.fn(),
+}));
+
+vi.mock('../../db/bookings.js', () => ({
+  findClassBookings: vi.fn(),
 }));
 
 vi.mock('../../db/homework.js', () => ({
@@ -27,7 +30,8 @@ vi.mock('../../db/sessions.js', () => ({
   deleteExpiredSessions: vi.fn().mockResolvedValue(undefined),
 }));
 
-const { findClassById, findTurnClasses } = await import('../../db/classes.js');
+const { findClass } = await import('../../db/classes.js');
+const { findClassBookings } = await import('../../db/bookings.js');
 const db = await import('../../db/homework.js');
 const { findValidSession } = await import('../../db/sessions.js');
 const { buildApp } = await import('../../app.js');
@@ -199,41 +203,57 @@ describe('/api/homework', () => {
       expect(db.createHomework).not.toHaveBeenCalled();
     });
 
-    it('a una grupal le llega a los anotados, no a los cancelados', async () => {
+    it('a una grupal le llega a sus anotados', async () => {
       const headers = await authedHeaders(app, 'teacher', DOCENTE);
-      findClassById.mockResolvedValue({
+      // Como la devuelve findClass (classes.id = CLASE).
+      findClass.mockResolvedValue({
+        id: CLASE,
         teacherId: DOCENTE,
         maxStudents: 5,
         date: '2099-09-14',
         startTime: '13:00',
         subjectId: 'materia',
+        active: true,
       });
-      findTurnClasses.mockResolvedValue([
-        { studentId: ALUMNO, status: 'confirmada' },
-        { studentId: OTRO, status: 'cancelada' },
-      ]);
+      // findClassBookings ya viene sin las canceladas.
+      findClassBookings.mockResolvedValue([{ studentId: ALUMNO, status: 'confirmada' }]);
       db.createHomework.mockResolvedValue(TAREA);
       db.findTeacherHomework.mockResolvedValue({ id: TAREA, submissions: [] });
 
       const res = await send('POST', '/api/homework', headers, { ...NUEVA, classId: CLASE });
 
       expect(res.statusCode).toBe(201);
+      expect(findClassBookings).toHaveBeenCalledWith(CLASE);
       expect(db.createHomework).toHaveBeenCalledWith(
-        expect.objectContaining({
-          studentIds: [ALUMNO],
-          subjectId: 'materia',
-          classDate: '2099-09-14',
-          startTime: '13:00',
-        })
+        expect.objectContaining({ studentIds: [ALUMNO], classId: CLASE })
       );
     });
 
     it('una clase ajena da 404 y una individual, 400', async () => {
       const headers = await authedHeaders(app, 'teacher', DOCENTE);
-      findClassById.mockResolvedValueOnce({ teacherId: OTRO, maxStudents: 5 });
+      findClass.mockResolvedValueOnce({ teacherId: OTRO, maxStudents: 5 });
       expect((await send('POST', '/api/homework', headers, { ...NUEVA, classId: CLASE })).statusCode).toBe(404);
-      findClassById.mockResolvedValueOnce({ teacherId: DOCENTE, maxStudents: 1 });
+      findClass.mockResolvedValueOnce({ teacherId: DOCENTE, maxStudents: 1 });
       expect((await send('POST', '/api/homework', headers, { ...NUEVA, classId: CLASE })).statusCode).toBe(400);
+    });
+
+    it('no asigna a una grupal de hace más de 60 días', async () => {
+      const headers = await authedHeaders(app, 'teacher', DOCENTE);
+      findClass.mockResolvedValue({
+        id: CLASE,
+        teacherId: DOCENTE,
+        maxStudents: 5,
+        date: '2001-01-01',
+        startTime: '13:00',
+        subjectId: 'materia',
+      });
+
+      const res = await send('POST', '/api/homework', headers, { ...NUEVA, classId: CLASE });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().message).toMatch(/60 días/);
+      expect(findClassBookings).not.toHaveBeenCalled();
+      expect(db.createHomework).not.toHaveBeenCalled();
     });
 
     it('exige exactamente un destino', async () => {

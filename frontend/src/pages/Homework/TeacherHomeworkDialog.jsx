@@ -4,7 +4,14 @@ import { ChevronRightIcon } from '../../components/icons.jsx'
 import { formatDue, submissionStatus, targetLabel } from '../../utils/homework.js'
 import TeacherSubmissionDialog from './TeacherSubmissionDialog.jsx'
 
-/** Una tarea vista por el docente: la consigna y la entrega de cada alumno. */
+/**
+ * Una tarea vista por el docente: la consigna y la entrega de cada alumno.
+ *
+ * Props (de HomeworkPage): homework (una tarea de GET /api/homework con sus
+ * `submissions`), now, onChange(tarea actualizada) y onClose(). Sin fetch:
+ * tocar una entrega abre TeacherSubmissionDialog, que corrige.
+ * Estado: submissionId, la entrega abierta.
+ */
 class TeacherHomeworkDialog extends Component {
   state = { submissionId: null }
 

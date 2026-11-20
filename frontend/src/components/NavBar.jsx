@@ -26,9 +26,10 @@ import './NavBar.css'
  *
  * Es oscura en los dos temas (tokens --color-sidebar-*), como el diseño.
  *
- * En pantallas chicas el CSS la convierte en una barra horizontal abajo,
- * donde las etiquetas se esconden y quedan solo los íconos: el mismo markup
- * sirve para las dos formas, así que no hace falta medir el viewport.
+ * Entre 700 y 900px (tablets) el CSS la pasa a una barra horizontal abajo,
+ * solo con íconos, con el mismo markup. En el
+ * teléfono (≤700px) sí se mide el viewport: withViewport baja `mobile` y
+ * render() devuelve otra barra (renderMobile), ver abajo.
  *
  * Usa <NavLink>, que es un componente común y no un hook, así que no hace
  * falta ningún puente para poder seguir siendo un class component. El
@@ -39,6 +40,9 @@ import './NavBar.css'
  * cinco pestañas como en iOS, sin marca ni buscador (el buscador vive en la
  * pantalla de Reservar y el tema en el Perfil). Favoritos no entra en cinco:
  * se llega desde el Perfil, igual que a Tareas y a Neuronas.
+ *
+ * Props: viewRole y user (de AppLayout, que los recibe de App) y mobile (de
+ * withViewport). Sin fetch propio (SearchBar pide lo suyo).
  */
 class NavBar extends Component {
   getLinkClass = ({ isActive }) => `navbar-item ${isActive ? 'is-active' : ''}`
@@ -107,6 +111,9 @@ class NavBar extends Component {
     // La pantalla es la misma para los dos roles, pero lo que se va a hacer
     // ahí no: el docente carga los horarios que da y el alumno busca uno para
     // reservar. El aria-label sí queda igual para los dos.
+    // FILTRO: qué ve cada rol en la barra (regla de pantalla; el backend
+    // igual rechaza lo que no le toca): el buscador solo el alumno, el admin
+    // solo /admin, y Favoritos no lo ve el docente.
     const esDocente = this.props.viewRole === 'teacher'
     const esAdmin = this.props.viewRole === 'admin'
     const etiquetaDisponibilidad = esDocente ? 'Disponibilidad' : 'Reservar'

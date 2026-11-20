@@ -15,9 +15,8 @@ const openModals = []
 const CLOSE_MS = 260
 
 /**
- * El primer modal de la app. Hasta acá lo más parecido era CopyDayMenu, que es
- * un globito pegado a su botón y no una capa por encima de todo, así que lo de
- * abajo es todo nuevo y por eso está explicado.
+ * El modal único de la app: una capa por encima de todo que usan todos los
+ * diálogos. Lo que no es obvio está explicado abajo.
  *
  * Va por createPortal al <body> y no en su lugar del árbol: adentro de la
  * pantalla hay contenedores con overflow:hidden (el visor del calendario) y
@@ -37,6 +36,13 @@ const CLOSE_MS = 260
  * las de iOS, y se cierra arrastrando la manija (o el título) hacia abajo.
  * El arrastre mueve el panel tocando el style directo, sin setState: son
  * decenas de eventos por segundo y no cambia nada que React tenga que saber.
+ *
+ * Lo usan todos los diálogos de la app (ver los <Modal> en pages/ y
+ * components/). Sin fetch ni state: lo que necesita recordar (foco previo,
+ * arrastre) va en campos de la instancia.
+ *
+ * Props: title, children, onClose() (lo llama la cruz, Escape, el fondo o el
+ * arrastre), wide, tall y closable (ver defaultProps).
  */
 class Modal extends Component {
   panelRef = null
@@ -87,7 +93,9 @@ class Modal extends Component {
    * con movimiento reducido, se cierran al toque.
    */
   requestClose = () => {
-    if (this.closing) return
+    // Con closable={false} (mientras se guarda algo) se ignora: si el modal se
+    // fuera, la respuesta del pedido volvería a un dueño que ya no lo espera.
+    if (this.closing || !this.props.closable) return
     const panel = this.panelRef
     if (!this.props.tall || !panel || matchesQuery('(prefers-reduced-motion: reduce)')) {
       this.props.onClose()
@@ -157,7 +165,7 @@ class Modal extends Component {
 
   /** Arrastrar la hoja hacia abajo: solo en el teléfono, desde la manija o el título. */
   handleDragStart = (event) => {
-    if (!matchesQuery(MOBILE_QUERY) || !this.panelRef) return
+    if (!this.props.closable || !matchesQuery(MOBILE_QUERY) || !this.panelRef) return
     // El botón de cerrar es un botón, no una manija.
     if (event.target.closest?.('button')) return
     this.dragStart = event.clientY
@@ -229,6 +237,7 @@ class Modal extends Component {
               type="button"
               className="modal-close"
               onClick={this.requestClose}
+              disabled={!this.props.closable}
               aria-label="Cerrar"
             >
               <ErrorIcon />
@@ -252,6 +261,9 @@ Modal.defaultProps = {
   // para listas largas (las reservas de una categoría, el detalle de una
   // clase con su material).
   tall: false,
+  // false mientras se envía algo: ni la cruz, ni Escape, ni el fondo, ni el
+  // arrastre lo cierran.
+  closable: true,
 }
 
 export default Modal

@@ -6,6 +6,12 @@ import { setAcceptsRewards } from '../../api/client.js'
  * Si el docente acepta que le canjeen clases con neuronas. Se guarda al momento y
  * aparte de "Guardar cambios": guardar el perfil le vuelve a pedir aprobación a
  * un docente rechazado, y esto no cambia nada que se revise.
+ *
+ * Props (de ProfilePage): accepts (user.acceptsRewards de la sesión) y
+ * onChange(acceptsRewards), que hace que App actualice su `user`.
+ *
+ * Datos: setAcceptsRewards → PUT /api/teachers/me/accepts-rewards, al tocar
+ * el interruptor; responde { acceptsRewards }.
  */
 class NeuronasSetting extends Component {
   state = { saving: false, error: null }

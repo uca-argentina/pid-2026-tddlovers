@@ -5,7 +5,14 @@ const HOY = '2099-09-10';
 
 // 4 clases de 1 h que vencen el 9/10.
 const pack = (over = {}) =>
-  new StudentPack({ id: 'p1', classCount: 4, classMinutes: 60, expiresOn: '2099-10-09', ...over });
+  new StudentPack({
+    id: 'p1',
+    classCount: 4,
+    classMinutes: 60,
+    expiresOn: '2099-10-09',
+    teacherApproved: true,
+    ...over,
+  });
 
 const oferta = (over = {}) => ({
   classCount: 4,
@@ -145,6 +152,13 @@ describe('StudentPack', () => {
       remaining: 3,
       available: 2,
       expired: false,
+      usable: true,
     });
+  });
+
+  it('summary marca como no usable el vencido, el agotado y el de un docente no aprobado', () => {
+    expect(pack({ expiresOn: '2099-09-01' }).summary(HOY).usable).toBe(false);
+    expect(pack({ attended: 2, reserved: 2 }).summary(HOY).usable).toBe(false);
+    expect(pack({ teacherApproved: false }).summary(HOY).usable).toBe(false);
   });
 });

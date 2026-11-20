@@ -12,6 +12,15 @@ import { addressErrors, addressToForm, addressToPayload, EMPTY_ADDRESS } from '.
  *
  * Editar una dirección cambia todos los horarios que la usan: se dice acá,
  * antes de guardar. Las clases ya reservadas no cambian (tienen su copia).
+ *
+ * Props (de AddressesSection): address (la dirección a editar, o null),
+ * onClose() y onSaved(dirección devuelta por el backend).
+ *
+ * Datos: createAddress → POST /api/teachers/me/addresses, o updateAddress →
+ * PUT /api/teachers/me/addresses/:id, con addressToPayload(form) + isDefault.
+ *
+ * Estado: form (campos tal cual se tipean, ver utils/addresses.js), isDefault,
+ * showErrors, saving, error.
  */
 class AddressDialog extends Component {
   constructor(props) {

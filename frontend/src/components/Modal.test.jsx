@@ -52,6 +52,21 @@ describe('Modal', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
+  it('con closable={false} no se cierra por ningún lado', async () => {
+    const onClose = vi.fn()
+    render(
+      <Modal title="Reservar clase" onClose={onClose} closable={false}>
+        <button type="button">Confirmar</button>
+      </Modal>,
+    )
+
+    await userEvent.keyboard('{Escape}')
+    expect(screen.getByRole('button', { name: 'Cerrar' })).toBeDisabled()
+    fireEvent.pointerDown(screen.getByRole('dialog').closest('.modal-backdrop'))
+
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
   it('tocar el fondo cierra, pero tocar el panel no', async () => {
     const { onClose } = renderModal()
 

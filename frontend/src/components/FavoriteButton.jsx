@@ -14,6 +14,17 @@ import './FavoriteButton.css'
  * roto. Si el pedido falla vuelve a como estaba y avisa por `onError`.
  * Mientras guarda queda deshabilitado, así un doble clic no manda dos pedidos
  * opuestos.
+ *
+ * Lo usan BookingCard, DayAgenda, ClassCard y FavoritesPage.
+ *
+ * Props: teacherId, teacherName (para el aria-label), favorite (si ya lo es:
+ * sale de favoriteIds de withFavorites, o true en FavoritesPage), className,
+ * onChange(teacherId, favorite) y onError(mensaje).
+ *
+ * Datos: addFavoriteTeacher → PUT /api/favorites/:teacherId o
+ * removeFavoriteTeacher → DELETE /api/favorites/:teacherId (ambos idempotentes).
+ *
+ * Estado: pending, el valor pedido mientras el pedido está en vuelo.
  */
 class FavoriteButton extends Component {
   // null = no hay pedido en vuelo; true/false = lo que se pidió.

@@ -1,51 +1,45 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import BookingCard from './BookingCard.jsx'
-import { apiClass } from '../../testing/fixtures.js'
+import { apiAvailabilityRow, startsBetween } from '../../testing/fixtures.js'
 
-// Una fila ya pasada por annotateClashes, que es lo que recibe la tarjeta.
+// Una fila de GET /api/availability, que es lo que recibe la tarjeta.
 function card(overrides = {}) {
-  return {
-    id: 'w1|2026-09-14',
-    windowId: 'w1',
-    date: '2026-09-14',
-    dayKey: 'lunes',
+  return apiAvailabilityRow({
     teacherId: 2,
-    teacherName: 'Laura Gómez',
     start: '13:00',
     end: '15:30',
-    modality: 'virtual',
-    maxStudents: 1,
-    locality: null,
     subjects: [
       { id: 2, name: 'Física', hourlyRateCents: 600000 },
       { id: 1, name: 'Matemática', hourlyRateCents: 500000 },
     ],
-    free: [{ start: '13:00', end: '15:30' }],
-    groups: [],
-    starts: [
-      { start: '13:00', maxMinutes: 150, blocked: false },
-      { start: '13:30', maxMinutes: 120, blocked: false },
-    ],
-    clashes: [],
-    joined: [],
-    bookable: true,
+    starts: startsBetween('13:00', '15:30'),
     ...overrides,
-  }
+  })
 }
 
-function renderCard(overrides, onReservar = () => {}) {
+function renderCard(overrides, onReservar = () => {}, props = {}) {
   return render(
     <ul>
-      <BookingCard card={card(overrides)} onReservar={onReservar} />
+      <BookingCard card={card(overrides)} onReservar={onReservar} {...props} />
     </ul>,
   )
 }
 
 // El botón nombra docente y horario: en un día con varias tarjetas todos
 // dirían "Reservar".
-const reservar = () =>
-  screen.getByRole('button', { name: 'Reservar con Laura Gómez, 13:00 – 15:30' })
+const reservar = (extra = '') =>
+  screen.getByRole('button', { name: `Reservar con Laura Gómez, 13:00 – 15:30${extra}` })
+
+const grupal = (over = {}) => ({
+  start: '13:00',
+  end: '14:30',
+  subjectId: 1,
+  subjectName: 'Matemática',
+  enrolled: 3,
+  maxStudents: 4,
+  ...over,
+})
 
 describe('BookingCard', () => {
   it('las materias que se pueden reservar mandan, y abajo con quién', () => {
@@ -83,52 +77,26 @@ describe('BookingCard', () => {
   })
 
   it('invita a sumarse a una grupal con lugar, con su materia', () => {
-    renderCard({
-      maxStudents: 4,
-      groups: [
-        {
-          start: '13:00',
-          end: '14:30',
-          subjectId: 1,
-          subjectName: 'Matemática',
-          enrolled: 3,
-          joined: false,
-          blocked: false,
-        },
-      ],
-    })
+    renderCard({ maxStudents: 4, groups: [grupal()] })
     expect(screen.getByText('Grupal · hasta 4')).toBeInTheDocument()
     expect(screen.getByText('Sumate a Matemática de las 13:00: 3 de 4 anotados.')).toBeInTheDocument()
   })
 
-  it('avisa si ya está anotado en esa grupal', () => {
-    const anotado = {
-      start: '13:00',
-      end: '14:30',
-      subjectId: 1,
-      subjectName: 'Matemática',
-      enrolled: 2,
-      joined: true,
-      blocked: true,
-    }
-    renderCard({ maxStudents: 4, groups: [anotado], joined: [anotado] })
-    expect(screen.getByText('Ya estás anotado a las 13:00.')).toBeInTheDocument()
-    expect(screen.queryByText(/Sumate/)).not.toBeInTheDocument()
+  it('el "n de M" usa el cupo de la clase, no el de la ventana', () => {
+    // La ventana se agrandó a 6 después de que se armó una grupal de 4.
+    renderCard({ maxStudents: 6, groups: [grupal({ enrolled: 2, maxStudents: 4 })] })
+    expect(screen.getByText('Sumate a Matemática de las 13:00: 2 de 4 anotados.')).toBeInTheDocument()
   })
 
-  it('avisa en gris con qué clase se superpone, y sigue siendo reservable', () => {
-    renderCard({
-      clashes: [apiClass({ subjectName: 'Física', teacherName: 'Carla Benítez' })],
-    })
-    expect(
-      screen.getByText('Se superpone con Física con Carla Benítez (13:00 – 14:00).'),
-    ).toBeInTheDocument()
+  it('una tarjeta que llegó del backend siempre se puede reservar', () => {
+    renderCard({ starts: [], groups: [grupal()] })
     expect(reservar()).toBeEnabled()
   })
 
-  it('sin ningún horario libre no se puede reservar', () => {
-    renderCard({ bookable: false })
-    expect(reservar()).toBeDisabled()
+  it('de licencia se ve apagada y no se puede reservar', () => {
+    renderCard({ onVacation: true, starts: [], groups: [] })
+    expect(screen.getByText('El docente está de licencia este día.')).toBeInTheDocument()
+    expect(reservar(', de licencia')).toBeDisabled()
   })
 
   it('el botón avisa que se quiere reservar esta tarjeta', async () => {
@@ -136,6 +104,11 @@ describe('BookingCard', () => {
     renderCard({}, onReservar)
     await userEvent.click(reservar())
     expect(onReservar).toHaveBeenCalledTimes(1)
+  })
+
+  it('con un paquete que sirve dice cuántas clases le quedan', () => {
+    renderCard({}, () => {}, { pack: { available: 2, classMinutes: 60 } })
+    expect(screen.getByText('Te quedan 2 clases de 1 h del paquete.')).toBeInTheDocument()
   })
 })
 
@@ -150,10 +123,5 @@ describe('BookingCard — neuronas', () => {
     renderCard({})
     expect(screen.queryByText('Destacado')).not.toBeInTheDocument()
     expect(screen.queryByText('Acepta neuronas')).not.toBeInTheDocument()
-  })
-
-  it('de licencia no se muestra como destacado', () => {
-    renderCard({ teacherFeatured: true, onVacation: true, bookable: false })
-    expect(screen.queryByText('Destacado')).not.toBeInTheDocument()
   })
 })

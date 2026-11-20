@@ -7,16 +7,32 @@ import { formatVacationRange, vacationDays, vacationRangeError } from '../../uti
 import './VacationsDialog.css'
 
 /**
- * Las vacaciones del docente: los rangos que ya cargó (cada uno se puede
+ * Las licencias del docente (internamente "vacations"): los rangos que ya cargó (cada uno se puede
  * borrar, por si se equivocó) y el formulario para agregar otro.
  *
  * Mientras dura un rango, sus horarios no se pueden reservar: los alumnos los
- * ven en gris con "El docente está de vacaciones". Al guardar, las reservas
+ * ven en gris con "El docente está de licencia este día". Al guardar, las reservas
  * que ya tenía esos días se cancelan solas, así que ANTES de guardar se le
  * dice cuántas van a ser (lo cuenta el backend) y tiene que confirmarlo.
  *
  * Los datos son de TeacherAvailability: después de guardar o borrar se le
  * avisa con onChanged para que recargue la lista y la semana.
+ *
+ * Rol: docente. En pantalla se llama "Licencia".
+ *
+ * Props (de TeacherAvailability): vacations (GET /api/teachers/me/vacations),
+ * loading, today ("YYYY-MM-DD"), onChanged() y onClose().
+ *
+ * Datos (api/client.js):
+ *   - fetchVacationImpact → GET /api/teachers/me/vacations/impact?startDate&endDate,
+ *     cada vez que cambia una fecha y el rango es válido.
+ *   - createVacation → POST /api/teachers/me/vacations, al guardar (responde
+ *     con `cancelledClasses`).
+ *   - deleteVacation → DELETE /api/teachers/me/vacations/:id, al borrar.
+ *
+ * Estado: startDate/endDate del formulario, impact (reservas que se
+ * cancelarían, de /impact), impactLoading, saving, removing (id que se está
+ * borrando), error y notice.
  */
 class VacationsDialog extends Component {
   state = {
@@ -46,7 +62,11 @@ class VacationsDialog extends Component {
     return vacationRangeError(this.getRange(), this.props.today)
   }
 
-  /** Con un rango válido, pregunta cuántas reservas se caerían. */
+  /**
+   * Con un rango válido, pregunta cuántas reservas se caerían:
+   * fetchVacationImpact → GET /api/teachers/me/vacations/impact; guarda
+   * `cancelledClasses` de la respuesta en `impact`.
+   */
   loadImpact() {
     const token = ++this.impactToken
     if (this.getRangeError()) {
@@ -79,6 +99,11 @@ class VacationsDialog extends Component {
     }, () => this.loadImpact())
   }
 
+  /**
+   * Guarda el rango con createVacation (POST /api/teachers/me/vacations); el
+   * backend cancela las reservas de esos días y devuelve cuántas
+   * (`cancelledClasses`). Después avisa con onChanged().
+   */
   handleSave = (event) => {
     event.preventDefault()
     const rangeError = this.getRangeError()
@@ -113,6 +138,7 @@ class VacationsDialog extends Component {
       })
   }
 
+  /** Borra una licencia con deleteVacation (DELETE /api/teachers/me/vacations/:id). */
   handleRemove = (vacation) => () => {
     if (this.state.removing) return
     this.setState({ removing: vacation.id, error: null, notice: null })

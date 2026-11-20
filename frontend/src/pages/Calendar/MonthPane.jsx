@@ -49,6 +49,23 @@ const FALLBACK_LINE_HEIGHT = 19
  * semana del día elegido, como el Calendario de iOS; el botón "Mes" despliega
  * la grilla. El mes cargado sigue al día elegido (showMonthOf), así la semana
  * de la tira siempre cae dentro del rango que se le pidió al backend.
+ *
+ * Props (de CalendarPage y BookingBoard):
+ *   - eventsByDate: { "YYYY-MM-DD": [clase, …] }, las líneas de cada día
+ *     (clases propias: CalendarPage.getClassesByDate / BookingBoard.getLessonsByDate).
+ *   - freeByDate: { "YYYY-MM-DD": n } tarjetas reservables (solo BookingBoard).
+ *   - selectedIso: día elegido, guardado en el state del padre.
+ *   - loading: muestra el spinner del título.
+ *   - onSelectDay(iso): el usuario tocó un día.
+ *   - onRangeChange(from, to): primer y último día de la grilla visible; el
+ *     padre pide sus datos con eso (al montar y al cambiar de mes).
+ *   - markedLabel, compactTitle: textos/tamaño de la tira del teléfono.
+ *   - children: avisos (Banner) que van entre el encabezado y la grilla.
+ *   - mobile: de withViewport.
+ *
+ * Estado: viewDate (1.º del mes visible), direction (para la animación),
+ * maxVisibleEvents (líneas que entran por celda, medido del CSS) y expanded
+ * (grilla del mes desplegada en el teléfono). Sin fetch propio.
  */
 class MonthPane extends Component {
   state = {
@@ -85,6 +102,7 @@ class MonthPane extends Component {
     window.removeEventListener('resize', this.measureVisibleEvents)
   }
 
+  /** Las 6 semanas × 7 días del mes visible (buildMonthGrid de utils/calendar.js). */
   getWeeks() {
     const { viewDate } = this.state
     return buildMonthGrid(viewDate.getFullYear(), viewDate.getMonth())

@@ -24,6 +24,19 @@ const slideVariants = {
  * Class component: todo el estado del flujo vive acá (this.state), los
  * pasos son componentes controlados que reciben datos y callbacks por
  * props.
+ *
+ * Ruta /registro. Props (de App): onComplete(resultado, nombre), para el
+ * cartel de bienvenida en el login.
+ *
+ * Datos (api/client.js):
+ *   - fetchSubjects → GET /api/subjects, cuando el docente llega al paso de
+ *     materias (y al tocar "Reintentar").
+ *   - registerAccount → POST /api/auth/register con buildPayload() al final.
+ *
+ * Estado: step/direction (paso actual y sentido de la animación), values y
+ * touched (campos del paso 1), role ('teacher' | 'student'), subjects /
+ * subjectsLoading / subjectsError (catálogo), selectedSubjectIds,
+ * submitting / submitError y done (redirige al login).
  */
 class RegisterPage extends Component {
   state = {

@@ -4,8 +4,15 @@ import {
   setTeacherApproval,
 } from '../../db/approvals.js';
 import { APPROVAL_STATUSES, TeacherApproval } from '../../lib/teacherApproval.js';
+import { isUuid } from '../../lib/validators.js';
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Montado en /api/admin (app.js). Todo solo para role 'admin' (403 si no):
+//   GET  /api/admin/teachers?status=       lista para revisar
+//   POST /api/admin/teachers/:id/approve   (CSRF)
+//   POST /api/admin/teachers/:id/reject    (CSRF) — "Dar de baja"
+// Usa: db/approvals.js y lib/teacherApproval.js (reglas de cada decisión).
+// Los errores salen como { message } (+ `fields` en validaciones); no hay código `error`.
+
 const NOT_FOUND = 'Ese docente no existe.';
 const CHANGED_MEANWHILE = 'Otro administrador ya revisó a este docente. Recargá la página.';
 
@@ -29,6 +36,8 @@ export default async function adminRoutes(app) {
   /**
    * Los docentes a revisar. `?status=pending` es lo que pide la pantalla al
    * abrir; sin status vienen todos.
+   *
+   * Respuesta: 200 [filas de listTeachersForReview]. Errores: 400 estado inválido, 403.
    */
   app.get('/teachers', read, async (request, reply) => {
     const { status } = request.query ?? {};
@@ -42,11 +51,17 @@ export default async function adminRoutes(app) {
    * Arma la ruta de una decisión sobre un docente. Si se puede lo decide
    * TeacherApproval; si en el medio otro admin lo cambió, setTeacherApproval
    * no pisa nada y se avisa con un 409. Devuelve el docente actualizado.
+   *
+   * @param {'approve'|'reject'} name - acción (y último tramo del path).
+   * @param {(a: TeacherApproval) => TeacherApproval} apply - calcula el estado nuevo.
+   * Respuesta: 200 docente (findTeacherForReview). Errores: 404 id inválido o no
+   *   docente; el status que dé TeacherApproval.check (transición no permitida);
+   *   409 otro admin lo cambió en el medio.
    */
   function decision(name, apply) {
     app.post(`/teachers/:id/${name}`, write, async (request, reply) => {
       const { id } = request.params;
-      if (!UUID_RE.test(id)) return reply.code(404).send({ message: NOT_FOUND });
+      if (!isUuid(id)) return reply.code(404).send({ message: NOT_FOUND });
 
       const teacher = await findTeacherForReview(id);
       if (!teacher) return reply.code(404).send({ message: NOT_FOUND });

@@ -1,5 +1,10 @@
 // Las vacaciones del docente, del lado del front. Las reglas de verdad viven
-// en backend/src/lib/vacations.js; acá solo se decide qué mostrar.
+// en backend/src/lib/vacations.js; acá solo se decide qué mostrar. En
+// pantalla se llaman "Licencia". Los rangos ({ id, startDate, endDate }, los
+// dos incluidos) llegan de GET /api/teachers/me/vacations.
+//
+// Lo usan: pages/Availability/TeacherAvailability.jsx, WeekCalendar.jsx y
+// VacationsDialog.jsx.
 
 const MONTH = new Intl.DateTimeFormat('es-AR', { month: 'long' })
 
@@ -8,7 +13,16 @@ function toDate(iso) {
   return new Date(y, m - 1, d)
 }
 
-/** ¿Ese día cae en alguno de los rangos? Los dos extremos cuentan. */
+/**
+ * FILTRO: ¿ese día cae en alguno de los rangos? Los dos extremos cuentan. Es
+ * para que el docente vea sus días de licencia rayados; para el alumno lo
+ * decide el backend (`onVacation` en GET /api/availability).
+ *
+ * @param {Array<{startDate: string, endDate: string}>|null} vacations - de fetchMyVacations().
+ * @param {string} iso - el día, 'YYYY-MM-DD'.
+ * @returns {boolean}
+ * Lo usan: pages/Availability/TeacherAvailability.jsx, WeekCalendar.jsx.
+ */
 export function isOnVacation(vacations, iso) {
   return (vacations || []).some((range) => iso >= range.startDate && iso <= range.endDate)
 }
@@ -17,6 +31,7 @@ export function isOnVacation(vacations, iso) {
  * '19 al 21 de octubre de 2026', '28 de octubre al 3 de noviembre de 2026' o,
  * si es un solo día, '19 de octubre de 2026'. Armado a mano: así se lee como
  * se dice, sin depender de cómo cada navegador formatea un rango.
+ * Lo usa: pages/Availability/VacationsDialog.jsx.
  */
 export function formatVacationRange({ startDate, endDate }) {
   const desde = toDate(startDate)
@@ -32,12 +47,20 @@ export function formatVacationRange({ startDate, endDate }) {
   return `${dia(desde)} al ${fin}`
 }
 
-/** Cuántos días dura, los dos extremos incluidos. */
+/** Cuántos días dura, los dos extremos incluidos. Lo usa: pages/Availability/VacationsDialog.jsx. */
 export function vacationDays({ startDate, endDate }) {
   return Math.round((toDate(endDate) - toDate(startDate)) / 86400000) + 1
 }
 
-/** El mismo chequeo que el backend, para avisar antes de mandar. null si está bien. */
+/**
+ * El mismo chequeo que el backend, para avisar antes de mandar. null si está bien.
+ *
+ * @param {{startDate: string, endDate: string}} range - lo elegido en el formulario.
+ * @param {string} today - hoy, 'YYYY-MM-DD'.
+ * @returns {string|null} el mensaje de error.
+ * Lo usa: pages/Availability/VacationsDialog.jsx.
+ * Espejo: VacationRange de backend/src/lib/vacations.js.
+ */
 export function vacationRangeError({ startDate, endDate }, today) {
   if (!startDate) return 'Elegí desde qué día.'
   if (!endDate) return 'Elegí hasta qué día.'

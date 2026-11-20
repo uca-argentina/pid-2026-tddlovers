@@ -4,8 +4,14 @@
 //
 // `locality` es lo que ve cualquier alumno (el tablero, una clase sin pagar);
 // el resto es la dirección exacta, que el alumno ve recién cuando pagó.
+//
+// Tabla: teacher_addresses (migración 019). Lo usan routes/teachers/index.js
+// (CRUD de /me/addresses), lib/availabilityWindow.js (dirección nueva cargada
+// en una ventana) y db/bookings.js (formatAddress al reservar).
+// Espejo: frontend/src/utils/addresses.js (addressErrors, formatAddress).
 
-// Los mismos topes que los CHECK de la migración 019.
+// Los mismos topes que los CHECK de la migración 019. `label` es el texto que
+// se usa en el mensaje de error ("Falta la calle.").
 const FIELDS = [
   { key: 'street', label: 'la calle', max: 120, required: true },
   { key: 'number', label: 'el número', max: 10, required: true },
@@ -24,10 +30,19 @@ function text(value) {
 }
 
 /**
- * Devuelve { value } con la dirección normalizada (sin espacios de más, los
- * opcionales vacíos en null) o { message, fields } con el primer problema.
- * El nombre ("Casa") solo es obligatorio si se guarda: una dirección suelta
- * de una ventana no lo necesita.
+ * Valida y normaliza una dirección (sin espacios de más, los opcionales vacíos
+ * en null). El nombre ("Casa") solo es obligatorio si se guarda: una dirección
+ * suelta de una ventana no lo necesita.
+ *
+ * @param {object} body - { label, street, number, postalCode, locality, city,
+ *   floor?, apartment?, notes? }: el body de POST/PUT /api/teachers/me/addresses,
+ *   o el `address` que viene adentro del body de una ventana.
+ * @param {{saving: boolean}} opts - `saving` true si va a quedar guardada en el
+ *   perfil (siempre en las rutas de direcciones; en una ventana, si el docente
+ *   tildó "Guardar esta dirección" = body.saveAddress).
+ * @returns {{value: object}|{message: string, fields: object}} `value` con los
+ *   mismos campos en camelCase (label null si no se guarda), o el primer problema.
+ * Lo usan: routes/teachers/index.js y lib/availabilityWindow.js (validateWindow).
  */
 export function validateAddress(body, { saving }) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
@@ -77,6 +92,13 @@ function capitalize(phrase) {
  * La dirección completa en una línea, para la clase y para mostrar:
  * "Av. Corrientes 1234, piso 3, depto. B · CP 1043 · Balvanera, CABA · Timbre 3B".
  * Se copia a la clase al reservar: después no cambia aunque el docente la edite.
+ *
+ * @param {object} address - { street, number, postalCode, locality, city, floor?,
+ *   apartment?, notes? } en camelCase; al reservar es `window.address`, que viene
+ *   de teacher_addresses vía la consulta de la ventana en db/availability.js.
+ * @returns {string} la línea que se guarda en classes.address.
+ * Lo usa: db/bookings.js (insertBooking, al crear la clase).
+ * Espejo: frontend/src/utils/addresses.js (formatAddress).
  */
 export function formatAddress(address) {
   const calle = [`${address.street} ${address.number}`];

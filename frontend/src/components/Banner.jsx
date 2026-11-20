@@ -5,6 +5,10 @@ import { CheckIcon, ClockIcon, ErrorIcon } from './icons.jsx'
 // por eso el reloj y no la cruz.
 const ICONS = { success: CheckIcon, warning: ClockIcon, danger: ErrorIcon }
 
+/**
+ * Cartel de aviso con ícono: `type` = 'success' | 'warning' | 'danger'
+ * (por defecto) y el texto como children. Lo usa casi toda la app.
+ */
 class Banner extends Component {
   render() {
     const { type = 'danger', children } = this.props

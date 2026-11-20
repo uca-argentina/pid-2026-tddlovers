@@ -6,6 +6,10 @@ import { SpinnerIcon } from '../../../components/icons.jsx'
 /**
  * Paso 3 del registro: elegir materias. Solo lo ve el docente; el alumno se
  * registra directo desde el paso del rol.
+ *
+ * Props (de RegisterPage): subjects (GET /api/subjects), selectedIds,
+ * onToggle(id), onBack(), onSubmit(), loading, loadError, onRetry(),
+ * submitting y error.
  */
 class StepSubjects extends Component {
   render() {

@@ -1,7 +1,7 @@
 import { Component } from 'react'
 import Modal from '../../components/Modal.jsx'
 import { SearchIcon } from '../../components/icons.jsx'
-import { EMPTY_FILTERS, filterTurns, hasFilters, subjectsOf } from '../../utils/reservations.js'
+import { EMPTY_FILTERS, filterClasses, hasFilters, subjectsOf } from '../../utils/reservations.js'
 import './CategoryDialog.css'
 
 /**
@@ -15,6 +15,10 @@ import './CategoryDialog.css'
  *
  * Las tarjetas las arma la página (renderCard), que es la que tiene las
  * reservas, los favoritos y el detalle.
+ *
+ * Props (de ReservationsPage): category (una de CATEGORIES), entries
+ * (classesIn(category, groupClasses(bookings))), viewRole, renderCard(cls) y
+ * onClose(). Sin fetch. Estado: filters (forma de EMPTY_FILTERS).
  */
 class CategoryDialog extends Component {
   state = { filters: EMPTY_FILTERS }
@@ -80,22 +84,24 @@ class CategoryDialog extends Component {
   }
 
   render() {
-    const { category, turns, viewRole, renderCard, onClose } = this.props
+    const { category, entries, viewRole, renderCard, onClose } = this.props
     const { filters } = this.state
-    const visibles = filterTurns(turns, filters, viewRole)
+    // FILTRO: lo que ELIGIÓ el usuario (materia, fechas, nombre), con
+    // filterClasses de utils/reservations.js.
+    const visibles = filterClasses(entries, filters, viewRole)
     const filtrando = hasFilters(filters)
 
     return (
       <Modal title={category.title} onClose={onClose} tall>
-        {turns.length === 0 ? (
+        {entries.length === 0 ? (
           <p className="reservations-empty">No hay clases {category.title.toLowerCase()}.</p>
         ) : (
           <>
-            {this.renderFilters(subjectsOf(turns))}
+            {this.renderFilters(subjectsOf(entries))}
             {filtrando ? (
               <div className="category-filter-status">
                 <span>
-                  {visibles.length} de {turns.length} {turns.length === 1 ? 'clase' : 'clases'}
+                  {visibles.length} de {entries.length} {entries.length === 1 ? 'clase' : 'clases'}
                 </span>
                 <button type="button" className="category-filter-clear" onClick={this.handleClear}>
                   Limpiar filtros
@@ -106,7 +112,7 @@ class CategoryDialog extends Component {
               <p className="reservations-empty">Ninguna clase coincide con los filtros.</p>
             ) : (
               <ul className="reservations-list reservations-dialog-list">
-                {visibles.map((turn) => renderCard(turn.cls))}
+                {visibles.map((entry) => renderCard(entry.cls))}
               </ul>
             )}
           </>
@@ -117,8 +123,8 @@ class CategoryDialog extends Component {
 }
 
 CategoryDialog.defaultProps = {
-  // Los turnos de la categoría, ya en su orden (turnsIn).
-  turns: [],
+  // Las clases de la categoría, ya en su orden (classesIn).
+  entries: [],
   viewRole: 'student',
   renderCard: () => null,
   onClose: () => {},

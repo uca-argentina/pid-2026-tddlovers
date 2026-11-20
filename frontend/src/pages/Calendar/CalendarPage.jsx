@@ -3,15 +3,11 @@ import { Link } from 'react-router-dom'
 import Banner from '../../components/Banner.jsx'
 import MonthPane from './MonthPane.jsx'
 import DayAgenda from './DayAgenda.jsx'
-import { addDays, toISODate } from '../../utils/calendar.js'
-import { fetchClasses, fetchFavoriteTeachers } from '../../api/client.js'
-import { favoriteIdsOf, withFavorite } from '../../utils/favorites.js'
+import withFavorites from '../../routes/withFavorites.jsx'
+import { addDays, groupByDate, toISODate } from '../../utils/calendar.js'
+import { fetchBookings } from '../../api/client.js'
+import { calendarClasses, pendingClassCount } from '../../utils/reservations.js'
 import './CalendarPage.css'
-
-// Esta pantalla es "mis clases": todo lo que sigue en pie, en cualquier
-// estado (pendiente, aceptada, confirmada, realizada, no presentada). Las
-// canceladas no ocupan lugar en el calendario: se ven en "Mis reservas".
-const isOnCalendar = (item) => Boolean(item.status) && item.status !== 'cancelada'
 
 // Hasta dónde se buscan solicitudes pendientes para el aviso del docente.
 const PENDING_LOOKAHEAD_DAYS = 90
@@ -29,20 +25,40 @@ const PENDING_LOOKAHEAD_DAYS = 90
  * El calendario en sí (el mes visible, las flechas, la animación y la medición
  * de cuántas líneas entran por celda) vive en MonthPane, que comparte con la
  * pantalla de reservar: acá solo queda de dónde salen los datos.
+ *
+ * Los favoritos del alumno (el corazón al lado del docente) los baja
+ * withFavorites.
+ *
+ * Rol: docente y alumno (ruta "/"; el admin es redirigido a /admin en App).
+ *
+ * Props:
+ *   - viewRole: 'teacher' | 'student', de App (roleOf(user)).
+ *   - favoriteIds, favoriteError, onFavoriteChange, onFavoriteError: de
+ *     withFavorites (solo con viewRole 'student'); se reenvían a DayAgenda.
+ *
+ * Datos (api/client.js):
+ *   - fetchBookings → GET /api/bookings?from&to, cada vez que MonthPane avisa
+ *     el rango de la grilla. Devuelve las clases del usuario de la sesión
+ *     (una fila por reserva).
+ *   - fetchBookings → GET /api/bookings?from=hoy&to=hoy+90&status=pendiente,
+ *     solo para el docente, al montar y después de cada cambio de una clase
+ *     (para el aviso "Tenés N solicitudes").
+ *
+ * Estado:
+ *   - selectedIso: día elegido en MonthPane ("YYYY-MM-DD").
+ *   - bookings: filas de GET /api/bookings del rango; bookingsLoading/Error.
+ *   - pendingCount: clases (clases) con alguna reserva pendiente del docente
+ *     en los próximos 90 días.
  */
 class CalendarPage extends Component {
   state = {
     selectedIso: toISODate(new Date()),
-    classes: [],
-    classesLoading: false,
-    classesError: null,
-    // Solo para el docente: cuántas reservas esperan que responda, en
+    bookings: [],
+    bookingsLoading: false,
+    bookingsError: null,
+    // Solo para el docente: cuántas clases esperan que responda, en
     // cualquier mes (no solo el que se está mirando).
     pendingCount: 0,
-    // Solo para el alumno: ids de sus docentes favoritos, para el corazón al
-    // lado de "Docente:". null = no se muestran corazones.
-    favoriteIds: null,
-    favoriteError: null,
   }
 
   // Contador para descartar respuestas viejas: si se cambia de mes mientras
@@ -53,67 +69,45 @@ class CalendarPage extends Component {
 
   pendingToken = 0
 
-  favoritesToken = 0
-
   componentDidMount() {
     if (this.props.viewRole === 'teacher') this.loadPending()
-    this.loadFavorites()
   }
 
   componentDidUpdate(prevProps) {
-    if (prevProps.viewRole !== this.props.viewRole) this.loadFavorites()
+    // El aviso depende del rol: si cambia (otra sesión en la misma app), se
+    // pide de nuevo o se olvida, para no mostrarle a nadie el de otro.
+    if (prevProps.viewRole === this.props.viewRole) return
+    if (this.props.viewRole === 'teacher') this.loadPending()
+    else {
+      this.pendingToken += 1
+      this.setState({ pendingCount: 0 })
+    }
   }
 
   componentWillUnmount() {
     this.fetchToken += 1
     this.pendingToken += 1
-    this.favoritesToken += 1
   }
 
   /**
-   * Solo el alumno tiene favoritos. Si el pedido falla no se muestran los
-   * corazones: uno vacío para un docente que ya es favorito mentiría.
+   * Cuenta las clases con solicitudes pendientes del docente: fetchBookings
+   * con status=pendiente (GET /api/bookings) de hoy a hoy + 90 días →
+   * `pendingCount`. Cuenta TURNOS, como Mis reservas: una grupal con tres
+   * pendientes es una clase esperando respuesta, no tres.
    */
-  loadFavorites() {
-    const token = ++this.favoritesToken
-    if (this.props.viewRole !== 'student') {
-      this.setState({ favoriteIds: null })
-      return
-    }
-    fetchFavoriteTeachers()
-      .then((teachers) => {
-        if (token === this.favoritesToken) this.setState({ favoriteIds: favoriteIdsOf(teachers) })
-      })
-      .catch(() => {
-        if (token === this.favoritesToken) this.setState({ favoriteIds: null })
-      })
-  }
-
-  handleFavoriteChange = (teacherId, favorite) => {
-    this.setState((prev) => ({
-      favoriteIds: withFavorite(prev.favoriteIds, teacherId, favorite),
-      favoriteError: null,
-    }))
-  }
-
-  handleFavoriteError = (message) => {
-    this.setState({ favoriteError: message })
-  }
-
   loadPending = () => {
     const token = ++this.pendingToken
     const hoy = new Date()
-    fetchClasses({
+    fetchBookings({
       from: toISODate(hoy),
       to: toISODate(addDays(hoy, PENDING_LOOKAHEAD_DAYS)),
       status: 'pendiente',
     })
       .then((pendientes) => {
         if (token !== this.pendingToken) return
-        const lista = Array.isArray(pendientes) ? pendientes : []
-        // Defensivo, igual que el calendario: no depender de que el backend
-        // respete el filtro.
-        this.setState({ pendingCount: lista.filter((item) => item.status === 'pendiente').length })
+        // FILTRO: el backend ya trae solo las pendientes (?status=pendiente);
+        // pendingClassCount igual mira el estado y las agrupa por clase.
+        this.setState({ pendingCount: pendingClassCount(pendientes) })
       })
       .catch(() => {
         // El aviso es un extra: si falla, el calendario sigue andando.
@@ -121,42 +115,16 @@ class CalendarPage extends Component {
   }
 
   /**
-   * Las clases agrupadas por fecha ISO, cada lista ordenada por hora.
+   * FILTRO: las clases agrupadas por fecha ISO, cada lista ordenada por hora,
+   * sin las clases canceladas para todos (calendarClasses en
+   * utils/reservations.js; regla de pantalla, se ven en "Mis reservas").
    *
    * Una grupal llega como una fila por alumno (así está en la base), pero es
-   * UNA clase: el docente la ve una sola vez con todos sus alumnos en
-   * `students`. Cada alumno sigue teniendo su propia reserva, con su estado,
-   * y esas filas van en `rows`: el docente acepta y toma lista de a uno. Al
-   * alumno nunca le llegan dos filas del mismo turno, así que para él no
-   * cambia nada.
+   * UNA clase: va una vez, como la reserva que representa a la clase. MonthPane
+   * solo mira id, startTime y subjectName, así que la forma plana le sirve.
    */
   getClassesByDate() {
-    const map = {}
-    const porTurno = {}
-
-    for (const item of this.state.classes) {
-      if (!isOnCalendar(item)) continue
-
-      const turno = `${item.teacherId}|${item.date}|${item.startTime}`
-      if (porTurno[turno]) {
-        porTurno[turno].students.push(item.studentName)
-        porTurno[turno].rows.push(item)
-        continue
-      }
-
-      const clase = { ...item, students: [item.studentName], rows: [item] }
-      porTurno[turno] = clase
-      if (!map[item.date]) map[item.date] = []
-      map[item.date].push(clase)
-    }
-
-    // Todo arranca :00 o :30, así que comparar los strings 'HH:MM' alcanza
-    // para ordenarlas.
-    for (const iso of Object.keys(map)) {
-      map[iso].sort((a, b) => a.startTime.localeCompare(b.startTime))
-    }
-
-    return map
+    return groupByDate(calendarClasses(this.state.bookings))
   }
 
   /** MonthPane avisa qué rango abarca la grilla; recién ahí se pide. */
@@ -164,25 +132,25 @@ class CalendarPage extends Component {
     this.loadClasses(from, to)
   }
 
+  /**
+   * Trae las clases del usuario entre `from` y `to` ("YYYY-MM-DD", el rango
+   * de la grilla de MonthPane) con fetchBookings → GET /api/bookings?from&to y
+   * las guarda en `bookings`. Maneja bookingsLoading/bookingsError.
+   */
   loadClasses = (from, to) => {
     const token = ++this.fetchToken
 
-    this.setState({ classesLoading: true, classesError: null })
-    fetchClasses({ from, to })
-      .then((classes) => {
+    this.setState({ bookingsLoading: true, bookingsError: null })
+    fetchBookings({ from, to })
+      .then((bookings) => {
         if (token !== this.fetchToken) return
-        // Defensivo: si el backend devuelve algo que no es un array,
-        // preferimos una lista vacía a romper el render de la grilla.
-        this.setState({
-          classes: Array.isArray(classes) ? classes : [],
-          classesLoading: false,
-        })
+        this.setState({ bookings, bookingsLoading: false })
       })
       .catch((error) => {
         if (token !== this.fetchToken) return
         this.setState({
-          classesLoading: false,
-          classesError: error.message || 'No se pudieron cargar las clases.',
+          bookingsLoading: false,
+          bookingsError: error.message || 'No se pudieron cargar las clases.',
         })
       })
   }
@@ -194,31 +162,33 @@ class CalendarPage extends Component {
   /**
    * Una reserva cambió de estado (la aceptó, la pagó, la canceló): se
    * reemplaza esa fila y listo, no hace falta volver a pedir el mes. Si quedó
-   * cancelada, getClassesByDate ya no la muestra.
+   * cancelada va al final de su clase, y la clase sale del calendario solo si
+   * ya no queda nadie.
    */
   handleClassChange = (updated) => {
     if (!updated?.id) return
     this.setState((prev) => ({
-      classes: prev.classes.map((item) => (String(item.id) === String(updated.id) ? updated : item)),
+      bookings: prev.bookings.map((item) => (String(item.id) === String(updated.id) ? updated : item)),
     }))
     if (this.props.viewRole === 'teacher') this.loadPending()
   }
 
   renderPending() {
     const { pendingCount } = this.state
+    // FILTRO: el aviso de solicitudes solo para el docente y si hay alguna.
     if (this.props.viewRole !== 'teacher' || pendingCount === 0) return null
     return (
       <p className="calendar-pending" role="status">
         {pendingCount === 1
-          ? 'Tenés 1 solicitud de clase esperando respuesta.'
-          : `Tenés ${pendingCount} solicitudes de clase esperando respuesta.`}{' '}
+          ? 'Tenés 1 clase con solicitudes esperando respuesta.'
+          : `Tenés ${pendingCount} clases con solicitudes esperando respuesta.`}{' '}
         <Link to="/reservas">Ver solicitudes</Link>
       </p>
     )
   }
 
   render() {
-    const { selectedIso, classesLoading, classesError } = this.state
+    const { selectedIso, bookingsLoading, bookingsError } = this.state
     const classesByDate = this.getClassesByDate()
 
     return (
@@ -226,12 +196,12 @@ class CalendarPage extends Component {
         <MonthPane
           eventsByDate={classesByDate}
           selectedIso={selectedIso}
-          loading={classesLoading}
+          loading={bookingsLoading}
           onSelectDay={this.handleSelectDay}
           onRangeChange={this.handleRangeChange}
         >
           {this.renderPending()}
-          {classesError ? <Banner type="danger">{classesError}</Banner> : null}
+          {bookingsError ? <Banner type="danger">{bookingsError}</Banner> : null}
         </MonthPane>
 
         {/* Va después en el DOM pero se dibuja a la izquierda (order en el
@@ -239,18 +209,18 @@ class CalendarPage extends Component {
             complementario. En pantallas chicas se apilan en el orden del
             DOM, que es el que conviene ahí. */}
         <aside className="calendar-aside">
-          {this.state.favoriteError ? (
-            <Banner type="danger">{this.state.favoriteError}</Banner>
+          {this.props.favoriteError ? (
+            <Banner type="danger">{this.props.favoriteError}</Banner>
           ) : null}
           <DayAgenda
             classesByDate={classesByDate}
             selectedIso={selectedIso}
-            loading={classesLoading}
+            loading={bookingsLoading}
             viewRole={this.props.viewRole}
-            favoriteIds={this.state.favoriteIds}
+            favoriteIds={this.props.favoriteIds}
             onClassChange={this.handleClassChange}
-            onFavoriteChange={this.handleFavoriteChange}
-            onFavoriteError={this.handleFavoriteError}
+            onFavoriteChange={this.props.onFavoriteChange}
+            onFavoriteError={this.props.onFavoriteError}
           />
         </aside>
       </div>
@@ -258,4 +228,4 @@ class CalendarPage extends Component {
   }
 }
 
-export default CalendarPage
+export default withFavorites(CalendarPage)

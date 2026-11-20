@@ -9,8 +9,22 @@ import {
 import { now } from '../../lib/clock.js';
 import { FEATURED_COST, FEATURED_DAYS, badgesFor, levelFor } from '../../lib/neuronas.js';
 
+// Montado en /api/neuronas (app.js):
+//   GET  /api/neuronas           teacher o student (admin: 403)
+//   POST /api/neuronas/featured  solo teacher aprobado (CSRF)
+// El toggle de "acepta canjes" está en routes/teachers (/me/accepts-rewards).
+// Usa: db/neuronas.js y lib/neuronas.js (nivel, insignias, costos).
+// Los errores salen como { message } (+ `fields` en validaciones); no hay código `error`.
+
 export default async function neuronasRoutes(app) {
-  /** El saldo, el nivel y el historial del usuario logueado: sale de la sesión. */
+  /**
+   * El saldo, el nivel y el historial del usuario logueado: sale de la sesión.
+   * Al alumno antes se le liquidan las tareas sin corregir (settleHomeworkCredits).
+   *
+   * Respuesta: 200 { balance, earned, level, movements } + `badges` (alumno) o
+   *   `featured: { activeUntil, slotsLeft, cost, days }` (docente).
+   * Errores: 403 admin.
+   */
   app.get('/', { onRequest: app.requireAuth }, async (request, reply) => {
     const { id, role } = request.user;
     if (role === 'admin') {
@@ -33,7 +47,12 @@ export default async function neuronasRoutes(app) {
     return reply.send({ ...summary, featured: { ...status, cost: FEATURED_COST, days: FEATURED_DAYS } });
   });
 
-  /** Comprar 7 días de Destacado. Sin aprobar no se muestra en el tablero: no tiene sentido. */
+  /**
+   * Comprar 7 días de Destacado. Sin aprobar no se muestra en el tablero: no tiene sentido.
+   *
+   * Respuesta: 201 { endDate }. Errores: 403 no docente o no aprobado;
+   *   409 ya destacado, sin lugares o sin saldo (buyFeatured).
+   */
   app.post(
     '/featured',
     { onRequest: [app.requireAuth, app.csrfProtection] },

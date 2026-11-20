@@ -7,6 +7,9 @@ import { SpinnerIcon, StudentIcon, TeacherIcon } from '../../../components/icons
  * Paso 2 del registro: elegir Docente o Alumno. El alumno no tiene paso de
  * materias, así que acá mismo se registra: el botón pasa a ser el mismo
  * "Registrarme" (con spinner) que usa el docente en el paso 3.
+ *
+ * Props (de RegisterPage): value (rol elegido), onSelect(rol), onNext(),
+ * onBack(), submitting y error.
  */
 class StepRole extends Component {
   handleNext = () => {

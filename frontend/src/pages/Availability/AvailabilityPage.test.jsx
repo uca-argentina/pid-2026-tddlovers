@@ -9,13 +9,13 @@ import { apiUser } from '../../testing/fixtures.js'
 
 // Ojo: vi.mock con factory reemplaza el módulo ENTERO, así que todo lo que
 // importe cualquier pantalla de esta ruta tiene que estar acá — la del alumno
-// pide fetchAvailability y fetchMyLessons.
+// pide fetchAvailability y fetchMyBookings.
 const {
   createWindow,
   deleteWindow,
   fetchAvailability,
   fetchMyAddresses,
-  fetchMyLessons,
+  fetchMyBookings,
   fetchMyWindows,
   fetchMyVacations,
   fetchFavoriteTeachers,
@@ -28,7 +28,7 @@ const {
   createWindow: vi.fn(),
   deleteWindow: vi.fn(),
   fetchAvailability: vi.fn(),
-  fetchMyLessons: vi.fn(),
+  fetchMyBookings: vi.fn(),
   fetchMyWindows: vi.fn(),
   // Nadie tiene vacaciones cargadas en estos tests.
   fetchMyVacations: vi.fn(() => Promise.resolve([])),
@@ -44,7 +44,7 @@ vi.mock('../../api/client.js', () => ({
   deleteWindow,
   fetchAvailability,
   fetchMyAddresses,
-  fetchMyLessons,
+  fetchMyBookings,
   fetchMyWindows,
   fetchMyVacations,
   fetchMyPacks,
@@ -129,7 +129,7 @@ describe('AvailabilityPage — vista de alumno', () => {
   beforeEach(() => {
     fetchSubjects.mockReset().mockResolvedValue(MATERIAS)
     fetchAvailability.mockReset().mockResolvedValue([])
-    fetchMyLessons.mockReset().mockResolvedValue([])
+    fetchMyBookings.mockReset().mockResolvedValue([])
   })
 
   function esperarTablero() {
@@ -152,7 +152,7 @@ describe('AvailabilityPage — vista de alumno', () => {
     await esperarTablero()
 
     expect(fetchAvailability).toHaveBeenCalled()
-    expect(fetchMyLessons).not.toHaveBeenCalled()
+    expect(fetchMyBookings).not.toHaveBeenCalled()
   })
 })
 
@@ -252,7 +252,7 @@ describe('AvailabilityPage — vista de docente', () => {
     const modal = await abrirModalDelBloque()
 
     expect(
-      within(modal).getByText(/No tenés tarifas para clases híbridas: los alumnos no ven este horario/),
+      within(modal).getByText(/No se ofrece: no tenés tarifas para clases híbridas, así que los alumnos no ven este horario/),
     ).toBeInTheDocument()
   })
 

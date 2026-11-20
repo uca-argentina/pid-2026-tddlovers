@@ -8,7 +8,7 @@ import {
   saveClassSummary,
   uploadClassFiles,
 } from '../api/client.js'
-import { hasEnded, nowParts } from '../utils/classStates.js'
+import { hasEnded, nowParts } from '../utils/bookingStates.js'
 import {
   MAX_SUMMARY_LENGTH,
   canEditMaterial,
@@ -22,7 +22,7 @@ import './ClassMaterial.css'
 
 /**
  * El material de una clase ya dada: el resumen que deja el docente y los
- * archivos adjuntos (fotos, pdf, planillas, código...). Es del turno, así que
+ * archivos adjuntos (fotos, pdf, planillas, código...). Es de la clase, así que
  * en una grupal todos los anotados ven lo mismo.
  *
  * El docente lo carga cuando la clase terminó; el alumno lo ve desde ese
@@ -31,6 +31,22 @@ import './ClassMaterial.css'
  *
  * Avisa con onChange(tieneMaterial) cuando cambia, para que la tarjeta de la
  * reserva muestre (o deje de mostrar) el clip.
+ *
+ * Props (de ClassDetailDialog): cls (la reserva), viewRole, now (inyectable
+ * para tests) y onChange(hasMaterial).
+ *
+ * Datos (api/client.js), todos devuelven el material entero
+ * { summary, files: [{ id, name, … }] }:
+ *   - fetchClassMaterial → GET /api/classes/:classId/material, al montar si
+ *     canViewMaterial (la clase ya terminó).
+ *   - saveClassSummary → PUT /api/classes/:classId/material (docente).
+ *   - uploadClassFiles → POST /api/classes/:classId/material/files (multipart).
+ *   - deleteClassFile → DELETE /api/classes/:classId/material/files/:fileId.
+ *   - classFileUrl arma el href de descarga (GET …/files/:fileId, que
+ *     responde con un 302 a un link firmado del bucket).
+ *
+ * Estado: material (última respuesta), loading, error, draft (resumen en
+ * edición), saving, uploading, deletingId / confirmDeleteId, notice.
  */
 class ClassMaterial extends Component {
   state = {
@@ -51,7 +67,7 @@ class ClassMaterial extends Component {
   token = 0
 
   componentDidMount() {
-    if (canViewMaterial(this.props.cls, this.props.viewRole, this.now())) this.load()
+    if (canViewMaterial(this.props.cls, this.now())) this.load()
   }
 
   componentWillUnmount() {
@@ -62,10 +78,11 @@ class ClassMaterial extends Component {
     return this.props.now || nowParts()
   }
 
+  /** Trae el material de la clase (GET /api/classes/:classId/material) → `material` y `draft`. */
   load() {
     const token = ++this.token
     this.setState({ loading: true, error: null })
-    fetchClassMaterial(this.props.cls.id)
+    fetchClassMaterial(this.props.cls.classId)
       .then((material) => {
         if (token !== this.token) return
         this.setState({ material, draft: material.summary, loading: false })
@@ -86,10 +103,11 @@ class ClassMaterial extends Component {
     this.setState({ draft: event.target.value, notice: null })
   }
 
+  /** Guarda el resumen (PUT /api/classes/:classId/material) y aplica el material devuelto. */
   handleSaveSummary = () => {
     if (this.state.saving) return
     this.setState({ saving: true, error: null, notice: null })
-    saveClassSummary(this.props.cls.id, this.state.draft)
+    saveClassSummary(this.props.cls.classId, this.state.draft)
       .then((material) =>
         this.applyMaterial(material, {
           saving: false,
@@ -104,6 +122,10 @@ class ClassMaterial extends Component {
 
   handlePickFiles = () => this.fileInput.current?.click()
 
+  /**
+   * Chequea los límites con uploadProblem (utils/classMaterials.js) y sube los
+   * archivos elegidos (POST /api/classes/:classId/material/files).
+   */
   handleFilesChosen = (event) => {
     const files = [...(event.target.files || [])]
     // Se vacía el input para que elegir el mismo archivo de nuevo vuelva a
@@ -118,7 +140,7 @@ class ClassMaterial extends Component {
     }
 
     this.setState({ uploading: true, error: null, notice: null })
-    uploadClassFiles(this.props.cls.id, files)
+    uploadClassFiles(this.props.cls.classId, files)
       .then((material) => {
         const cuantos =
           files.length === 1 ? 'Se subió el archivo.' : `Se subieron ${files.length} archivos.`
@@ -136,10 +158,11 @@ class ClassMaterial extends Component {
 
   handleKeepFile = () => this.setState({ confirmDeleteId: null })
 
+  /** Borra un archivo (DELETE /api/classes/:classId/material/files/:fileId). */
   handleDelete = (fileId) => () => {
     if (this.state.deletingId) return
     this.setState({ deletingId: fileId, error: null, notice: null })
-    deleteClassFile(this.props.cls.id, fileId)
+    deleteClassFile(this.props.cls.classId, fileId)
       .then((material) => this.applyMaterial(material, { deletingId: null, confirmDeleteId: null }))
       .catch((error) =>
         this.setState({
@@ -191,7 +214,7 @@ class ClassMaterial extends Component {
 
   renderFile(file, editable) {
     const { deletingId, confirmDeleteId } = this.state
-    const url = classFileUrl(this.props.cls.id, file.id)
+    const url = classFileUrl(this.props.cls.classId, file.id)
     const preview = isPreviewable(file.mimeType)
 
     return (
@@ -227,7 +250,16 @@ class ClassMaterial extends Component {
             </>
           ) : (
             <>
-              <a className="class-action is-secondary" href={url} download={file.name}>
+              {/* Las imágenes el backend las sirve inline desde otro origen (el
+                  302 al bucket), donde el navegador ignora `download`: sin
+                  pestaña nueva, la imagen reemplazaría a la app. */}
+              <a
+                className="class-action is-secondary"
+                href={url}
+                download={file.name}
+                target={preview ? '_blank' : undefined}
+                rel={preview ? 'noreferrer' : undefined}
+              >
                 <DownloadIcon />
                 Descargar
               </a>
@@ -253,6 +285,8 @@ class ClassMaterial extends Component {
     const { material, loading, uploading } = this.state
     const now = this.now()
 
+    // FILTRO: el material se ve recién con la clase dada y terminada (espejo
+    // de backend/src/lib/classMaterials.js, que es el que decide).
     if (!canHaveMaterial(cls)) {
       return <p className="class-material-empty">Esta clase no se dio, así que no tiene material.</p>
     }

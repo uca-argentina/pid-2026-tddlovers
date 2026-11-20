@@ -4,9 +4,10 @@ import {
   cancelReasonFor,
   checkAction,
   forViewer,
+  hasEnded,
   hasStarted,
   minutesUntilStart,
-} from './classStates.js';
+} from './bookingStates.js';
 
 // La clase es el lunes 14/9 a las 13:00. "Ahora" se mueve alrededor.
 const clase = (over = {}) => ({
@@ -36,6 +37,21 @@ describe('tiempo', () => {
   it('a la hora de inicio ya empezó', () => {
     expect(hasStarted(clase(), NOW_EMPEZADA)).toBe(true);
     expect(hasStarted(clase(), { iso: '2099-09-14', time: '12:59' })).toBe(false);
+  });
+});
+
+describe('hasEnded', () => {
+  const conFin = (over = {}) => clase({ endTime: '14:30', ...over });
+
+  it('termina justo a la hora de fin', () => {
+    expect(hasEnded(conFin(), { iso: '2099-09-14', time: '14:29' })).toBe(false);
+    expect(hasEnded(conFin(), { iso: '2099-09-14', time: '14:30' })).toBe(true);
+  });
+
+  it('un fin "24:00" es la medianoche siguiente', () => {
+    const tarde = conFin({ startTime: '23:00', endTime: '24:00' });
+    expect(hasEnded(tarde, { iso: '2099-09-14', time: '23:59' })).toBe(false);
+    expect(hasEnded(tarde, { iso: '2099-09-15', time: '00:00' })).toBe(true);
   });
 });
 

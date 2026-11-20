@@ -26,11 +26,9 @@ describe('storage/files', () => {
     expect(isConfigured()).toBe(false);
   });
 
-  it('la clave agrupa por turno y no lleva el nombre del archivo', async () => {
+  it('la clave agrupa por clase y no lleva el nombre del archivo', async () => {
     const { newFileKey } = await load(DEV);
-    expect(newFileKey({ teacherId: 't1', date: '2099-09-14', startTime: '13:30' }, 'abc')).toBe(
-      'materials/t1/2099-09-14/1330/abc'
-    );
+    expect(newFileKey('clase-1', 'abc')).toBe('materials/clase-1/abc');
   });
 
   it('el link se firma para el host que ve el navegador, con nombre y tipo', async () => {

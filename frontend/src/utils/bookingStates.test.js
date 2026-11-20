@@ -5,11 +5,11 @@ import {
   owesPayment,
   statusLabel,
   paymentStatus,
-} from './classStates.js'
-import { apiClass } from '../testing/fixtures.js'
+} from './bookingStates.js'
+import { apiBooking } from '../testing/fixtures.js'
 
 // La clase es el lunes 14/9/2099 a las 13:00.
-const clase = (over = {}) => apiClass(over)
+const clase = (over = {}) => apiBooking(over)
 
 const LEJOS = { iso: '2099-09-10', time: '10:00' }
 const JUSTO_24H = { iso: '2099-09-13', time: '13:00' }
@@ -95,5 +95,22 @@ describe('paymentStatus con neuronas', () => {
   it('con un resto por pagar sigue el camino de siempre', () => {
     const conResto = { priceCents: 250000, rewardType: 'free_60', paidAt: null, packTokens: 0 }
     expect(paymentStatus(conResto).label).toBe('Sin pagar')
+  })
+})
+
+describe('paymentStatus con paquete', () => {
+  it('una clase cubierta entera por el paquete dice "Con paquete", también ya aceptada', () => {
+    const conPaquete = apiBooking({ priceCents: 0, packTokens: 1, paidAt: null })
+    expect(paymentStatus(conPaquete).label).toBe('Con paquete')
+    // Aceptarla la confirma con paidAt, pero el alumno no pagó nada.
+    expect(
+      paymentStatus({ ...conPaquete, status: 'confirmada', paidAt: '2099-09-14T12:00:00.000Z' })
+        .label,
+    ).toBe('Con paquete')
+  })
+
+  it('con un resto pagado aparte, "Pagó"', () => {
+    const conResto = apiBooking({ priceCents: 250000, packTokens: 1, paidAt: '2099-09-14T12:00:00.000Z' })
+    expect(paymentStatus(conResto).label).toBe('Pagó')
   })
 })

@@ -2,14 +2,15 @@ import { Component } from 'react'
 import Modal from './Modal.jsx'
 import Banner from './Banner.jsx'
 import { SpinnerIcon } from './icons.jsx'
-import { acceptLesson, cancelLesson } from '../api/client.js'
+import { acceptBooking, cancelBooking } from '../api/client.js'
 import {
   STATUS_TONES,
   allowedActions,
   nowParts,
   paymentStatus,
   statusLabel,
-} from '../utils/classStates.js'
+} from '../utils/bookingStates.js'
+import { activeRows } from '../utils/reservations.js'
 import './ClassActions.css'
 import './AttendanceDialog.css'
 
@@ -17,10 +18,19 @@ import './AttendanceDialog.css'
  * Los alumnos de una clase grupal, antes de que empiece: un renglón por
  * alumno con su estado, si pagó, y lo que se puede hacer con su reserva
  * (aceptarlo, rechazarlo, sacarlo de la clase). Es para decidir de a uno; lo
- * de toda la clase va en los botones del detalle (TurnActions).
+ * de toda la clase va en los botones del detalle (ClassActions).
  *
  * Va en su propio modal, como tomar lista, para que una grupal de muchos no
  * llene el detalle. Cada cambio se avisa con onChange(reserva).
+ *
+ * Rol: docente. Props (de ClassDetailDialog): rows (reservas de la clase), now,
+ * onChange(reservaActualizada) y onClose().
+ *
+ * Datos: acceptBooking → POST /api/bookings/:id/accept y cancelBooking →
+ * POST /api/bookings/:id/cancel, de a una reserva; qué botones se ven lo
+ * decide allowedActions (utils/bookingStates.js).
+ *
+ * Estado: busy (id en vuelo), confirmCancelId, error.
  */
 class StudentsDialog extends Component {
   state = {
@@ -34,6 +44,10 @@ class StudentsDialog extends Component {
     return this.props.now || nowParts()
   }
 
+  /**
+   * Corre `call(row.id)` (acceptBooking o cancelBooking) y le pasa la reserva
+   * devuelta a onChange; si falla deja el mensaje del backend en `error`.
+   */
   run(row, call) {
     if (this.state.busy) return
     this.setState({ busy: row.id, error: null })
@@ -51,13 +65,13 @@ class StudentsDialog extends Component {
       )
   }
 
-  handleAccept = (row) => () => this.run(row, acceptLesson)
+  handleAccept = (row) => () => this.run(row, acceptBooking)
 
   handleAskCancel = (row) => () => this.setState({ confirmCancelId: row.id, error: null })
 
   handleKeep = () => this.setState({ confirmCancelId: null })
 
-  handleCancel = (row) => () => this.run(row, cancelLesson)
+  handleCancel = (row) => () => this.run(row, cancelBooking)
 
   renderButtons(row) {
     const { busy, confirmCancelId } = this.state
@@ -129,7 +143,8 @@ class StudentsDialog extends Component {
             <span className={`class-status is-${STATUS_TONES[row.status] || 'muted'}`}>
               {statusLabel(row.status)}
             </span>
-            {row.status !== 'cancelada' ? (
+            {/* FILTRO: el pago solo en las reservas en pie (regla de pantalla). */}
+            {activeRows(this.props.rows).includes(row) ? (
               <span className={`class-status is-${pago.tone}`}>{pago.label}</span>
             ) : null}
           </div>
@@ -141,13 +156,13 @@ class StudentsDialog extends Component {
 
   render() {
     const { rows, onClose } = this.props
-    const pagaron = rows.filter((row) => row.status !== 'cancelada' && row.paidAt).length
-    const enPie = rows.filter((row) => row.status !== 'cancelada').length
+    const enPie = activeRows(rows)
+    const pagaron = enPie.filter((row) => row.paidAt).length
 
     return (
       <Modal title="Alumnos" onClose={onClose}>
         <p className="attendance-summary">
-          {enPie} {enPie === 1 ? 'anotado' : 'anotados'} · {pagaron}{' '}
+          {enPie.length} {enPie.length === 1 ? 'anotado' : 'anotados'} · {pagaron}{' '}
           {pagaron === 1 ? 'pagó' : 'pagaron'}
         </p>
         {this.state.error ? <Banner type="danger">{this.state.error}</Banner> : null}

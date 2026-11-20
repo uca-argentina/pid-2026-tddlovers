@@ -12,11 +12,28 @@
 //
 // Horas en minutos desde medianoche para comparar: '24:00' como texto ordena
 // bien de casualidad, pero restar strings no.
+//
+// Origen de los datos: las ventanas crudas de GET /api/teachers/me/availability
+// (fetchMyWindows): { id, date, repeatsWeekly, start, end, modality,
+// maxStudents, meetingUrl, address, locality }. El borrador del formulario se
+// manda con createWindow/updateWindow (POST/PUT /api/teachers/me/availability).
+// Espejo: backend/src/lib/availabilityWindow.js (validación) y occursOn de
+// backend/src/lib/availabilityExpansion.js.
+// Lo usan: pages/Availability/ (TeacherAvailability, WeekCalendar,
+// DayWindowsDialog, WindowForm, WindowCard), pages/Calendar/MonthPane.jsx
+// (startOfWeek/weekDates), pages/Booking/ y las tarjetas de clase
+// (modalityLabel, capacityLabel, needsAddress...), pages/Profile/ProfilePage.jsx
+// (MODALITIES) y utils/packs.js (formatMinutes).
 
 import { addressErrors, addressToForm, addressToPayload, EMPTY_ADDRESS } from './addresses.js'
 import { dayLabel } from './availability.js'
 import { addDays, mondayIndex } from './calendar.js'
-import { dayKeyFromIso } from './booking.js'
+import { dayKeyFromIso, toMinutes } from './booking.js'
+
+// Una sola cuenta de 'HH:MM' -> minutos para toda la app (la de booking.js, que
+// valida y devuelve -1 si no es hora). Se reexporta porque las pantallas de
+// disponibilidad la toman de acá.
+export { toMinutes }
 
 // Los valores viajan por la API y viven en la base: en inglés. Lo que se lee
 // en pantalla es `label`.
@@ -36,6 +53,10 @@ export const MAX_STUDENTS_LIMIT = 50
 // Grupal con cupo 1 sería individual: el mínimo de una grupal es 2.
 export const MIN_GROUP_SIZE = 2
 
+/**
+ * 'in_person' -> 'Presencial'. Una clave desconocida sale tal cual.
+ * Recibe el `modality` de una ventana, fila de disponibilidad o clase.
+ */
 export function modalityLabel(key) {
   return MODALITY_LABELS[key] || key
 }
@@ -50,18 +71,20 @@ export function needsAddress(modality) {
   return modality === 'in_person' || modality === 'hybrid'
 }
 
-export function toMinutes(time) {
-  const [h, m] = String(time).split(':').map(Number)
-  return h * 60 + m
-}
-
+/**
+ * Minutos desde medianoche -> 'HH:MM' (el inverso de toMinutes).
+ * Lo usan: pages/Booking/BookingDialog.jsx, components/TimeRangeSlider.jsx.
+ */
 export function minutesToTime(minutes) {
   const h = Math.floor(minutes / 60)
   const m = minutes % 60
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 }
 
-/** 30 -> '30 min', 60 -> '1 h', 90 -> '1 h 30 min'. */
+/**
+ * 30 -> '30 min', 60 -> '1 h', 90 -> '1 h 30 min'.
+ * Lo usan: utils/packs.js, pages/Booking/BookingDialog.jsx, pages/Availability/WindowForm.jsx.
+ */
 export function formatMinutes(total) {
   const hours = Math.floor(total / 60)
   const minutes = total % 60
@@ -70,7 +93,7 @@ export function formatMinutes(total) {
   return `${hours} h ${minutes} min`
 }
 
-/** 'Individual' o 'Grupal · hasta 5'. */
+/** 'Individual' o 'Grupal · hasta 5', a partir de `maxStudents` (ventana, fila o clase). */
 export function capacityLabel(maxStudents) {
   return maxStudents > 1 ? `Grupal · hasta ${maxStudents}` : 'Individual'
 }
@@ -79,6 +102,12 @@ export function capacityLabel(maxStudents) {
  * ¿La ventana cae en esa fecha? La suya, o —si se repite— cualquier fecha
  * posterior del mismo día de la semana. El backend decide igual
  * (occursOn en lib/availabilityExpansion.js).
+ *
+ * @param {object} window - una ventana de GET /api/teachers/me/availability (date, repeatsWeekly).
+ * @param {string} iso - 'YYYY-MM-DD'.
+ * @returns {boolean}
+ * Lo usa: windowsOn (acá mismo).
+ * Espejo: occursOn de backend/src/lib/availabilityExpansion.js.
  */
 export function occursOn(window, iso) {
   if (iso === window.date) return true
@@ -87,19 +116,30 @@ export function occursOn(window, iso) {
   )
 }
 
-/** Las ventanas que caen ese día, de la más temprana a la más tarde. */
+/**
+ * FILTRO: las ventanas del docente que caen ese día (occursOn, espejo del de
+ * backend/src/lib/availabilityExpansion.js), de la más temprana a la más tarde.
+ * `windows` son las de fetchMyWindows. Lo usan: pages/Availability/WeekCalendar.jsx y
+ * DayWindowsDialog.jsx.
+ */
 export function windowsOn(windows, iso) {
   return windows
     .filter((window) => occursOn(window, iso))
     .sort((a, b) => toMinutes(a.start) - toMinutes(b.start))
 }
 
-/** El lunes de la semana de `date`. */
+/**
+ * El lunes de la semana de `date` (un Date nuevo).
+ * Lo usan: pages/Availability/TeacherAvailability.jsx, pages/Calendar/MonthPane.jsx.
+ */
 export function startOfWeek(date) {
   return addDays(date, -mondayIndex(date))
 }
 
-/** Los 7 días de la semana que arranca en `monday`. */
+/**
+ * Los 7 días (Date) de la semana que arranca en `monday`.
+ * Lo usan: pages/Availability/WeekCalendar.jsx, pages/Calendar/MonthPane.jsx.
+ */
 export function weekDates(monday) {
   return Array.from({ length: 7 }, (_, index) => addDays(monday, index))
 }
@@ -115,6 +155,7 @@ const DAY_MONTH_YEAR_FORMAT = new Intl.DateTimeFormat('es-AR', {
  * '14 – 20 de septiembre de 2026', o con los dos meses si la semana cruza
  * uno: '28 de septiembre – 4 de octubre de 2026'. El año va una sola vez,
  * salvo que la semana cruce de año.
+ * Lo usa: pages/Availability/WeekCalendar.jsx.
  */
 export function formatWeekTitle(monday) {
   const sunday = addDays(monday, 6)
@@ -131,14 +172,15 @@ export function formatWeekTitle(monday) {
 
 /**
  * 'lunes' -> 'lunes', 'sabado' -> 'sábados': el plural para "todos los ...".
- * Los días que ya terminan en s no cambian.
+ * Los días que ya terminan en s no cambian. Recibe una fecha 'YYYY-MM-DD'
+ * (no la clave del día). Lo usa: pages/Availability/WindowForm.jsx.
  */
 export function weekdayPlural(iso) {
   const dia = dayLabel(dayKeyFromIso(iso)).toLowerCase()
   return dia.endsWith('s') ? dia : `${dia}s`
 }
 
-/** 'Todos los lunes'. */
+/** 'Todos los lunes', según el `date` de la ventana. Lo usa: pages/Availability/WindowCard.jsx. */
 export function repeatLabel(window) {
   return `Todos los ${weekdayPlural(window.date)}`
 }
@@ -146,6 +188,10 @@ export function repeatLabel(window) {
 /**
  * Qué horas muestra el calendario semanal: de 8 a 20 como mínimo (un día de
  * clases normal) y estirado a lo que haga falta para que entre todo.
+ *
+ * @param {object[]} windows - las ventanas de la semana mostrada.
+ * @returns {{from: number, to: number}} horas enteras.
+ * Lo usa: pages/Availability/WeekCalendar.jsx.
  */
 export function visibleHours(windows) {
   let from = 8
@@ -171,6 +217,12 @@ export const NEW_ADDRESS = 'new'
  * cargar una ahí mismo (`newAddress`, que se guarda en el perfil si
  * `saveAddress`). Una ventana nueva arranca con la predeterminada; sin
  * ninguna guardada, cargando una.
+ *
+ * @param {{date: string, modality?: string, defaultAddressId?: string|null}} options -
+ *   el día tocado en el calendario, una modalidad con tarifa y la dirección
+ *   predeterminada (de GET /api/teachers/me/addresses).
+ * @returns {object} el borrador.
+ * Lo usa: pages/Availability/DayWindowsDialog.jsx.
  */
 export function emptyDraft({ date, modality = 'virtual', defaultAddressId = null }) {
   return {
@@ -193,6 +245,11 @@ export function emptyDraft({ date, modality = 'virtual', defaultAddressId = null
  * Una dirección guardada se edita desde el perfil: acá solo se elige. Una
  * suelta (que no se guardó) vuelve al formulario como "otra dirección" con
  * sus campos completos.
+ *
+ * @param {object} window - una ventana de GET /api/teachers/me/availability.
+ * @param {{defaultAddressId?: string|null}} [options]
+ * @returns {object} el borrador, con la misma forma que emptyDraft.
+ * Lo usa: pages/Availability/DayWindowsDialog.jsx (editar una ventana).
  */
 export function draftFromWindow(window, { defaultAddressId = null } = {}) {
   const address = window.address
@@ -217,7 +274,14 @@ export function draftFromWindow(window, { defaultAddressId = null } = {}) {
   }
 }
 
-/** Lo que va al backend. */
+/**
+ * Lo que va al backend: el body de POST/PUT /api/teachers/me/availability.
+ *
+ * @param {object} draft - el borrador del formulario.
+ * @returns {object} { date, repeatsWeekly, start, end, modality, maxStudents,
+ *   meetingUrl } y, si es presencial/híbrida, `addressId` o `address` + `saveAddress`.
+ * Lo usa: pages/Availability/DayWindowsDialog.jsx.
+ */
 export function draftToPayload(draft) {
   return {
     date: draft.date,
@@ -249,7 +313,21 @@ function isHttpUrl(text) {
 // Para "no tenés tarifas para clases ...".
 const MODALITY_PLURALS = { virtual: 'virtuales', in_person: 'presenciales', hybrid: 'híbridas' }
 
-/** 'virtuales', 'presenciales', 'híbridas'. */
+/**
+ * FILTRO: ¿los alumnos ven esta ventana? Solo si el docente tiene alguna
+ * tarifa en su modalidad. Regla del backend (las filas de
+ * backend/src/lib/availabilityExpansion.js salen sin materias y no se
+ * ofrecen): acá solo se usa para avisarle al docente.
+ *
+ * @param {Array} modalityRates - ratesForModality(...) de utils/rates.js para la modalidad de la ventana.
+ * @returns {boolean}
+ * Lo usa: pages/Availability/WindowCard.jsx.
+ */
+export function windowOffered(modalityRates) {
+  return (modalityRates || []).length > 0
+}
+
+/** 'virtuales', 'presenciales', 'híbridas'. Lo usan: WindowForm.jsx, WindowCard.jsx. */
 export function modalityPlural(key) {
   return MODALITY_PLURALS[key] || key
 }
@@ -261,6 +339,16 @@ export function modalityPlural(key) {
  * `rateModalities`: las modalidades en las que el docente tiene tarifas. Una
  * ventana en otra no le serviría a nadie (el alumno no tendría materia para
  * elegir), y el backend tampoco la deja guardar.
+ *
+ * Ojo: no revisa fecha ni horarios (inicio/fin en :00/:30, ≥30 min): los
+ * selects de WindowForm solo ofrecen valores válidos y el backend los
+ * re-chequea.
+ *
+ * @param {object} draft - el borrador del formulario.
+ * @param {{rateModalities?: string[]|null}} [options] - rateModalities(user.rates) de utils/rates.js.
+ * @returns {object} { campo: mensaje }; `address` es a su vez un objeto de addressErrors.
+ * Lo usan: pages/Availability/WindowForm.jsx y DayWindowsDialog.jsx.
+ * Espejo: backend/src/lib/availabilityWindow.js.
  */
 export function validateDraft(draft, { rateModalities = null } = {}) {
   const errors = {}

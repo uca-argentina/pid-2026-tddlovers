@@ -8,23 +8,26 @@ import Modal from '../../components/Modal.jsx'
 import SearchBar from '../../components/SearchBar.jsx'
 import { FilterIcon, HeartIcon } from '../../components/icons.jsx'
 import withViewport from '../../routes/withViewport.jsx'
+import withFavorites from '../../routes/withFavorites.jsx'
 import {
   fetchAvailability,
-  fetchClass,
-  fetchFavoriteTeachers,
-  fetchMyLessons,
+  fetchBooking,
+  fetchMyBookings,
   fetchMyPacks,
   fetchNeuronas,
   fetchSubjects,
 } from '../../api/client.js'
 import { formatDayLong, fromISODate, toISODate } from '../../utils/calendar.js'
-import { favoriteIdsOf, withFavorite } from '../../utils/favorites.js'
 import {
-  annotateClashes,
+  EMPTY_BOOKING_FILTERS,
+  countBookableByDate,
+  countBookingFilters,
   filterCards,
+  filterSubjectsFor,
   groupCardsByDate,
-  resolveQuery,
 } from '../../utils/booking.js'
+import { packsForReschedule } from '../../utils/packs.js'
+import { resolveQuery } from '../../utils/search.js'
 import { MODALITIES } from '../../utils/windows.js'
 import './BookingBoard.css'
 
@@ -34,10 +37,6 @@ const QUICK_KINDS = [
   { key: 'group', label: 'Grupal' },
 ]
 
-// Cuando no hay nada que anotar, SIEMPRE el mismo objeto: lo que sale de acá
-// baja hasta MonthPane y hasta las tarjetas.
-const SIN_TARJETAS = { slots: null, myLessons: null, excludeId: null, cards: [] }
-
 /**
  * La pantalla del alumno: buscar clases para reservar. A la derecha el
  * calendario del mes y a la izquierda las clases del día elegido, con los
@@ -46,13 +45,15 @@ const SIN_TARJETAS = { slots: null, myLessons: null, excludeId: null, cards: [] 
  * Una tarjeta es un horario que ofrece un docente un día: rango, modalidad y
  * cupo los fijó el docente; la materia (entre las que tarifó), la hora de
  * inicio y la duración las elige el alumno en el modal (o se suma a una
- * grupal ya armada). Lo reservado CON ESE DOCENTE ya no está (lo restó el
- * backend); lo que el alumno tiene con OTRO aparece como aviso gris, porque
- * el rato del docente sigue existiendo aunque este alumno no lo pueda tomar.
+ * grupal ya armada). Qué horarios se ven lo decide el backend para ESTE
+ * alumno: sin lo completo, sin lo que le choca con sus clases, sin lo pasado
+ * (lib/availabilityExpansion.js). Acá solo se aplican los filtros que elige
+ * el alumno, todos en utils/booking.js.
  *
  * Con ?reprogramar=<id> la misma pantalla sirve para reprogramar una clase
- * confirmada: se ven solo los horarios del mismo docente y la misma materia, y
- * el modal pide el cambio en vez de una reserva nueva.
+ * confirmada: el backend (excludeBookingId) manda solo los horarios del mismo
+ * docente con la misma materia, y el modal pide el cambio en vez de una
+ * reserva nueva.
  *
  * El `router` llega por props desde AvailabilityPage en vez de envolver esto
  * en otro withRouter: alcanza con un puente por ruta y así sigue siendo obvio
@@ -62,6 +63,43 @@ const SIN_TARJETAS = { slots: null, myLessons: null, excludeId: null, cards: [] 
  * (que ahí no está en la barra), una fila de chips rápidos con el botón
  * "Filtros" que abre todos en una hoja, la tira de semana y la lista del día.
  * Los filtros y su estado son los mismos: solo cambia dónde se tocan.
+ *
+ * Rol: alumno (AvailabilityPage la muestra para todo viewRole que no sea
+ * 'teacher', así que también sin sesión).
+ *
+ * Props:
+ *   - router: { navigate, location, searchParams, setSearchParams, … } de
+ *     withRouter, que AvailabilityPage recibe y reenvía tal cual. De la URL se
+ *     leen `?q=` (búsqueda del navbar) y `?reprogramar=<classId>`.
+ *   - user: el usuario de la sesión (App → AvailabilityPage → acá), o null.
+ *   - mobile: de withViewport.
+ *   - favoriteIds, favoriteError, onFavoriteChange, onFavoriteError: de
+ *     withFavorites (configurado para mirar `user.role`).
+ *
+ * Datos (api/client.js):
+ *   - fetchSubjects → GET /api/subjects, al montar (catálogo para los chips).
+ *   - fetchAvailability → GET /api/availability?from&to[&excludeBookingId], y
+ *     fetchMyBookings → GET /api/bookings?from&to, cada vez que MonthPane avisa
+ *     un rango nuevo (onRangeChange) o cambia el usuario / la reprogramación.
+ *   - fetchBooking → GET /api/bookings/:id, si hay ?reprogramar=<id>.
+ *   - fetchMyPacks → GET /api/packs/mine y fetchNeuronas → GET /api/neuronas,
+ *     solo con un alumno logueado (al montar, al cambiar `user` y después de
+ *     reservar con paquete/canje o reprogramar).
+ *
+ * Estado:
+ *   - selectedIso: día elegido ("YYYY-MM-DD"); arranca hoy, lo cambia MonthPane.
+ *   - from/to: rango visible que reportó MonthPane (onRangeChange).
+ *   - slots: filas (ventana × fecha) de GET /api/availability.
+ *   - myBookings: reservas propias del rango (GET /api/bookings), solo para
+ *     pintar las líneas del calendario.
+ *   - subjects: catálogo de GET /api/subjects.
+ *   - loading/error: del último pedido de rango (o de la reprogramación).
+ *   - booking: tarjeta abierta en BookingDialog; booked: lo que devolvió el
+ *     modal tras reservar (para el cartel verde).
+ *   - rescheduling: la clase de GET /api/bookings/:id que se reprograma.
+ *   - packs / neuronasBalance: de /api/packs/mine y /api/neuronas.
+ *   - filters: ver EMPTY_BOOKING_FILTERS en utils/booking.js.
+ *   - filtersOpen: hoja de filtros abierta (solo teléfono).
  */
 class BookingBoard extends Component {
   state = {
@@ -69,7 +107,7 @@ class BookingBoard extends Component {
     from: null,
     to: null,
     slots: [],
-    myLessons: [],
+    myBookings: [],
     subjects: [],
     loading: false,
     error: null,
@@ -82,21 +120,11 @@ class BookingBoard extends Component {
     // quedan con ese docente, y el modal ofrece reservar con el paquete.
     packs: [],
     neuronasBalance: 0,
-    // Los ids (string) de los docentes favoritos del alumno: el corazón de
-    // cada tarjeta y el filtro "Solo favoritos".
-    favoriteIds: [],
-    // Si falló marcar o desmarcar un favorito. Va arriba de las tarjetas, al
-    // lado del corazón que se tocó, y no arriba del calendario donde no se ve.
-    favoriteError: null,
-    // --- filtros ---
-    dayKeys: [],
-    subjectIds: [],
-    modalities: [],
-    kinds: [],
-    fromTime: '',
-    toTime: '',
-    teacherQuery: '',
-    onlyFavorites: false,
+    // Los favoritos (favoriteIds, favoriteError) llegan por props desde
+    // withFavorites, igual que en el Calendario y Mis reservas.
+    // Los filtros, todos juntos (ver EMPTY_BOOKING_FILTERS): se leen, cuentan
+    // y limpian de una, y bajan así a BookingFilters.
+    filters: EMPTY_BOOKING_FILTERS,
     // Solo en el teléfono: si la hoja de filtros está abierta.
     filtersOpen: false,
   }
@@ -110,50 +138,45 @@ class BookingBoard extends Component {
 
   rescheduleToken = 0
 
-  packsToken = 0
-  neuronasToken = 0
-
-  favoritesToken = 0
-
-  // Cache de un solo valor, igual que shortRunsCache en AvailabilityPage: la
-  // clave es la IDENTIDAD de los dos arrays, que sirve porque solo cambian
-  // cuando vuelve una respuesta. Sin esto, tocar un chip recalcularía las
-  // superposiciones de los 42 días de la grilla.
-  cardsCache = SIN_TARJETAS
+  studentToken = 0
 
   componentDidMount() {
     this.loadSubjects()
     this.applyQuery()
     this.loadReschedule()
-    this.loadPacks()
-    this.loadNeuronas()
-    this.loadFavorites()
+    this.loadStudentData()
   }
 
   componentDidUpdate(prevProps) {
-    // Al abrir la app directo en esta pantalla, el usuario llega después
-    // (App lo recupera con /me): recién ahí se sabe si tiene paquetes y
-    // favoritos.
+    // FILTRO: "Solo favoritos" se apaga si el usuario dejó de ser alumno
+    // (regla de pantalla), para no filtrar con una lista que ya no existe.
+    // Además se recargan paquetes y saldo; los favoritos los recarga
+    // withFavorites.
     if (prevProps.user !== this.props.user) {
-      this.loadPacks()
-      this.loadNeuronas()
-      this.loadFavorites()
-    }
-    if (prevProps.router.location.search !== this.props.router.location.search) {
-      this.applyQuery()
-      if (prevProps.router.searchParams.get('reprogramar') !== this.getRescheduleId()) {
-        this.loadReschedule()
+      this.loadStudentData()
+      if (!this.isStudent() && this.state.filters.onlyFavorites) {
+        this.setState((prev) => ({ filters: { ...prev.filters, onlyFavorites: false } }))
       }
     }
+    const cambioUsuario = prevProps.user?.id !== this.props.user?.id
+    let cambioReprogramar = false
+    if (prevProps.router.location.search !== this.props.router.location.search) {
+      this.applyQuery()
+      cambioReprogramar = prevProps.router.searchParams.get('reprogramar') !== this.getRescheduleId()
+      if (cambioReprogramar) this.loadReschedule()
+    }
+    // El rango cargado depende de los dos: el backend recorta los horarios
+    // con las clases del alumno de la sesión, y al reprogramar saca la clase
+    // vieja de lo ocupado.
+    const { from, to } = this.state
+    if ((cambioUsuario || cambioReprogramar) && from && to) this.loadRange(from, to)
   }
 
   componentWillUnmount() {
     this.rangeToken += 1
     this.subjectsToken += 1
     this.rescheduleToken += 1
-    this.packsToken += 1
-    this.neuronasToken += 1
-    this.favoritesToken += 1
+    this.studentToken += 1
   }
 
   isStudent() {
@@ -161,64 +184,39 @@ class BookingBoard extends Component {
   }
 
   /**
-   * Solo un alumno tiene favoritos. Si falla, el tablero sigue andando: los
-   * corazones arrancan vacíos y marcar uno igual se guarda.
+   * Los paquetes y el saldo de neuronas: solo un alumno logueado los tiene.
+   * Si uno falla, el tablero sigue andando sin él: no se ofrece reservar con
+   * paquete, o no se ofrecen canjes.
+   *
+   * Pide en paralelo fetchMyPacks (GET /api/packs/mine) y fetchNeuronas
+   * (GET /api/neuronas, se usa solo `.balance`) y llena `packs` y
+   * `neuronasBalance`. Sin alumno los deja en [] y 0.
    */
-  loadFavorites() {
-    const token = ++this.favoritesToken
+  loadStudentData() {
+    const token = ++this.studentToken
     if (!this.isStudent()) {
-      this.setState({ favoriteIds: [], onlyFavorites: false })
+      this.setState({ packs: [], neuronasBalance: 0 })
       return
     }
-    fetchFavoriteTeachers()
-      .then((teachers) => {
-        if (token !== this.favoritesToken) return
-        this.setState({ favoriteIds: favoriteIdsOf(teachers) })
+    Promise.allSettled([fetchMyPacks(), fetchNeuronas()]).then(([packs, neuronas]) => {
+      if (token !== this.studentToken) return
+      this.setState({
+        packs: packs.status === 'fulfilled' ? packs.value : [],
+        neuronasBalance: neuronas.status === 'fulfilled' ? neuronas.value.balance : 0,
       })
-      .catch(() => {
-        if (token === this.favoritesToken) this.setState({ favoriteIds: [] })
-      })
+    })
   }
 
-  /**
-   * Solo un alumno logueado tiene paquetes. Si falla, el tablero sigue
-   * andando: simplemente no se ofrece reservar con paquete.
-   */
-  loadPacks() {
-    const token = ++this.packsToken
-    if (!this.isStudent()) {
-      this.setState({ packs: [] })
-      return
-    }
-    fetchMyPacks()
-      .then((packs) => {
-        if (token === this.packsToken) this.setState({ packs: Array.isArray(packs) ? packs : [] })
-      })
-      .catch(() => {
-        if (token === this.packsToken) this.setState({ packs: [] })
-      })
-  }
-
-  /** Igual que los paquetes: si falla, el tablero sigue andando sin ofrecer canjes. */
-  loadNeuronas() {
-    const token = ++this.neuronasToken
-    if (!this.isStudent()) {
-      this.setState({ neuronasBalance: 0 })
-      return
-    }
-    fetchNeuronas()
-      .then(({ balance }) => {
-        if (token === this.neuronasToken) this.setState({ neuronasBalance: balance })
-      })
-      .catch(() => {
-        if (token === this.neuronasToken) this.setState({ neuronasBalance: 0 })
-      })
-  }
-
+  /** El id de ?reprogramar=<classId> en la URL, o null. */
   getRescheduleId() {
     return this.props.router.searchParams.get('reprogramar')
   }
 
+  /**
+   * Si la URL trae ?reprogramar=<id>, trae esa clase con fetchBooking
+   * (GET /api/bookings/:id) y la guarda en `rescheduling`; si no, la limpia.
+   * Si falla, deja el mensaje del backend en `error`.
+   */
   loadReschedule() {
     const token = ++this.rescheduleToken
     const id = this.getRescheduleId()
@@ -226,7 +224,7 @@ class BookingBoard extends Component {
       this.setState({ rescheduling: null })
       return
     }
-    fetchClass(id)
+    fetchBooking(id)
       .then((cls) => {
         if (token !== this.rescheduleToken) return
         this.setState({ rescheduling: cls })
@@ -248,24 +246,28 @@ class BookingBoard extends Component {
     this.props.router.setSearchParams(params, { replace: true })
   }
 
+  /** El texto de ?q= (lo pone SearchBar al buscar), o ''. */
   getQuery() {
     return this.props.router.searchParams.get('q') || ''
   }
 
   /**
-   * Qué significa lo que se buscó arriba: si pega con una materia se comporta
-   * como si se hubiera tocado ese chip, y si no es un pedazo de nombre de
-   * docente. Se vuelve a correr cuando cambia la URL, no en cada render.
+   * Qué significa lo que se buscó arriba: si es el nombre de una materia se
+   * comporta como si se hubiera tocado ese chip, y si no es texto libre
+   * (docente o materia). Se vuelve a correr cuando cambia la URL, no en cada
+   * render.
+   *
+   * Recibe el catálogo (por defecto el del state) y usa resolveQuery
+   * (utils/search.js) para pisar `filters.subjectIds` y `filters.teacherQuery`.
    */
-  applyQuery() {
+  applyQuery(subjects = this.state.subjects) {
     const q = this.getQuery()
     if (!q) return
 
-    const { subjectId, teacherQuery } = resolveQuery(q, this.state.subjects)
-    this.setState({
-      teacherQuery,
-      subjectIds: subjectId ? [subjectId] : [],
-    })
+    const { subjectId, teacherQuery } = resolveQuery(q, subjects)
+    this.setState((prev) => ({
+      filters: { ...prev.filters, teacherQuery, subjectIds: subjectId ? [subjectId] : [] },
+    }))
   }
 
   /**
@@ -279,19 +281,16 @@ class BookingBoard extends Component {
     this.dropParam('q')
   }
 
+  /** Trae el catálogo con fetchSubjects (GET /api/subjects) y lo guarda en `subjects`. */
   loadSubjects = () => {
     const token = ++this.subjectsToken
     fetchSubjects()
       .then((subjects) => {
         if (token !== this.subjectsToken) return
-        const lista = Array.isArray(subjects) ? subjects : []
-        this.setState({ subjects: lista })
+        this.setState({ subjects })
         // El catálogo llega después que la URL, así que recién acá se puede
         // saber si lo buscado era una materia.
-        if (this.getQuery()) {
-          const { subjectId, teacherQuery } = resolveQuery(this.getQuery(), lista)
-          this.setState({ teacherQuery, subjectIds: subjectId ? [subjectId] : [] })
-        }
+        this.applyQuery(subjects)
       })
       .catch(() => {
         // El catálogo solo alimenta los chips: si falla, la pantalla sigue
@@ -300,22 +299,29 @@ class BookingBoard extends Component {
       })
   }
 
+  /**
+   * Carga los horarios y las clases propias del rango [from, to] que muestra
+   * MonthPane ("YYYY-MM-DD").
+   *
+   * - fetchAvailability → GET /api/availability?from&to (con excludeBookingId =
+   *   la clase que se reprograma: el backend no la cuenta como ocupada y
+   *   devuelve solo ese docente y esa materia) → `slots`.
+   * - fetchMyBookings → GET /api/bookings?from&to (las del usuario de la
+   *   sesión) → `myBookings`, para las líneas del calendario; sin usuario, [].
+   * Maneja `loading` y `error`; descarta respuestas viejas con rangeToken.
+   */
   loadRange = (from, to) => {
     const token = ++this.rangeToken
     this.setState({ loading: true, error: null })
 
-    const pedidos = [fetchAvailability({ from, to })]
-    // Sin usuario no hay clases propias: tampoco hay superposiciones.
-    pedidos.push(this.props.user ? fetchMyLessons({ from, to }) : Promise.resolve([]))
+    const pedidos = [fetchAvailability({ from, to, excludeBookingId: this.getRescheduleId() })]
+    // Sin usuario no hay clases propias que dibujar.
+    pedidos.push(this.props.user ? fetchMyBookings({ from, to }) : Promise.resolve([]))
 
     Promise.all(pedidos)
-      .then(([slots, myLessons]) => {
+      .then(([slots, myBookings]) => {
         if (token !== this.rangeToken) return
-        this.setState({
-          slots: Array.isArray(slots) ? slots : [],
-          myLessons: Array.isArray(myLessons) ? myLessons : [],
-          loading: false,
-        })
+        this.setState({ slots, myBookings, loading: false })
       })
       .catch((error) => {
         if (token !== this.rangeToken) return
@@ -326,101 +332,53 @@ class BookingBoard extends Component {
       })
   }
 
-  /**
-   * Todas las tarjetas del rango, con las superposiciones ya anotadas.
-   *
-   * Al reprogramar, la clase vieja no cuenta como choque: se cancela en el
-   * mismo momento en que se toma la nueva (así se la puede correr media hora).
-   */
-  getCards() {
-    const { slots, myLessons, rescheduling } = this.state
-    const excludeId = rescheduling ? String(rescheduling.id) : null
-    const cache = this.cardsCache
-    if (cache.slots !== slots || cache.myLessons !== myLessons || cache.excludeId !== excludeId) {
-      const propias = excludeId
-        ? myLessons.filter((lesson) => String(lesson.id) !== excludeId)
-        : myLessons
-      this.cardsCache = { slots, myLessons, excludeId, cards: annotateClashes(slots, propias) }
-    }
-    const cards = this.cardsCache.cards
-    return rescheduling ? this.onlyForReschedule(cards, rescheduling) : cards
+  /** Los paquetes del alumno, con lo que libera la clase que se reprograma. */
+  getPacks() {
+    return packsForReschedule(this.state.packs, this.state.rescheduling)
   }
 
   /**
-   * Reprogramar es con el mismo docente y la misma materia: las tarjetas de
-   * ese docente que la ofrecen, recortadas a esa materia (y a las grupales de
-   * esa materia) para que el modal no ofrezca otra.
+   * FILTRO: lo que recibe filterCards (utils/booking.js), elegido por el
+   * alumno. "Solo favoritos" pasa a ser la lista de esos docentes.
    */
-  onlyForReschedule(cards, cls) {
-    const materia = String(cls.subjectId)
-    return cards
-      .filter((card) => String(card.teacherId) === String(cls.teacherId))
-      .map((card) => ({
-        ...card,
-        subjects: card.subjects.filter((subject) => String(subject.id) === materia),
-        groups: card.groups.filter((group) => String(group.subjectId) === materia),
-      }))
-      .filter((card) => card.subjects.length > 0)
-  }
-
   getFilters() {
-    const { dayKeys, subjectIds, modalities, kinds, fromTime, toTime, teacherQuery } = this.state
-    const teacherIds = this.state.onlyFavorites ? this.state.favoriteIds : null
-    return { dayKeys, subjectIds, modalities, kinds, fromTime, toTime, teacherQuery, teacherIds }
+    const { filters } = this.state
+    // favoriteIds es null si el pedido falló: con "Solo favoritos" prendido
+    // eso es "ninguno", no "sin filtro".
+    const teacherIds = filters.onlyFavorites ? this.props.favoriteIds || [] : null
+    return { ...filters, teacherIds }
   }
 
   hasFilters() {
-    const { dayKeys, subjectIds, modalities, kinds, fromTime, toTime, teacherQuery } = this.state
-    return (
-      this.state.onlyFavorites ||
-      dayKeys.length > 0 ||
-      subjectIds.length > 0 ||
-      modalities.length > 0 ||
-      kinds.length > 0 ||
-      Boolean(fromTime) ||
-      Boolean(toTime) ||
-      Boolean(teacherQuery)
-    )
-  }
-
-  /** Cuántos filtros hay prendidos, para el "Filtros (3)" del teléfono. */
-  countFilters() {
-    const { dayKeys, subjectIds, modalities, kinds, fromTime, toTime, teacherQuery } = this.state
-    return (
-      dayKeys.length +
-      subjectIds.length +
-      modalities.length +
-      kinds.length +
-      (fromTime || toTime ? 1 : 0) +
-      (teacherQuery ? 1 : 0) +
-      (this.state.onlyFavorites ? 1 : 0)
-    )
-  }
-
-  getFilteredByDate() {
-    return groupCardsByDate(filterCards(this.getCards(), this.getFilters()))
+    return countBookingFilters(this.state.filters) > 0
   }
 
   /**
-   * El número verde de cada día. Es la cantidad de TARJETAS y respeta los
-   * filtros, así que lo que dice el calendario es exactamente lo que se ve al
-   * tocar ese día.
+   * FILTRO: las tarjetas filtradas por lo que eligió el alumno (filterCards;
+   * lo que no se ve por regla ya no vino del backend) y agrupadas por fecha
+   * (groupCardsByDate, que además pone primero las de docentes Destacados):
+   * `{ "YYYY-MM-DD": [tarjeta, …] }`.
+   */
+  getFilteredByDate() {
+    return groupCardsByDate(filterCards(this.state.slots, this.getFilters()))
+  }
+
+  /**
+   * FILTRO: el número verde de cada día, sin las de licencia
+   * (countBookableByDate en utils/booking.js). Es la cantidad de TARJETAS y
+   * respeta los filtros, así que lo que dice el calendario es exactamente lo
+   * que se ve al tocar ese día.
    */
   getFreeByDate(porFecha) {
-    const counts = {}
-    for (const [iso, cards] of Object.entries(porFecha)) {
-      // Las de vacaciones se muestran en gris pero no son "libres".
-      counts[iso] = cards.filter((card) => !card.onVacation).length
-    }
-    return counts
+    return countBookableByDate(porFecha)
   }
 
   /** Las clases propias agrupadas por día, que son las líneas azules. */
-  getLessonsByDate() {
+  getMyBookingsByDate() {
     const map = {}
-    for (const lesson of this.state.myLessons) {
-      if (!map[lesson.date]) map[lesson.date] = []
-      map[lesson.date].push(lesson)
+    for (const booking of this.state.myBookings) {
+      if (!map[booking.date]) map[booking.date] = []
+      map[booking.date].push(booking)
     }
     for (const iso of Object.keys(map)) {
       map[iso].sort((a, b) => a.startTime.localeCompare(b.startTime))
@@ -428,18 +386,12 @@ class BookingBoard extends Component {
     return map
   }
 
-  /** Solo las materias que se pueden reservar en algún horario del rango cargado. */
+  /**
+   * FILTRO: los chips de materia, solo las que se pueden reservar en el rango
+   * cargado (filterSubjectsFor en utils/booking.js).
+   */
   getFilterSubjects() {
-    // Todo se normaliza a string: el id elegido puede venir de la URL (siempre
-    // string) y el de las tarjetas del backend, y un Set compara con ===.
-    const presentes = new Set()
-    for (const card of this.getCards()) {
-      for (const subject of card.subjects) presentes.add(String(subject.id))
-    }
-    // La elegida se agrega igual: si no, un chip seleccionado que se queda sin
-    // resultados desaparecería y no habría forma de sacarlo.
-    for (const id of this.state.subjectIds) presentes.add(String(id))
-    return this.state.subjects.filter((subject) => presentes.has(String(subject.id)))
+    return filterSubjectsFor(this.state.slots, this.state.subjects, this.state.filters.subjectIds)
   }
 
   handleRangeChange = (from, to) => {
@@ -453,40 +405,32 @@ class BookingBoard extends Component {
     this.setState({ selectedIso: iso, booked: null })
   }
 
-  handleToggleDay = (dayKey) => () => {
+  /**
+   * Prende o apaga un filtro: en las listas (días, materias, modalidad, tipo)
+   * agrega o saca `value`; "Solo favoritos" es un sí/no y se da vuelta.
+   */
+  toggleFilter(key, value) {
     this.dropQuery()
-    this.setState((prev) => ({
-      dayKeys: prev.dayKeys.includes(dayKey)
-        ? prev.dayKeys.filter((key) => key !== dayKey)
-        : [...prev.dayKeys, dayKey],
-    }))
+    this.setState((prev) => {
+      const actual = prev.filters[key]
+      let siguiente = !actual
+      if (Array.isArray(actual)) {
+        siguiente = actual.includes(value)
+          ? actual.filter((item) => item !== value)
+          : [...actual, value]
+      }
+      return { filters: { ...prev.filters, [key]: siguiente } }
+    })
   }
 
-  handleToggleSubject = (subjectId) => () => {
+  /** Para un onClick: handleToggle('modalities', 'virtual'). */
+  handleToggle = (key, value) => () => {
+    this.toggleFilter(key, value)
+  }
+
+  setFilters(cambios) {
     this.dropQuery()
-    this.setState((prev) => ({
-      subjectIds: prev.subjectIds.includes(subjectId)
-        ? prev.subjectIds.filter((id) => id !== subjectId)
-        : [...prev.subjectIds, subjectId],
-    }))
-  }
-
-  /** Mismo patrón para modalidad y tipo: prender o apagar una clave de la lista. */
-  toggleIn(key, value) {
-    this.dropQuery()
-    this.setState((prev) => ({
-      [key]: prev[key].includes(value)
-        ? prev[key].filter((item) => item !== value)
-        : [...prev[key], value],
-    }))
-  }
-
-  handleToggleModality = (modality) => () => {
-    this.toggleIn('modalities', modality)
-  }
-
-  handleToggleKind = (kind) => () => {
-    this.toggleIn('kinds', kind)
+    this.setState((prev) => ({ filters: { ...prev.filters, ...cambios } }))
   }
 
   /**
@@ -494,48 +438,16 @@ class BookingBoard extends Component {
    * dónde quedó la otra (se empujan entre sí).
    */
   handleChangeRange = (fromTime, toTime) => {
-    this.dropQuery()
-    this.setState({ fromTime, toTime })
+    this.setFilters({ fromTime, toTime })
   }
 
   handleClearTeacher = () => {
-    this.dropQuery()
-    this.setState({ teacherQuery: '' })
+    this.setFilters({ teacherQuery: '' })
   }
 
-  handleToggleFavorites = () => {
-    this.dropQuery()
-    this.setState((prev) => ({ onlyFavorites: !prev.onlyFavorites }))
-  }
-
-  /**
-   * El corazón ya guardó: se actualiza la lista acá y no se vuelve a pedir.
-   * Con "Solo favoritos" prendido, sacar uno hace desaparecer sus tarjetas,
-   * que es justo lo que pide ese filtro.
-   */
-  handleFavoriteChange = (teacherId, favorite) => {
-    this.setState((prev) => ({
-      favoriteIds: withFavorite(prev.favoriteIds, teacherId, favorite),
-      favoriteError: null,
-    }))
-  }
-
-  handleFavoriteError = (message) => {
-    this.setState({ favoriteError: message })
-  }
 
   handleClear = () => {
-    this.dropQuery()
-    this.setState({
-      onlyFavorites: false,
-      dayKeys: [],
-      subjectIds: [],
-      modalities: [],
-      kinds: [],
-      fromTime: '',
-      toTime: '',
-      teacherQuery: '',
-    })
+    this.setFilters(EMPTY_BOOKING_FILTERS)
   }
 
   handleOpenFilters = () => {
@@ -557,20 +469,23 @@ class BookingBoard extends Component {
   /**
    * Reservada: se vuelve a pedir el mes entero en vez de tocar el estado a
    * mano. No es solo la tarjeta que se reservó la que cambia — ese horario
-   * puede pasar a chocar con tarjetas de otros docentes. Recalcular eso acá
-   * sería repetir lo que ya hace el backend, y es una sola llamada.
+   * deja de ofrecerse en tarjetas de otros docentes que le chocan, y eso lo
+   * decide el backend. Es una sola llamada.
    *
-   * `booked` lo arma el modal con lo que hace falta para el cartel.
+   * `booked` lo arma el modal con lo que hace falta para el cartel, el día
+   * incluido: no se lee de `this.state.booking`, que es del modal y no de la
+   * respuesta.
    */
   handleBooked = (booked) => {
-    const { booking, from, to } = this.state
-    this.setState({ booking: null, booked, selectedIso: booking.date, rescheduling: null })
-    // La reprogramación terminó: la pantalla vuelve a ser la de reservar.
+    const { from, to } = this.state
+    this.setState({ booking: null, booked, selectedIso: booked.date, rescheduling: null })
+    // La reprogramación terminó: la pantalla vuelve a ser la de reservar. Al
+    // salir el parámetro, componentDidUpdate recarga el rango.
     if (booked.rescheduled) this.dropParam('reprogramar')
-    if (from && to) this.loadRange(from, to)
-    // Una clase con paquete aparta un lugar del paquete.
-    if (booked.usedPack) this.loadPacks()
-    if (booked.usedReward) this.loadNeuronas()
+    else if (from && to) this.loadRange(from, to)
+    // Una clase con paquete aparta un lugar del paquete, un canje gasta
+    // neuronas y reprogramar devuelve lo que usaba la vieja.
+    if (booked.usedPack || booked.usedReward || booked.rescheduled) this.loadStudentData()
   }
 
   handleStopReschedule = () => {
@@ -620,23 +535,12 @@ class BookingBoard extends Component {
   getFiltersProps() {
     return {
       subjects: this.getFilterSubjects(),
-      dayKeys: this.state.dayKeys,
-      subjectIds: this.state.subjectIds,
-      modalities: this.state.modalities,
-      kinds: this.state.kinds,
-      fromTime: this.state.fromTime,
-      toTime: this.state.toTime,
-      teacherQuery: this.state.teacherQuery,
+      filters: this.state.filters,
       showFavorites: this.isStudent(),
-      onlyFavorites: this.state.onlyFavorites,
       hasFilters: this.hasFilters(),
-      onToggleDay: this.handleToggleDay,
-      onToggleSubject: this.handleToggleSubject,
-      onToggleModality: this.handleToggleModality,
-      onToggleKind: this.handleToggleKind,
+      onToggle: this.handleToggle,
       onChangeRange: this.handleChangeRange,
       onClearTeacher: this.handleClearTeacher,
-      onToggleFavorites: this.handleToggleFavorites,
       onClear: this.handleClear,
     }
   }
@@ -649,12 +553,12 @@ class BookingBoard extends Component {
         cards={porFecha[selectedIso] || []}
         loading={loading}
         filtered={this.hasFilters()}
-        packs={this.state.packs}
-        favoriteIds={this.isStudent() ? this.state.favoriteIds : null}
-        favoriteError={this.state.favoriteError}
+        packs={this.getPacks()}
+        favoriteIds={this.props.favoriteIds}
+        favoriteError={this.props.favoriteError}
         onReservar={this.handleReservar}
-        onFavoriteChange={this.handleFavoriteChange}
-        onFavoriteError={this.handleFavoriteError}
+        onFavoriteChange={this.props.onFavoriteChange}
+        onFavoriteError={this.props.onFavoriteError}
       />
     )
   }
@@ -666,7 +570,7 @@ class BookingBoard extends Component {
       <BookingDialog
         card={booking}
         rescheduleOf={this.state.rescheduling}
-        packs={this.state.packs}
+        packs={this.getPacks()}
         neuronasBalance={this.state.neuronasBalance}
         onClose={this.handleCloseDialog}
         onBooked={this.handleBooked}
@@ -680,8 +584,10 @@ class BookingBoard extends Component {
    * desliza de costado, como los filtros de las apps de iOS.
    */
   renderQuickFilters() {
-    const cuantos = this.countFilters()
-    const { modalities, kinds, onlyFavorites } = this.state
+    const cuantos = countBookingFilters(this.state.filters)
+    const { modalities, kinds, onlyFavorites } = this.state.filters
+    // FILTRO: el chip de favoritos solo para un alumno logueado (regla de
+    // pantalla; el backend igual responde favoritos solo a alumnos).
 
     return (
       <div className="booking-quick" role="group" aria-label="Filtros rápidos">
@@ -700,7 +606,7 @@ class BookingBoard extends Component {
             type="button"
             className={`subject-chip ${onlyFavorites ? 'selected' : ''}`}
             aria-pressed={onlyFavorites}
-            onClick={this.handleToggleFavorites}
+            onClick={this.handleToggle('onlyFavorites')}
           >
             <HeartIcon filled={onlyFavorites} />
             Favoritos
@@ -712,7 +618,7 @@ class BookingBoard extends Component {
             type="button"
             className={`subject-chip ${modalities.includes(item.key) ? 'selected' : ''}`}
             aria-pressed={modalities.includes(item.key)}
-            onClick={this.handleToggleModality(item.key)}
+            onClick={this.handleToggle('modalities', item.key)}
           >
             {item.label}
           </button>
@@ -723,7 +629,7 @@ class BookingBoard extends Component {
             type="button"
             className={`subject-chip ${kinds.includes(item.key) ? 'selected' : ''}`}
             aria-pressed={kinds.includes(item.key)}
-            onClick={this.handleToggleKind(item.key)}
+            onClick={this.handleToggle('kinds', item.key)}
           >
             {item.label}
           </button>
@@ -757,6 +663,8 @@ class BookingBoard extends Component {
   renderMobile() {
     const { selectedIso, loading } = this.state
     const porFecha = this.getFilteredByDate()
+    // FILTRO: el buscador solo para alumnos (regla de pantalla, igual que en
+    // la barra de NavBar).
 
     return (
       <div className="booking-board is-mobile">
@@ -771,7 +679,7 @@ class BookingBoard extends Component {
         <MonthPane
           mobile
           compactTitle
-          eventsByDate={this.getLessonsByDate()}
+          eventsByDate={this.getMyBookingsByDate()}
           freeByDate={this.getFreeByDate(porFecha)}
           selectedIso={selectedIso}
           loading={loading}
@@ -799,7 +707,7 @@ class BookingBoard extends Component {
       <div className="booking-board">
         <div className="booking-panes">
           <MonthPane
-            eventsByDate={this.getLessonsByDate()}
+            eventsByDate={this.getMyBookingsByDate()}
             freeByDate={this.getFreeByDate(porFecha)}
             selectedIso={selectedIso}
             loading={loading}
@@ -829,4 +737,7 @@ BookingBoard.defaultProps = {
   mobile: false,
 }
 
-export default withViewport(BookingBoard)
+// El tablero recibe `user` y no `viewRole`: la regla de "es alumno" sale de ahí.
+export default withViewport(
+  withFavorites(BookingBoard, { isStudent: (props) => props.user?.role === 'student' }),
+)

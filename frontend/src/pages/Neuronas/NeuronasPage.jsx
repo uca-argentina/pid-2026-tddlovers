@@ -41,6 +41,21 @@ const TEACHER_EARNINGS = [
  *
  * En el teléfono no es una pestaña: se llega desde el Perfil, así que arriba va
  * el "‹ Perfil" de iOS para volver.
+ *
+ * Ruta /neuronas (docente y alumno).
+ *
+ * Props: viewRole y user (de App; de `user` solo se mira approvalStatus:
+ * un docente sin aprobar no puede comprar Destacado), mobile (de withViewport).
+ *
+ * Datos (api/client.js):
+ *   - fetchNeuronas → GET /api/neuronas, al montar, al cambiar viewRole y
+ *     después de comprar un Destacado. Responde según el rol de la sesión:
+ *     { balance, earned, level, movements, … } más `badges` (alumno) o
+ *     `featured` (docente).
+ *   - buyFeatured → POST /api/neuronas/featured (docente), responde { endDate }.
+ *
+ * Estado: data (la respuesta de GET /api/neuronas), loading, buying (compra
+ * de Destacado en vuelo), error, notice.
  */
 class NeuronasPage extends Component {
   state = {
@@ -65,6 +80,7 @@ class NeuronasPage extends Component {
     this.fetchToken += 1
   }
 
+  /** Trae el saldo, nivel e historial con fetchNeuronas (GET /api/neuronas) → `data`. */
   load() {
     const token = ++this.fetchToken
     return fetchNeuronas()
@@ -80,6 +96,10 @@ class NeuronasPage extends Component {
       })
   }
 
+  /**
+   * Compra 7 días de Destacado con buyFeatured (POST /api/neuronas/featured)
+   * y recarga `data` (el saldo bajó y aparece en `featured`).
+   */
   handleBuyFeatured = () => {
     this.setState({ buying: true, error: null, notice: null })
     buyFeatured()
@@ -150,6 +170,8 @@ class NeuronasPage extends Component {
 
   renderRewards() {
     const { data } = this.state
+    // FILTRO: los canjes son del alumno; la respuesta de docente trae
+    // `featured` (el backend contesta por el rol de la sesión).
     if (data.featured) return null
     return (
       <section className="neuronas-section">
@@ -170,7 +192,11 @@ class NeuronasPage extends Component {
     )
   }
 
-  /** Por qué no se puede comprar ahora, o null si se puede. */
+  /**
+   * FILTRO: por qué no se puede comprar Destacado ahora, o null si se puede.
+   * Espejo de lo que chequea POST /api/neuronas/featured (aprobado, lugares,
+   * saldo), que es el que decide.
+   */
   featuredProblem() {
     const { balance, featured } = this.state.data
     if (this.props.user?.approvalStatus !== 'approved') {
@@ -184,6 +210,7 @@ class NeuronasPage extends Component {
 
   renderFeatured() {
     const { featured } = this.state.data
+    // FILTRO: Destacado solo en la respuesta de docente (regla del backend).
     if (!featured) return null
     const problem = this.featuredProblem()
     const { buying } = this.state

@@ -9,9 +9,10 @@ import './AppLayout.css'
  * envuelve a las demás, el NavBar se monta una sola vez y sobrevive a los
  * cambios de pantalla.
  *
- * No hace de portero: por ahora se puede entrar al calendario sin estar
- * logueado (no hay backend de sesión todavía, así que un candado sería de
- * mentira). Cada pantalla se arregla sola si `user` viene en null.
+ * No hace de portero: App no lo monta hasta que /api/auth/me contestó
+ * (sessionChecked), pero si no hay sesión igual se muestra y no redirige a
+ * /ingresar. Cada pantalla se arregla sola si `user` viene en null, y el
+ * backend rechaza con 401 lo que necesita sesión.
  *
  * Los hijos NO reciben datos por el Outlet — eso necesitaría el hook
  * useOutletContext. App se los pasa directo por props a cada ruta.
@@ -19,6 +20,10 @@ import './AppLayout.css'
  * A diferencia de .auth-page, acá no pisamos las variables de color: estas
  * pantallas siguen el modo claro/oscuro del sistema (ver el comentario en
  * styles/ui.css).
+ *
+ * Props (de App.jsx): `viewRole` (roleOf(user)) y `user` (el de /api/auth/me,
+ * o null); las dos van al NavBar, y viewRole decide si se deja lugar para el
+ * buscador del alumno.
  */
 class AppLayout extends Component {
   render() {

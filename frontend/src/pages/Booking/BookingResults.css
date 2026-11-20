@@ -72,8 +72,8 @@
   background: var(--color-surface-solid);
 }
 
-/* Sin una hora entera libre no se puede reservar: se apaga, pero se sigue
-   viendo — que el docente tenga horario ahí es información. */
+/* De licencia no se puede reservar: se apaga, pero se sigue viendo — que el
+   docente tenga horario ahí es información. */
 .booking-card.is-blocked {
   background: color-mix(in srgb, var(--color-bg) 60%, var(--color-surface-solid));
 }
@@ -205,25 +205,11 @@
   color: var(--color-success);
 }
 
-.booking-card-joined {
-  margin-top: 8px;
-  font-size: 12.5px;
-  color: var(--color-primary);
-}
-
 .booking-card-price {
   font-size: 15px;
   font-weight: 700;
   color: var(--color-text);
   font-variant-numeric: tabular-nums;
-}
-
-/* El aviso de superposición va en gris: no es un error, es un dato. */
-.booking-card-clash {
-  margin-top: 8px;
-  font-size: 12.5px;
-  color: var(--color-text-muted);
-  line-height: 1.35;
 }
 
 .booking-card-actions {

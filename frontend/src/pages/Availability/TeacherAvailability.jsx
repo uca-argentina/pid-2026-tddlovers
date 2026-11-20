@@ -31,9 +31,32 @@ import { isOnVacation } from '../../utils/vacations.js'
  * se pasa a otra semana, la de atrás la sigue — el calendario y el modal
  * siempre hablan de la misma.
  *
- * Las vacaciones van aparte (botón "Vacaciones", al lado de "Agregar
+ * Las licencias (vacations) van aparte (botón "Licencia", al lado de "Agregar
  * horario"): son pocas, así que se piden todas juntas y no por semana. La
  * semana marca esos días en gris, igual que los ve el alumno.
+ *
+ * Rol: docente (AvailabilityPage la muestra con viewRole 'teacher' y sesión).
+ *
+ * Props:
+ *   - user: el docente de la sesión (App → AvailabilityPage). Se usa
+ *     `user.rates` (sus tarifas por materia × modalidad) para saber qué
+ *     modalidades puede ofrecer.
+ *
+ * Datos (api/client.js):
+ *   - fetchMyWindows → GET /api/teachers/me/availability?from&to, al montar y
+ *     al cambiar de semana o después de guardar/borrar un horario.
+ *   - fetchMyVacations → GET /api/teachers/me/vacations, al montar y después
+ *     de cambiar licencias.
+ *   - fetchMyAddresses → GET /api/teachers/me/addresses, al montar y después
+ *     de guardar un horario (pudo guardar una dirección nueva).
+ *   - fetchSubjects → GET /api/subjects, al montar (nombres de materias).
+ *
+ * Estado:
+ *   - weekStart: lunes (Date) de la semana visible.
+ *   - windows / loading / error: ventanas crudas de esa semana.
+ *   - catalog: materias del catálogo; addresses: direcciones guardadas.
+ *   - dialog: { iso, focusId, key } del DayWindowsDialog abierto, o null.
+ *   - vacations / vacationsLoading / vacationsOpen: licencias y su modal.
  */
 class TeacherAvailability extends Component {
   state = {
@@ -76,6 +99,7 @@ class TeacherAvailability extends Component {
     this.vacationsToken += 1
   }
 
+  /** Trae las licencias con fetchMyVacations (GET /api/teachers/me/vacations) → `vacations`. */
   loadVacations = () => {
     const token = ++this.vacationsToken
     this.setState({ vacationsLoading: true })
@@ -104,7 +128,7 @@ class TeacherAvailability extends Component {
     this.setState({ vacationsOpen: false })
   }
 
-  /** Cargar o borrar vacaciones cambia la lista y lo que se ve en la semana. */
+  /** Cargar o borrar licencias cambia la lista y lo que se ve en la semana. */
   handleVacationsChanged = () => {
     this.loadVacations()
     this.loadWeek(this.state.weekStart)
@@ -114,12 +138,19 @@ class TeacherAvailability extends Component {
     return toISODate(new Date())
   }
 
-  /** Las tarifas del perfil, con el nombre de la materia. */
+  /**
+   * Las tarifas del perfil, con el nombre de la materia: `user.rates` (de la
+   * sesión) cruzadas con el catálogo por resolveRates (utils/rates.js).
+   */
   getRates() {
     return resolveRates(this.props.user?.rates, this.state.catalog)
   }
 
   /**
+   * Trae las ventanas de la semana que arranca en `weekStart` (lunes a
+   * domingo) con fetchMyWindows → GET /api/teachers/me/availability?from&to
+   * y las guarda en `windows`.
+   *
    * Devuelve una promesa que NUNCA falla: el modal la espera para decir
    * "guardado", y si lo que falló es la recarga, lo que se guardó está bien
    * guardado — el error de la recarga se muestra en la página.
@@ -211,6 +242,8 @@ class TeacherAvailability extends Component {
   }
 
   /**
+   * Trae las direcciones del docente con fetchMyAddresses
+   * (GET /api/teachers/me/addresses) → `addresses`.
    * Si falla, el formulario se queda sin guardadas y ofrece cargar una: no
    * es motivo para no mostrar la semana.
    */

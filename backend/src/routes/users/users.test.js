@@ -128,6 +128,22 @@ describe('PATCH /api/users/me', () => {
     expect(updateUserProfile).not.toHaveBeenCalled();
   });
 
+  it('rejects subjectIds that are not UUIDs before reaching the database', async () => {
+    const headers = await authedHeaders(app);
+    for (const subjectIds of [['abc'], [1], [MATE, null]]) {
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/users/me',
+        headers,
+        payload: { telefono: '', subjectIds },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().fields).toEqual({ subjectIds: 'invalid' });
+    }
+    expect(countExistingSubjectIds).not.toHaveBeenCalled();
+    expect(updateUserProfile).not.toHaveBeenCalled();
+  });
+
   it('saves telefono and subjects for a teacher', async () => {
     countExistingSubjectIds.mockResolvedValueOnce(2);
     updateUserProfile.mockResolvedValueOnce({

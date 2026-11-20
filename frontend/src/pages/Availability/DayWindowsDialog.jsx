@@ -40,6 +40,31 @@ const NEW = 'new'
  * El modal no guarda ventanas propias: las recibe de TeacherAvailability, y
  * después de cada cambio le pide que recargue (`onChanged`). Así la semana de
  * atrás y el modal nunca muestran dos versiones distintas.
+ *
+ * Rol: docente. Lo abre TeacherAvailability.
+ *
+ * Props (de TeacherAvailability):
+ *   - iso: el día que se mira ("YYYY-MM-DD"); today: hoy, mismo formato.
+ *   - focusId: id de la ventana tocada en la semana (se scrollea hasta ella), o null.
+ *   - windows: ventanas crudas de la semana (GET /api/teachers/me/availability);
+ *     acá se filtran las de `iso` con windowsOn (utils/windows.js).
+ *   - loading: si la semana se está recargando.
+ *   - onVacation: si `iso` cae en una licencia (isOnVacation).
+ *   - rates: tarifas del perfil con nombre de materia (getRates).
+ *   - addresses: direcciones guardadas (GET /api/teachers/me/addresses).
+ *   - onChangeDay(iso), onChanged() → promesa (recarga la semana), onClose().
+ *
+ * Datos: createWindow → POST /api/teachers/me/availability, updateWindow →
+ * PUT /api/teachers/me/availability/:id, deleteWindow → DELETE
+ * /api/teachers/me/availability/:id.
+ *
+ * Estado:
+ *   - editing: id de la ventana en edición, 'new' para una nueva, o null.
+ *   - draft: el borrador del formulario (forma de emptyDraft/draftFromWindow);
+ *     original: la ventana antes de editar.
+ *   - showErrors / saving / serverError: validación y guardado.
+ *   - confirmDeleteId / deleting: confirmación de borrado.
+ *   - notice: cartel de "Listo, …" tras guardar o borrar.
  */
 class DayWindowsDialog extends Component {
   constructor(props) {
@@ -87,6 +112,8 @@ class DayWindowsDialog extends Component {
   }
 
   /** Un día que ya pasó se mira, no se toca: esas clases ya fueron. */
+  // FILTRO: un día pasado se ve pero no se edita (regla de pantalla; el
+  // backend igual valida las fechas de la ventana).
   canEdit() {
     return this.props.iso >= this.props.today
   }
@@ -164,6 +191,10 @@ class DayWindowsDialog extends Component {
   }
 
   /**
+   * Valida el borrador (validateDraft), lo convierte con draftToPayload y lo
+   * manda: createWindow (POST) si es nuevo o updateWindow (PUT /:id) si se
+   * editaba. Después espera onChanged() (recarga de TeacherAvailability).
+   *
    * Guardar y después recargar la semana. El aviso de "guardado" recién sale
    * cuando la recarga volvió: antes, la tarjeta todavía mostraría lo viejo.
    */
@@ -209,6 +240,10 @@ class DayWindowsDialog extends Component {
     this.setState({ confirmDeleteId: null })
   }
 
+  /**
+   * Borra la ventana confirmada con deleteWindow
+   * (DELETE /api/teachers/me/availability/:id) y pide recargar la semana.
+   */
   handleDelete = () => {
     const { confirmDeleteId, deleting } = this.state
     if (deleting) return

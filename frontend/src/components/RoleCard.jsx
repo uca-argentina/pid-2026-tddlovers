@@ -2,6 +2,10 @@ import { Component } from 'react'
 import { CheckIcon } from './icons.jsx'
 import './RoleCard.css'
 
+/**
+ * Tarjeta seleccionable de un rol (Docente / Alumno) en el paso 2 del
+ * registro. Props (de StepRole): icon, title, subtitle, selected y onClick.
+ */
 class RoleCard extends Component {
   render() {
     const { icon, title, subtitle, selected, onClick } = this.props

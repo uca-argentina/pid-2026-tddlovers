@@ -16,6 +16,9 @@ let nextId = 0
  *
  * La localidad lleva la aclaración de que es lo que ven los alumnos antes de
  * pagar: el docente tiene que saber qué expone.
+ *
+ * Props (de AddressDialog y WindowForm): value, onChange(form), errors,
+ * showErrors, disabled y showLabel. Sin fetch ni estado.
  */
 class AddressFields extends Component {
   constructor(props) {
