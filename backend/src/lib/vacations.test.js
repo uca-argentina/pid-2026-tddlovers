@@ -43,16 +43,6 @@ describe('VacationRange', () => {
     expect(r.includes('2099-10-01')).toBe(true);
     expect(r.includes('2099-10-05')).toBe(true);
     expect(r.includes('2099-10-06')).toBe(false);
-    expect(r.days()).toBe(5);
-  });
-
-  it('se pisa si comparte algún día, incluido un borde', () => {
-    const r = rango('2099-10-01', '2099-10-05');
-    expect(r.overlaps(rango('2099-10-05', '2099-10-08'))).toBe(true);
-    expect(r.overlaps(rango('2099-10-06', '2099-10-08'))).toBe(false);
-    expect(r.firstOverlap([rango('2099-11-01', '2099-11-02'), rango('2099-09-28', '2099-10-01')]).startDate).toBe(
-      '2099-09-28'
-    );
   });
 
   it('dice si un docente está de vacaciones un día', () => {

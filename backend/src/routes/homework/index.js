@@ -1,4 +1,5 @@
-import { findClassById, findTurnClasses } from '../../db/classes.js';
+import { findClassBookings } from '../../db/bookings.js';
+import { findClass } from '../../db/classes.js';
 import {
   addMessage,
   createHomework,
@@ -19,27 +20,33 @@ import {
   checkCorrect,
   checkSubmit,
   isPastDue,
+  isRecentGroupDate,
+  recentGroupSince,
   validateFeedback,
   validateHomework,
   validateMessage,
   validateSubmission,
 } from '../../lib/homework.js';
 import { correctionCredits } from '../../lib/neuronas.js';
+import { isUuid } from '../../lib/validators.js';
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Montado en /api/homework (app.js). "Tareas" en pantalla.
+//   GET  /api/homework                          teacher (con `submissions`) o student (con `submission`); admin 403
+//   GET  /api/homework/targets                  solo teacher
+//   POST /api/homework                          solo teacher (CSRF)
+//   PUT  /api/homework/:id/submission           solo student (CSRF)
+//   POST /api/homework/submissions/:id/feedback  docente de esa entrega (CSRF)
+//   GET  /api/homework/submissions/:id/messages  docente o alumno de esa entrega
+//   POST /api/homework/submissions/:id/messages  docente o alumno de esa entrega (CSRF)
+// Usa: db/homework.js, db/classes.js (findClass), db/bookings.js (findClassBookings),
+// lib/homework.js (reglas y validaciones) y lib/neuronas.js (correctionCredits).
+// Los errores salen como { message } (+ `fields` en validaciones); no hay código `error`.
+
 const HOMEWORK_NOT_FOUND = 'Esa tarea no existe.';
 const SUBMISSION_NOT_FOUND = 'Esa entrega no existe.';
 const CHANGED_MEANWHILE = 'La entrega cambió mientras tanto. Recargá la página.';
 const ONLY_TEACHERS = 'Solo los docentes pueden hacer esto.';
 const ONLY_STUDENTS = 'Solo los alumnos pueden entregar tareas.';
-// Las grupales que se ofrecen para asignar: las que vienen y las de hace poco.
-const RECENT_GROUP_DAYS = 60;
-
-function daysBefore(iso, days) {
-  const [y, m, d] = iso.split('-').map(Number);
-  const date = new Date(Date.UTC(y, m - 1, d - days));
-  return date.toISOString().slice(0, 10);
-}
 
 export default async function homeworkRoutes(app) {
   /**
@@ -47,6 +54,12 @@ export default async function homeworkRoutes(app) {
    * una grupal suya. Si no, cualquier docente podría escribirle a cualquier
    * usuario adivinando su id. Devuelve lo que falta para crear la tarea, o
    * { error } con el status.
+   *
+   * @param {object} body - request.body: exactamente uno de studentId o classId
+   *   (classes.id, el `classId` de GET /api/homework/targets).
+   * @param {string} teacherId - request.user.id.
+   * @returns {Promise<{target: {studentIds, classId?}}
+   *   | {error: {status, message}}>}
    */
   async function resolveTarget(body, teacherId) {
     const { studentId, classId } = body ?? {};
@@ -55,34 +68,41 @@ export default async function homeworkRoutes(app) {
     }
 
     if (studentId) {
-      const mine = UUID_RE.test(String(studentId)) && (await isStudentOf(teacherId, studentId));
+      const mine = isUuid(studentId) && (await isStudentOf(teacherId, studentId));
       if (!mine) return { error: { status: 404, message: 'Ese alumno no existe.' } };
       return { target: { studentIds: [studentId] } };
     }
 
-    const cls = UUID_RE.test(String(classId)) ? await findClassById(classId) : null;
+    const cls = isUuid(classId) ? await findClass(classId) : null;
     if (!cls || String(cls.teacherId) !== String(teacherId)) {
       return { error: { status: 404, message: 'Esa clase no existe.' } };
     }
     if (cls.maxStudents <= 1) {
       return { error: { status: 400, message: 'Elegí una clase grupal.' } };
     }
-    const rows = await findTurnClasses({ teacherId, date: cls.date, startTime: cls.startTime });
-    const studentIds = rows.filter((row) => row.status !== 'cancelada').map((row) => row.studentId);
+    if (!isRecentGroupDate(cls.date, now().iso)) {
+      return {
+        error: {
+          status: 400,
+          message: 'Esa clase es de hace más de 60 días: asignale la tarea a cada alumno.',
+        },
+      };
+    }
+    // findClassBookings ya deja afuera las reservas canceladas.
+    const rows = await findClassBookings(cls.id);
+    const studentIds = rows.map((row) => row.studentId);
     if (studentIds.length === 0) {
       return { error: { status: 409, message: 'Esa clase ya no tiene alumnos anotados.' } };
     }
     return {
-      target: {
-        studentIds,
-        subjectId: cls.subjectId,
-        classDate: cls.date,
-        startTime: cls.startTime,
-      },
+      target: { studentIds, classId: cls.id },
     };
   }
 
-  /** La lista de cada rol: el docente con todas las entregas, el alumno con la suya. */
+  /**
+   * La lista de cada rol: el docente con todas las entregas, el alumno con la suya.
+   * Respuesta: 200 listTeacherHomeworks o listStudentHomeworks. Errores: 403 admin.
+   */
   app.get('/', { onRequest: app.requireAuth }, async (request, reply) => {
     const { id, role } = request.user;
     if (role === 'teacher') return reply.send(await listTeacherHomeworks(id));
@@ -90,11 +110,17 @@ export default async function homeworkRoutes(app) {
     return reply.code(403).send({ message: 'Las tareas son para docentes y alumnos.' });
   });
 
+  /** A quién puede asignar. Respuesta: 200 { students, groups } (findTargets). Errores: 403. */
   app.get('/targets', { onRequest: app.requireAuth }, async (request, reply) => {
     if (request.user.role !== 'teacher') return reply.code(403).send({ message: ONLY_TEACHERS });
-    return reply.send(await findTargets(request.user.id, daysBefore(now().iso, RECENT_GROUP_DAYS)));
+    return reply.send(await findTargets(request.user.id, recentGroupSince(now().iso)));
   });
 
+  /**
+   * Asignar una tarea. Body: { title, description?, dueDate, dueTime } + studentId | classId.
+   * Respuesta: 201 tarea (findTeacherHomework). Errores: 400 validación o destino
+   *   inválido, 404 alumno/clase ajenos, 409 grupal sin alumnos, 403.
+   */
   app.post('/', { onRequest: [app.requireAuth, app.csrfProtection] }, async (request, reply) => {
     if (request.user.role !== 'teacher') return reply.code(403).send({ message: ONLY_TEACHERS });
 
@@ -118,6 +144,11 @@ export default async function homeworkRoutes(app) {
    * Entregar, o cambiar la entrega mientras no esté corregida. Si se cambia
    * después del vencimiento pasa a fuera de término: lo que cuenta es la
    * última versión, que es la que va a leer el docente.
+   *
+   * Body: { text?, linkUrl? } (validateSubmission).
+   * Respuesta: 200 tarea con su entrega (findStudentHomework).
+   * Errores: 400, 403 no alumno, 404 tarea no asignada, 409 ya corregida
+   *   (checkSubmit) o corregida en el medio.
    */
   app.put(
     '/:id/submission',
@@ -127,7 +158,7 @@ export default async function homeworkRoutes(app) {
       if (role !== 'student') return reply.code(403).send({ message: ONLY_STUDENTS });
 
       const { id } = request.params;
-      const homework = UUID_RE.test(id) ? await findStudentHomework(id, userId) : null;
+      const homework = isUuid(id) ? await findStudentHomework(id, userId) : null;
       if (!homework) return reply.code(404).send({ message: HOMEWORK_NOT_FOUND });
 
       const denied = checkSubmit(homework.submission);
@@ -149,12 +180,17 @@ export default async function homeworkRoutes(app) {
   /**
    * La entrega y desde qué lado la mira el usuario, o null si no es suya. Una
    * entrega ajena da 404 y no 403, para no contar que existe.
+   *
+   * @returns {Promise<{submission: object, role: 'teacher'|'student'}|null>}
+   *   submission de findSubmission; params.id es el id de la entrega.
    */
   async function loadOwnSubmission(request) {
     const { id } = request.params;
-    if (!UUID_RE.test(id)) return null;
+    if (!isUuid(id)) return null;
     const submission = await findSubmission(id);
     if (!submission) return null;
+    // FILTRO: una entrega solo la ven su docente y su alumno; para cualquier
+    // otro es un 404, como si no existiera.
     if (String(submission.teacherId) === String(request.user.id)) {
       return { submission, role: 'teacher' };
     }
@@ -168,6 +204,10 @@ export default async function homeworkRoutes(app) {
    * La devolución. Se puede corregir de nuevo, y reemplaza a la anterior. Solo
    * la primera da neuronas: corrected_at se pisa al recorregir, y si contara,
    * reescribir la devolución volvería a pagar.
+   *
+   * Body: { feedback }. Respuesta: 200 tarea con todas las entregas (findTeacherHomework).
+   * Errores: 400, 403 no es el docente, 404, 409 sin entregar (checkCorrect)
+   *   o cambió en el medio.
    */
   app.post(
     '/submissions/:id/feedback',
@@ -200,6 +240,10 @@ export default async function homeworkRoutes(app) {
     }
   );
 
+  /**
+   * El chat de la entrega (se consulta cada 5 s desde el front).
+   * Respuesta: 200 [listMessages]. Errores: 404, 409 todavía sin entregar (checkChat).
+   */
   app.get('/submissions/:id/messages', { onRequest: app.requireAuth }, async (request, reply) => {
     const own = await loadOwnSubmission(request);
     if (!own) return reply.code(404).send({ message: SUBMISSION_NOT_FOUND });
@@ -210,6 +254,10 @@ export default async function homeworkRoutes(app) {
     return reply.send(await listMessages(own.submission.id));
   });
 
+  /**
+   * Mandar un mensaje al chat. Body: { body }.
+   * Respuesta: 201 mensaje (addMessage). Errores: 400, 404, 409 (checkChat).
+   */
   app.post(
     '/submissions/:id/messages',
     { onRequest: [app.requireAuth, app.csrfProtection] },

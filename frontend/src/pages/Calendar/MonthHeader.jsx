@@ -6,7 +6,10 @@ import './MonthHeader.css'
  * Encabezado del calendario: el mes que se está viendo, las flechas para
  * moverse y el botón "Hoy". No tiene estado propio (todo viene por props,
  * igual que RoleCard), pero es una clase porque tiene comportamiento.
- * Los estilos viven en CalendarPage.css.
+ * Los estilos viven en MonthHeader.css.
+ *
+ * Props (de MonthPane): title (mes y año ya formateados), loading, y los
+ * handlers onPrev / onNext / onToday.
  */
 class MonthHeader extends Component {
   render() {

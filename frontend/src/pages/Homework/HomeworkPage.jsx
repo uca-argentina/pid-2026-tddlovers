@@ -24,6 +24,22 @@ import './HomeworkPage.css'
  *
  * En el teléfono no es una pestaña (no entra en cinco): se llega desde el
  * Perfil, así que arriba va el "‹ Perfil" de iOS para volver.
+ *
+ * Ruta /tareas (docente y alumno; otro rol ve un aviso).
+ *
+ * Props: viewRole (de App), mobile (de withViewport) y now ("ahora"
+ * inyectable para tests; null en la app).
+ *
+ * Datos: fetchHomeworks → GET /api/homework, al montar y al cambiar viewRole.
+ * El backend contesta según el rol de la sesión: para el docente cada tarea
+ * trae `submissions` (una por alumno), para el alumno trae su `submission`.
+ * Una respuesta pedida con el viewRole anterior se descarta (fetchToken).
+ * Crear, entregar y corregir lo hacen los diálogos, que devuelven la tarea
+ * entera actualizada.
+ *
+ * Estado: homeworks (de GET /api/homework), loading, error, notice, openId
+ * (tarea abierta en Teacher/StudentHomeworkDialog) y creating
+ * (NewHomeworkDialog abierto).
  */
 class HomeworkPage extends Component {
   state = {
@@ -53,6 +69,14 @@ class HomeworkPage extends Component {
     return this.props.viewRole === 'teacher'
   }
 
+  /**
+   * Trae las tareas con fetchHomeworks (GET /api/homework) → `homeworks`.
+   *
+   * FILTRO: solo docente o alumno (regla de pantalla). Qué tareas y qué
+   * entregas vienen lo decide el backend por el rol de la sesión
+   * (backend/src/routes/homework): el docente, las suyas con todas sus
+   * entregas; el alumno, solo la suya de cada tarea.
+   */
   load() {
     const token = ++this.fetchToken
     if (!['teacher', 'student'].includes(this.props.viewRole)) {
@@ -63,11 +87,6 @@ class HomeworkPage extends Component {
     fetchHomeworks()
       .then((homeworks) => {
         if (token !== this.fetchToken) return
-        // Al recargar, App arranca como alumno hasta que sabe quién es, y el
-        // backend contesta según la sesión: una respuesta de docente en ese
-        // rato no se puede mostrar. Sigue cargando: enseguida cambia el rol y
-        // se vuelve a pedir.
-        if (homeworks.some((row) => Array.isArray(row.submissions) !== this.isTeacher())) return
         this.setState({ homeworks, loading: false })
       })
       .catch((error) => {
@@ -95,6 +114,7 @@ class HomeworkPage extends Component {
     }))
   }
 
+  /** Un diálogo devolvió la tarea actualizada: se reemplaza por id en la lista. */
   handleChange = (homework) => {
     this.setState((prev) => ({
       homeworks: prev.homeworks.map((row) => (row.id === homework.id ? homework : row)),

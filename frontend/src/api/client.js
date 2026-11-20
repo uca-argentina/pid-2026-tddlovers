@@ -4,6 +4,16 @@
 // que queda como funciones simples.
 //
 // Todo pega contra el backend de verdad: ya no quedan datos de mentira.
+//
+// Cómo leer este archivo: cada función dice el endpoint (método + path +
+// query/body), qué devuelve YA DESENVUELTO (el JSON tal cual, nunca
+// { user } / { booking }) y qué archivo del backend lo atiende. Los prefijos
+// se registran en backend/src/app.js (/api/auth -> routes/auth, /api/bookings
+// -> routes/bookings, /api/classes -> routes/classes, etc.). Si el backend responde con error, la promesa se
+// rechaza con un Error con `message` (en castellano, para mostrar), `status`,
+// `code` y `fields` (ver request()).
+
+import { activeRows } from '../utils/reservations.js'
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 
@@ -18,6 +28,10 @@ const CREDENTIALS = 'include'
 // backend lo rechaza, request() reintenta una vez pidiendo uno nuevo.
 let csrfTokenPromise = null
 
+/**
+ * GET /api/auth/csrf-token -> { csrfToken } (backend/src/routes/auth/index.js).
+ * Devuelve el token (string), cacheado en csrfTokenPromise.
+ */
 function fetchCsrfToken() {
   if (!csrfTokenPromise) {
     csrfTokenPromise = fetch('/api/auth/csrf-token', {
@@ -34,6 +48,16 @@ function fetchCsrfToken() {
   return csrfTokenPromise
 }
 
+/**
+ * El único lugar que llama a fetch para la API: agrega cookies, Content-Type
+ * y el token CSRF, y convierte los errores del backend en excepciones.
+ *
+ * @param {string} path - '/api/...'.
+ * @param {RequestInit} [options] - method, body (string JSON o FormData), headers.
+ * @returns {Promise<any>} el JSON de la respuesta, o null si no tiene body (204).
+ * @throws {Error} si no es 2xx: `message` (el del backend, o uno genérico),
+ *   `status`, `code` (el `error` del backend) y `fields` (campo -> motivo).
+ */
 async function request(path, options = {}) {
   const method = (options.method || 'GET').toUpperCase()
   // El Content-Type va SOLO si hay body: Fastify rechaza con 400 un
@@ -76,10 +100,24 @@ async function request(path, options = {}) {
   return data
 }
 
+/**
+ * GET /api/subjects -> [{ id, name }], el catálogo fijo de materias por nombre.
+ * Backend: routes/subjects/index.js. Público (no pide sesión).
+ * Lo usan: components/SearchBar.jsx, pages/Booking/BookingBoard.jsx,
+ * pages/Register/RegisterPage.jsx, pages/Profile/ProfilePage.jsx,
+ * pages/Availability/TeacherAvailability.jsx.
+ */
 export function fetchSubjects() {
   return request('/api/subjects')
 }
 
+/**
+ * POST /api/auth/register, body { email, password, role: 'teacher'|'student',
+ * nombre, apellido, telefono?, subjectIds? (solo docentes) } -> 201 con el usuario público
+ * (toPublicUser: { id, email, role, nombre, apellido, telefono,
+ * approvalStatus, acceptsRewards, subjectIds, rates }); deja la sesión abierta.
+ * Backend: routes/auth/index.js. Lo usa: pages/Register/RegisterPage.jsx.
+ */
 export function registerAccount(payload) {
   return request('/api/auth/register', {
     method: 'POST',
@@ -87,6 +125,11 @@ export function registerAccount(payload) {
   })
 }
 
+/**
+ * POST /api/auth/login, body { email, password } -> el usuario público (misma
+ * forma que registerAccount) y la cookie de sesión.
+ * Backend: routes/auth/index.js. Lo usa: pages/Login/LoginPage.jsx.
+ */
 export function loginAccount(credentials) {
   return request('/api/auth/login', {
     method: 'POST',
@@ -94,28 +137,48 @@ export function loginAccount(credentials) {
   })
 }
 
+/**
+ * POST /api/auth/logout, sin body -> 204 (devuelve null). Borra la sesión.
+ * Backend: routes/auth/index.js. Lo usa: App.jsx (handleLogout).
+ */
 export function logoutAccount() {
   return request('/api/auth/logout', { method: 'POST' })
 }
 
+/**
+ * GET /api/auth/me -> el usuario de la sesión (misma forma que loginAccount);
+ * 401 si no hay sesión. Backend: routes/auth/index.js.
+ * Lo usa: App.jsx (al montar, para saber si hay sesión).
+ */
 export function fetchCurrentUser() {
   return request('/api/auth/me')
 }
 
 /**
- * Las clases del usuario logueado en ese rango: como docente las que da, como
- * alumno las que reservó. El backend filtra por la sesión, así que no hace
- * falta mandar quién es.
+ * Las reservas del usuario logueado en ese rango: como docente las de las
+ * clases que da, como alumno las suyas. El backend filtra por la sesión, así
+ * que no hace falta mandar quién es.
+ *
+ * GET /api/bookings?from=YYYY-MM-DD&to=YYYY-MM-DD[&status=] -> [reserva], cada
+ * una con la forma de apiBooking() en testing/fixtures.js: `id` es el de la
+ * reserva y `classId` el de su clase (al alumno, `address` va null hasta que
+ * paga: forViewer de backend/src/lib/bookingStates.js).
+ * Backend: routes/bookings/index.js.
+ * Lo usan: pages/Calendar/CalendarPage.jsx, pages/Reservations/ReservationsPage.jsx.
  */
-export function fetchClasses({ from, to, status }) {
+export function fetchBookings({ from, to, status }) {
   return request(
-    `/api/classes?from=${from}&to=${to}${status ? `&status=${status}` : ''}`,
+    `/api/bookings?from=${from}&to=${to}${status ? `&status=${status}` : ''}`,
   )
 }
 
 /**
  * Los docentes con las materias que ofrecen ({ id, nombre, apellido,
  * subjects }), para las sugerencias del buscador.
+ *
+ * GET /api/teachers -> [{ id, nombre, apellido, subjects: [{ id, name }] }],
+ * solo aprobados y con alguna tarifa. Backend: routes/teachers/index.js
+ * (listTeachers de db/users.js). Lo usa: components/SearchBar.jsx.
  */
 export function fetchTeachers() {
   return request('/api/teachers')
@@ -125,12 +188,21 @@ export function fetchTeachers() {
  * Las ventanas del docente logueado que caen en el rango, SIN expandir: cada
  * una trae su fecha original y si se repite, que es lo que hace falta para
  * editarla. La pantalla las ubica en cada día de la semana que muestra.
+ *
+ * GET /api/teachers/me/availability?from&to -> [{ id, teacherId, date,
+ * repeatsWeekly, start, end, modality, maxStudents, meetingUrl, locality,
+ * address }]. Solo docentes. Backend: routes/teachers/index.js.
+ * Lo usa: pages/Availability/TeacherAvailability.jsx.
  */
 export function fetchMyWindows({ from, to }) {
   return request(`/api/teachers/me/availability?from=${from}&to=${to}`)
 }
 
-/** Devuelve la ventana guardada, con su id. */
+/**
+ * POST /api/teachers/me/availability, body = draftToPayload() de utils/windows.js
+ * -> 201 con la ventana guardada, con su id (misma forma que fetchMyWindows).
+ * Backend: routes/teachers/index.js. Lo usa: pages/Availability/DayWindowsDialog.jsx.
+ */
 export function createWindow(window) {
   return request('/api/teachers/me/availability', {
     method: 'POST',
@@ -138,6 +210,11 @@ export function createWindow(window) {
   })
 }
 
+/**
+ * PUT /api/teachers/me/availability/:id, mismo body que createWindow -> la
+ * ventana actualizada. Backend: routes/teachers/index.js.
+ * Lo usa: pages/Availability/DayWindowsDialog.jsx.
+ */
 export function updateWindow(id, window) {
   return request(`/api/teachers/me/availability/${id}`, {
     method: 'PUT',
@@ -145,6 +222,11 @@ export function updateWindow(id, window) {
   })
 }
 
+/**
+ * DELETE /api/teachers/me/availability/:id -> 204 (null). Las clases ya
+ * reservadas en ella siguen. Backend: routes/teachers/index.js.
+ * Lo usa: pages/Availability/DayWindowsDialog.jsx.
+ */
 export function deleteWindow(id) {
   return request(`/api/teachers/me/availability/${id}`, { method: 'DELETE' })
 }
@@ -152,116 +234,190 @@ export function deleteWindow(id) {
 /**
  * La disponibilidad YA con fecha y YA neta de lo reservado: una fila por
  * (ventana, fecha), con su modalidad, cupo, las materias que se pueden
- * reservar con su tarifa (`subjects`), los tramos libres (`free`) y las
- * grupales a las que sumarse (`groups`). La pantalla del alumno nunca ve una
- * ventana semanal — el backend la proyecta sobre el rango pedido.
+ * reservar con su tarifa (`subjects`), los inicios que ESTE alumno puede
+ * tomar con su duración máxima (`starts`, sin lo pasado ni lo que le choca
+ * con sus clases) y las grupales a las que se puede sumar (`groups`, cada una
+ * con su `maxStudents`). La pantalla del alumno nunca ve una ventana semanal
+ * — el backend la proyecta sobre el rango pedido.
+ *
+ * FILTRO: qué filas vienen lo decide el backend (bookableRows): no vienen
+ * las que no tienen nada reservable para este alumno, salvo las de licencia
+ * (`onVacation`, que se muestran en gris).
+ *
+ * `excludeBookingId` es la reserva propia que se está reprogramando: el
+ * backend no la cuenta como ocupada, devuelve solo a ese docente con esa materia, y
+ * así se la puede correr media hora dentro del mismo rato del docente.
+ *
+ * GET /api/availability?from&to[&excludeBookingId] -> [{ id, windowId, date,
+ * dayKey, teacherId, teacherName, teacherAcceptsRewards, teacherFeatured,
+ * start, end, modality, maxStudents, locality, subjects, starts, groups,
+ * onVacation }], sin las ventanas del propio usuario. Nunca trae el link ni
+ * la dirección exacta. Backend: routes/availability/index.js (filas armadas
+ * por bookableRows de lib/availabilityExpansion.js).
+ * Lo usa: pages/Booking/BookingBoard.jsx.
  */
-export function fetchAvailability({ from, to }) {
-  return request(`/api/availability?from=${from}&to=${to}`)
+export function fetchAvailability({ from, to, excludeBookingId = null }) {
+  const params = new URLSearchParams({ from, to })
+  if (excludeBookingId) params.set('excludeBookingId', excludeBookingId)
+  return request(`/api/availability?${params}`)
 }
 
 /**
- * Las clases que ya reservó el alumno logueado y siguen en pie, para pintar
- * en gris los horarios que le chocan. Todo lo que no está cancelado ocupa el
- * horario (pendiente incluida), y eso ya no se pide con un solo ?status: se
- * traen todas y se filtra acá.
+ * Las reservas del usuario logueado que siguen en pie, para dibujar las
+ * líneas del calendario del tablero de reservar y saber con qué se pisa.
+ *
+ * FILTRO: sin las canceladas (activeRows de utils/reservations.js; regla de
+ * pantalla: una cancelada no ocupa lugar). Se traen todas y se filtra acá
+ * porque "en pie" no se pide con un solo ?status.
+ *
+ * GET /api/bookings?from&to -> [reserva] sin las canceladas (misma forma que
+ * fetchBookings). Backend: routes/bookings/index.js.
+ * Lo usa: pages/Booking/BookingBoard.jsx.
  */
-export function fetchMyLessons({ from, to }) {
-  return request(`/api/classes?from=${from}&to=${to}`).then((lessons) =>
-    Array.isArray(lessons) ? lessons.filter((lesson) => lesson.status !== 'cancelada') : lessons,
-  )
-}
-
-/** Una clase propia (como alumno o como docente), con su estado. */
-export function fetchClass(id) {
-  return request(`/api/classes/${id}`)
-}
-
-// Las acciones sobre una reserva. Todas devuelven la clase ya actualizada; si
-// no se puede (la regla de 24 h, ya empezó, el otro la canceló), el backend
-// dice por qué en el message del error.
-
-export function acceptLesson(id) {
-  return request(`/api/classes/${id}/accept`, { method: 'POST' })
-}
-
-export function cancelLesson(id) {
-  return request(`/api/classes/${id}/cancel`, { method: 'POST' })
+export function fetchMyBookings({ from, to }) {
+  return request(`/api/bookings?from=${from}&to=${to}`).then(activeRows)
 }
 
 /**
- * Aceptar o cancelar la clase entera (en una grupal, todas las reservas del
- * turno), todo o nada. Devuelve la lista de reservas actualizadas.
+ * Una reserva propia (como alumno o como docente de su clase), con su estado.
+ * GET /api/bookings/:id -> la reserva (forma de fetchBookings); 404 si no es propia.
+ * Backend: routes/bookings/index.js.
+ * Lo usa: pages/Booking/BookingBoard.jsx (la reserva de ?reprogramar=<id>).
  */
-export function acceptTurn(id) {
-  return request(`/api/classes/${id}/turn/accept`, { method: 'POST' })
+export function fetchBooking(id) {
+  return request(`/api/bookings/${id}`)
 }
 
-export function cancelTurn(id) {
-  return request(`/api/classes/${id}/turn/cancel`, { method: 'POST' })
+// Las acciones sobre UNA reserva. Todas devuelven la reserva ya actualizada;
+// si no se puede (la regla de 24 h, ya empezó, el otro la canceló), el
+// backend dice por qué en el message del error.
+// Backend: routes/bookings/index.js; las reglas, checkAction de
+// backend/src/lib/bookingStates.js (espejadas en utils/bookingStates.js).
+
+/**
+ * POST /api/bookings/:id/accept, sin body -> la reserva actualizada (aceptada, o
+ * confirmada si un paquete/canje la cubre entera). Solo el docente.
+ * Lo usan: components/BookingActions.jsx, components/StudentsDialog.jsx.
+ */
+export function acceptBooking(id) {
+  return request(`/api/bookings/${id}/accept`, { method: 'POST' })
 }
 
-export function payLesson(id) {
-  return request(`/api/classes/${id}/pay`, { method: 'POST' })
+/**
+ * POST /api/bookings/:id/cancel, sin body -> la reserva cancelada (con cancelReason).
+ * Lo usan: components/BookingActions.jsx, components/StudentsDialog.jsx.
+ */
+export function cancelBooking(id) {
+  return request(`/api/bookings/${id}/cancel`, { method: 'POST' })
 }
 
+/**
+ * POST /api/bookings/:id/pay, sin body -> la reserva con `paidAt` (y confirmada
+ * si estaba aceptada). No se cobra nada de verdad. Solo el alumno.
+ * Lo usa: components/BookingActions.jsx.
+ */
+export function payBooking(id) {
+  return request(`/api/bookings/${id}/pay`, { method: 'POST' })
+}
+
+/**
+ * POST /api/bookings/:id/attendance, body { attended: boolean } -> la reserva
+ * realizada (true) o no_presentada (false). Solo el docente, con la clase empezada.
+ * Lo usan: components/AttendanceDialog.jsx, components/BookingActions.jsx.
+ */
 export function markAttendance(id, attended) {
-  return request(`/api/classes/${id}/attendance`, {
+  return request(`/api/bookings/${id}/attendance`, {
     method: 'POST',
     body: JSON.stringify({ attended }),
   })
 }
 
-// El material de una clase ya dada (resumen + archivos). Es del turno: en
-// una grupal, cualquier reserva lleva al mismo. Todas devuelven el material
-// entero, { summary, updatedAt, files: [{ id, name, mimeType, sizeBytes }] }.
-
-export function fetchClassMaterial(id) {
-  return request(`/api/classes/${id}/material`)
+/**
+ * Aceptar o cancelar la CLASE entera (en una grupal, todas sus reservas en
+ * pie), todo o nada. `classId` es el `classId` de cualquiera de sus reservas.
+ * Devuelve la lista de reservas actualizadas.
+ *
+ * POST /api/classes/:classId/accept y /cancel, sin body -> [reserva]; 409 si
+ * alguna cambió en el medio, 403 si no es el docente.
+ * Backend: routes/classes/index.js. Lo usa: components/BookingActions.jsx.
+ */
+export function acceptClass(classId) {
+  return request(`/api/classes/${classId}/accept`, { method: 'POST' })
 }
 
-export function saveClassSummary(id, summary) {
-  return request(`/api/classes/${id}/material`, {
+export function cancelClass(classId) {
+  return request(`/api/classes/${classId}/cancel`, { method: 'POST' })
+}
+
+// El material de una clase ya dada (resumen + archivos). Es de la CLASE: se
+// pide con el `classId` de la reserva, y en una grupal todos ven el mismo.
+// Todas devuelven el material entero, { summary, updatedAt, files: [{ id,
+// name, mimeType, sizeBytes }] }.
+// Backend: routes/classes/index.js (findMaterial de db/classMaterials.js; los
+// archivos van al bucket por backend/src/storage/files.js).
+// Lo usa: components/ClassMaterial.jsx.
+
+/** GET /api/classes/:classId/material -> el material de la clase. */
+export function fetchClassMaterial(classId) {
+  return request(`/api/classes/${classId}/material`)
+}
+
+/** PUT /api/classes/:classId/material, body { summary } -> el material. Solo el docente. */
+export function saveClassSummary(classId, summary) {
+  return request(`/api/classes/${classId}/material`, {
     method: 'PUT',
     body: JSON.stringify({ summary }),
   })
 }
 
-export function uploadClassFiles(id, files) {
+/**
+ * POST /api/classes/:classId/material/files, multipart con un campo `files`
+ * por archivo -> 201 con el material. Solo el docente.
+ */
+export function uploadClassFiles(classId, files) {
   const body = new FormData()
   for (const file of files) body.append('files', file, file.name)
-  return request(`/api/classes/${id}/material/files`, { method: 'POST', body })
+  return request(`/api/classes/${classId}/material/files`, { method: 'POST', body })
 }
 
-export function deleteClassFile(id, fileId) {
-  return request(`/api/classes/${id}/material/files/${fileId}`, { method: 'DELETE' })
-}
-
-/** La URL de un archivo, para un link de descarga o un <img>: viaja con la cookie de sesión. */
-export function classFileUrl(id, fileId) {
-  return `/api/classes/${encodeURIComponent(id)}/material/files/${encodeURIComponent(fileId)}`
+/** DELETE /api/classes/:classId/material/files/:fileId -> el material sin ese archivo. */
+export function deleteClassFile(classId, fileId) {
+  return request(`/api/classes/${classId}/material/files/${fileId}`, { method: 'DELETE' })
 }
 
 /**
- * Reprogramar: mismo body que reservar, sin materia (es la de la clase
+ * La URL de un archivo, para un link de descarga o un <img>: viaja con la cookie de sesión.
+ * No hace pedido: GET a esa URL responde un 302 a un link firmado del bucket (5 min).
+ */
+export function classFileUrl(classId, fileId) {
+  return `/api/classes/${encodeURIComponent(classId)}/material/files/${encodeURIComponent(fileId)}`
+}
+
+/**
+ * Reprogramar: mismo body que reservar, sin materia (es la de la reserva
  * vieja). Devuelve la reserva nueva, que nace pendiente. Puede usar clases
  * de un paquete igual que una reserva (las de la vieja se liberan).
+ *
+ * POST /api/bookings/:id/reschedule, body { windowId, date, startTime,
+ * durationMinutes, packId, packTokens, rewardType } -> 201 con la reserva nueva
+ * (pendiente, con rescheduledFrom). Solo el alumno, reserva confirmada, ≥24 h antes.
+ * Backend: routes/bookings/index.js. Lo usa: pages/Booking/BookingDialog.jsx.
  */
-export function rescheduleLesson(
+export function rescheduleBooking(
   id,
   { windowId, date, startTime, durationMinutes, packId, packTokens, rewardType },
 ) {
-  return request(`/api/classes/${id}/reschedule`, {
+  return request(`/api/bookings/${id}/reschedule`, {
     method: 'POST',
     body: JSON.stringify({ windowId, date, startTime, durationMinutes, packId, packTokens, rewardType }),
   })
 }
 
 /**
- * Reservar una clase en una ventana: qué día, a qué hora, de qué materia y
- * cuántos minutos. La modalidad sale de la ventana y el precio lo calcula el
+ * Reservar un lugar en una clase de una ventana: qué día, a qué hora, de qué
+ * materia y cuántos minutos. La modalidad sale de la ventana y el precio lo calcula el
  * backend con la tarifa del docente. Si a esa hora ya hay una grupal de la
- * misma materia y duración, es sumarse a ella. Devuelve la clase guardada,
+ * misma materia y duración, es sumarse a ella. Devuelve la reserva guardada,
  * sin envolver.
  *
  * `packId` + `packTokens` usan esa cantidad de clases de un paquete del
@@ -270,8 +426,14 @@ export function rescheduleLesson(
  *
  * `rewardType` canjea neuronas en esta clase, si el docente acepta canjes. No se
  * combina con un paquete.
+ *
+ * POST /api/bookings, body { windowId, date, startTime, subjectId,
+ * durationMinutes, packId, packTokens, rewardType } -> 201 con la reserva
+ * (forma de fetchBookings). Solo alumnos. Backend: routes/bookings/index.js
+ * (validateBooking + insertBooking de db/bookings.js).
+ * Lo usa: pages/Booking/BookingDialog.jsx.
  */
-export function bookLesson({
+export function createBooking({
   windowId,
   date,
   startTime,
@@ -281,7 +443,7 @@ export function bookLesson({
   packTokens,
   rewardType,
 }) {
-  return request('/api/classes', {
+  return request('/api/bookings', {
     method: 'POST',
     body: JSON.stringify({
       windowId,
@@ -303,6 +465,10 @@ export function bookLesson({
  *
  * `rates` es la lista ENTERA de tarifas del docente,
  * [{ subjectId, modality, hourlyRateCents }], y reemplaza a la que había.
+ *
+ * PATCH /api/users/me, body { telefono, subjectIds, rates } -> el usuario
+ * público (forma de loginAccount). Un docente rechazado vuelve a pendiente.
+ * Backend: routes/users/index.js. Lo usa: pages/Profile/ProfilePage.jsx.
  */
 export function updateProfile(payload) {
   return request('/api/users/me', {
@@ -321,12 +487,21 @@ export function updateProfile(payload) {
  * Los docentes para revisar, opcionalmente de un solo estado ('pending' |
  * 'approved' | 'rejected'). Solo para admins: a cualquier otro el backend le
  * contesta 403.
+ *
+ * GET /api/admin/teachers[?status=] -> [{ id, email, nombre, apellido,
+ * telefono, approvalStatus, ... }] (listTeachersForReview de db/approvals.js).
+ * Backend: routes/admin/index.js. Lo usa: pages/Admin/AdminPage.jsx.
  */
 export function fetchTeachersForReview(status) {
   return request(`/api/admin/teachers${status ? `?status=${status}` : ''}`)
 }
 
-/** Devuelve el docente ya actualizado. */
+/**
+ * Devuelve el docente ya actualizado.
+ * POST /api/admin/teachers/:id/approve (y /reject abajo), sin body -> el docente
+ * con la forma de fetchTeachersForReview. Backend: routes/admin/index.js.
+ * Lo usa: pages/Admin/AdminPage.jsx.
+ */
 export function approveTeacher(id) {
   return request(`/api/admin/teachers/${id}/approve`, { method: 'POST' })
 }
@@ -337,12 +512,23 @@ export function rejectTeacher(id) {
 
 // --- Paquetes de clases ---------------------------------------------------------
 
-/** Los paquetes que ofrece el docente logueado. */
+// Todas las usa pages/Packs/PacksPage.jsx (fetchMyPacks también BookingBoard).
+
+/**
+ * Los paquetes que ofrece el docente logueado.
+ * GET /api/teachers/me/packs -> [{ id, teacherId, classCount, classMinutes,
+ * priceCents, validityDays, createdAt }] (solo los activos).
+ * Backend: routes/teachers/index.js.
+ */
 export function fetchMyPackOffers() {
   return request('/api/teachers/me/packs')
 }
 
-/** { classCount, classMinutes, priceCents, validityDays }. Devuelve el paquete creado. */
+/**
+ * { classCount, classMinutes, priceCents, validityDays }. Devuelve el paquete creado.
+ * POST /api/teachers/me/packs -> 201. Backend: routes/teachers/index.js
+ * (valida validatePackOffer de lib/classPacks.js).
+ */
 export function createPackOffer(offer) {
   return request('/api/teachers/me/packs', {
     method: 'POST',
@@ -350,12 +536,19 @@ export function createPackOffer(offer) {
   })
 }
 
-/** Dejar de ofrecerlo: quien ya lo compró lo sigue usando. */
+/**
+ * Dejar de ofrecerlo: quien ya lo compró lo sigue usando.
+ * DELETE /api/teachers/me/packs/:id -> 204 (null). Backend: routes/teachers/index.js.
+ */
 export function deletePackOffer(id) {
   return request(`/api/teachers/me/packs/${id}`, { method: 'DELETE' })
 }
 
-/** Los paquetes que se pueden comprar, opcionalmente de un docente. */
+/**
+ * Los paquetes que se pueden comprar, opcionalmente de un docente.
+ * GET /api/packs[?teacherId] -> [{ ...oferta, teacherName }], solo de docentes
+ * aprobados. Backend: routes/packs/index.js.
+ */
 export function fetchPackOffers(teacherId) {
   return request(`/api/packs${teacherId ? `?teacherId=${teacherId}` : ''}`)
 }
@@ -364,25 +557,48 @@ export function fetchPackOffers(teacherId) {
  * Los paquetes que compró el alumno logueado, cada uno con su duración por
  * clase (`classMinutes`), `remaining` (las clases que le quedan: cada
  * asistencia descuenta las que usó), `available` (las que todavía puede
- * reservar) y `expired`.
+ * reservar), `expired`, `teacherApproved` y `usable` (no vencido, con
+ * clases disponibles y docente aprobado: lo decide el backend).
+ *
+ * GET /api/packs/mine -> [{ id, packId, teacherId, teacherName, classCount,
+ * classMinutes, priceCents, purchasedAt, expiresOn, ...StudentPack.summary }]
+ * (remaining/available/expired los calcula StudentPack de lib/classPacks.js).
+ * Backend: routes/packs/index.js.
+ * Lo usan: pages/Packs/PacksPage.jsx, pages/Booking/BookingBoard.jsx.
  */
 export function fetchMyPacks() {
   return request('/api/packs/mine')
 }
 
-/** Nada se cobra de verdad: queda registrado. Devuelve el paquete comprado. */
+/**
+ * Nada se cobra de verdad: queda registrado. Devuelve el paquete comprado.
+ * POST /api/packs/:id/buy, sin body -> 201 con la forma de fetchMyPacks.
+ * Solo alumnos. Backend: routes/packs/index.js.
+ */
 export function buyPack(id) {
   return request(`/api/packs/${id}/buy`, { method: 'POST' })
 }
 
 // --- Vacaciones del docente -----------------------------------------------------
 
-/** Las vacaciones del docente logueado que todavía no terminaron. */
+// En pantalla se llaman "Licencia". Backend: routes/teachers/index.js (reglas
+// en lib/vacations.js). VacationsDialog.jsx crea/borra; TeacherAvailability
+// las lista.
+
+/**
+ * Las vacaciones del docente logueado que todavía no terminaron.
+ * GET /api/teachers/me/vacations -> [{ id, teacherId, startDate, endDate }].
+ * Lo usa: pages/Availability/TeacherAvailability.jsx.
+ */
 export function fetchMyVacations() {
   return request('/api/teachers/me/vacations')
 }
 
-/** Cuántas reservas se cancelarían con esas vacaciones: { cancelledClasses }. */
+/**
+ * Cuántas reservas se cancelarían con esas vacaciones: { cancelledClasses }.
+ * GET /api/teachers/me/vacations/impact?startDate&endDate.
+ * Lo usa: pages/Availability/VacationsDialog.jsx.
+ */
 export function fetchVacationImpact({ startDate, endDate }) {
   return request(`/api/teachers/me/vacations/impact?startDate=${startDate}&endDate=${endDate}`)
 }
@@ -391,6 +607,9 @@ export function fetchVacationImpact({ startDate, endDate }) {
  * { startDate, endDate } (los dos incluidos). Devuelve las vacaciones
  * guardadas con `cancelledClasses`: cuántas reservas de esos días se
  * cancelaron.
+ *
+ * POST /api/teachers/me/vacations -> 201 { id, teacherId, startDate, endDate,
+ * cancelledClasses }. Lo usa: pages/Availability/VacationsDialog.jsx.
  */
 export function createVacation({ startDate, endDate }) {
   return request('/api/teachers/me/vacations', {
@@ -399,19 +618,35 @@ export function createVacation({ startDate, endDate }) {
   })
 }
 
-/** Borrar un rango cargado por error. Las reservas canceladas no vuelven. */
+/**
+ * Borrar un rango cargado por error. Las reservas canceladas no vuelven.
+ * DELETE /api/teachers/me/vacations/:id -> 204 (null).
+ * Lo usa: pages/Availability/VacationsDialog.jsx.
+ */
 export function deleteVacation(id) {
   return request(`/api/teachers/me/vacations/${id}`, { method: 'DELETE' })
 }
 
 // --- Direcciones guardadas del docente --------------------------------------------
 
-/** Las guardadas, la predeterminada primero. */
+// Backend: routes/teachers/index.js (reglas en lib/addresses.js). Cada
+// dirección: { id, label, saved, isDefault, street, number, postalCode,
+// locality, city, floor, apartment, notes }.
+
+/**
+ * Las guardadas, la predeterminada primero.
+ * GET /api/teachers/me/addresses -> [dirección].
+ * Lo usan: pages/Profile/AddressesSection.jsx, pages/Availability/TeacherAvailability.jsx.
+ */
 export function fetchMyAddresses() {
   return request('/api/teachers/me/addresses')
 }
 
-/** { label, street, number, postalCode, locality, city, floor, apartment, notes, isDefault }. */
+/**
+ * { label, street, number, postalCode, locality, city, floor, apartment, notes, isDefault }.
+ * POST /api/teachers/me/addresses -> 201 con la dirección creada.
+ * Lo usa: pages/Profile/AddressDialog.jsx.
+ */
 export function createAddress(address) {
   return request('/api/teachers/me/addresses', {
     method: 'POST',
@@ -419,7 +654,11 @@ export function createAddress(address) {
   })
 }
 
-/** Las ventanas que la usan cambian con ella; las clases ya reservadas no. */
+/**
+ * Las ventanas que la usan cambian con ella; las clases ya reservadas no.
+ * PUT /api/teachers/me/addresses/:id, mismo body que createAddress -> la dirección.
+ * Lo usa: pages/Profile/AddressDialog.jsx.
+ */
 export function updateAddress(id, address) {
   return request(`/api/teachers/me/addresses/${id}`, {
     method: 'PUT',
@@ -427,11 +666,19 @@ export function updateAddress(id, address) {
   })
 }
 
+/**
+ * POST /api/teachers/me/addresses/:id/default, sin body -> la dirección, ahora
+ * predeterminada. Lo usa: pages/Profile/AddressesSection.jsx.
+ */
 export function setDefaultAddress(id) {
   return request(`/api/teachers/me/addresses/${id}/default`, { method: 'POST' })
 }
 
-/** 409 con el motivo si la usa alguna ventana. */
+/**
+ * 409 con el motivo si la usa alguna ventana.
+ * DELETE /api/teachers/me/addresses/:id -> 204 (null).
+ * Lo usa: pages/Profile/AddressesSection.jsx.
+ */
 export function deleteAddress(id) {
   return request(`/api/teachers/me/addresses/${id}`, { method: 'DELETE' })
 }
@@ -441,17 +688,31 @@ export function deleteAddress(id) {
 /**
  * Las tareas del usuario logueado. El docente las recibe con `submissions`,
  * una por alumno; el alumno, con `submission`, solo la suya.
+ *
+ * GET /api/homework -> [{ id, title, description, dueDate, dueTime, classDate,
+ * classStartTime, subjectName, teacherName, createdAt, submissions | submission }].
+ * Backend: routes/homework/index.js (todas las de esta sección; reglas en
+ * lib/homework.js). Lo usa: pages/Homework/HomeworkPage.jsx.
  */
 export function fetchHomeworks() {
   return request('/api/homework')
 }
 
-/** A quién puede asignar el docente: { students, groups }. */
+/**
+ * A quién puede asignar el docente: { students, groups }.
+ * GET /api/homework/targets -> { students: [{ id, name }], groups: [{ classId,
+ * date, startTime, subjectName, enrolled }] } (grupales de los últimos 60 días).
+ * Lo usa: pages/Homework/NewHomeworkDialog.jsx.
+ */
 export function fetchHomeworkTargets() {
   return request('/api/homework/targets')
 }
 
-/** { title, description, dueDate, dueTime } y `studentId` o `classId`. Devuelve la tarea. */
+/**
+ * { title, description, dueDate, dueTime } y `studentId` o `classId`. Devuelve la tarea.
+ * POST /api/homework -> 201 con la tarea del docente (con `submissions`).
+ * Lo usa: pages/Homework/NewHomeworkDialog.jsx.
+ */
 export function createHomework(homework) {
   return request('/api/homework', {
     method: 'POST',
@@ -459,7 +720,11 @@ export function createHomework(homework) {
   })
 }
 
-/** Entregar o cambiar la entrega. Devuelve la tarea actualizada. */
+/**
+ * Entregar o cambiar la entrega. Devuelve la tarea actualizada.
+ * PUT /api/homework/:id/submission (id de la TAREA), body { text, linkUrl } ->
+ * la tarea del alumno (con `submission`). Lo usa: pages/Homework/StudentHomeworkDialog.jsx.
+ */
 export function submitHomework(id, { text, linkUrl }) {
   return request(`/api/homework/${id}/submission`, {
     method: 'PUT',
@@ -467,7 +732,11 @@ export function submitHomework(id, { text, linkUrl }) {
   })
 }
 
-/** Corregir una entrega. Devuelve la tarea actualizada, con todas sus entregas. */
+/**
+ * Corregir una entrega. Devuelve la tarea actualizada, con todas sus entregas.
+ * POST /api/homework/submissions/:id/feedback (id de la ENTREGA), body { feedback }.
+ * Lo usa: pages/Homework/TeacherSubmissionDialog.jsx.
+ */
 export function saveHomeworkFeedback(submissionId, feedback) {
   return request(`/api/homework/submissions/${submissionId}/feedback`, {
     method: 'POST',
@@ -475,10 +744,19 @@ export function saveHomeworkFeedback(submissionId, feedback) {
   })
 }
 
+/**
+ * El chat de una entrega. GET /api/homework/submissions/:id/messages ->
+ * [{ id, senderId, senderName, senderRole, body, createdAt }].
+ * Lo usa: pages/Homework/HomeworkChat.jsx (cada 5 s mientras está abierto).
+ */
 export function fetchHomeworkMessages(submissionId) {
   return request(`/api/homework/submissions/${submissionId}/messages`)
 }
 
+/**
+ * POST /api/homework/submissions/:id/messages, body { body } -> 201 con el
+ * mensaje creado (forma de fetchHomeworkMessages). Lo usa: pages/Homework/HomeworkChat.jsx.
+ */
 export function sendHomeworkMessage(submissionId, body) {
   return request(`/api/homework/submissions/${submissionId}/messages`, {
     method: 'POST',
@@ -486,27 +764,36 @@ export function sendHomeworkMessage(submissionId, body) {
   })
 }
 
-// --- Docentes favoritos del alumno ------------------------------------------------
+// --- Neuronas -------------------------------------------------------------------
 
-/**
- * Los docentes favoritos del alumno logueado, con las materias que ofrecen
- * ({ id, nombre, apellido, subjects }). Solo los aprobados: si a uno lo dan
- * de baja, el favorito queda guardado pero no viene hasta que lo aprueben.
- */
 /**
  * Saldo, nivel e historial del usuario logueado. El alumno recibe además
  * `badges`, y el docente `featured`: lo decide el rol de la sesión.
+ *
+ * GET /api/neuronas -> { balance, earned, level: { name, min, nextName,
+ * nextMin }, movements, badges | featured: { activeUntil, slotsLeft, cost, days } }.
+ * Backend: routes/neuronas/index.js (reglas en lib/neuronas.js).
+ * Lo usan: pages/Neuronas/NeuronasPage.jsx, pages/Booking/BookingBoard.jsx (saldo para canjes).
  */
 export function fetchNeuronas() {
   return request('/api/neuronas')
 }
 
-/** Compra 7 días de Destacado. Devuelve { endDate }. */
+/**
+ * Compra 7 días de Destacado. Devuelve { endDate }.
+ * POST /api/neuronas/featured, sin body -> 201; 409 si no alcanza o no hay lugar.
+ * Backend: routes/neuronas/index.js. Lo usa: pages/Neuronas/NeuronasPage.jsx.
+ */
 export function buyFeatured() {
   return request('/api/neuronas/featured', { method: 'POST' })
 }
 
-/** Si el docente acepta canjes de neuronas. Devuelve { acceptsRewards }. */
+/**
+ * Si el docente acepta canjes de neuronas. Devuelve { acceptsRewards }.
+ * PUT /api/teachers/me/accepts-rewards, body { accepts: boolean }. Va aparte de
+ * updateProfile porque guardar el perfil devuelve a pendiente a un rechazado.
+ * Backend: routes/teachers/index.js. Lo usa: pages/Profile/NeuronasSetting.jsx.
+ */
 export function setAcceptsRewards(accepts) {
   return request('/api/teachers/me/accepts-rewards', {
     method: 'PUT',
@@ -514,16 +801,34 @@ export function setAcceptsRewards(accepts) {
   })
 }
 
+// --- Docentes favoritos del alumno ------------------------------------------------
+// Backend: routes/favorites/index.js (solo alumnos; a otro rol, 403).
+
+/**
+ * Los docentes favoritos del alumno logueado, con las materias que ofrecen
+ * ({ id, nombre, apellido, subjects }). Solo los aprobados: si a uno lo dan
+ * de baja, el favorito queda guardado pero no viene hasta que lo aprueben.
+ *
+ * GET /api/favorites -> [{ id, nombre, apellido, subjects: [{ id, name }] }].
+ * Lo usan: pages/Favorites/FavoritesPage.jsx, routes/withFavorites.jsx.
+ */
 export function fetchFavoriteTeachers() {
   return request('/api/favorites')
 }
 
-/** Idempotente: marcarlo dos veces no hace nada. Sin body (204). */
+/**
+ * Idempotente: marcarlo dos veces no hace nada. Sin body (204).
+ * PUT /api/favorites/:teacherId -> null; 404 si no es un docente aprobado.
+ * Lo usa: components/FavoriteButton.jsx.
+ */
 export function addFavoriteTeacher(teacherId) {
   return request(`/api/favorites/${teacherId}`, { method: 'PUT' })
 }
 
-/** Idempotente: sacar uno que no estaba no hace nada. Sin body (204). */
+/**
+ * Idempotente: sacar uno que no estaba no hace nada. Sin body (204).
+ * DELETE /api/favorites/:teacherId -> null. Lo usa: components/FavoriteButton.jsx.
+ */
 export function removeFavoriteTeacher(teacherId) {
   return request(`/api/favorites/${teacherId}`, { method: 'DELETE' })
 }

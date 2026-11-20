@@ -65,11 +65,8 @@ function ratesSignature(rates) {
  * "Cancelar" vuelve todo a como estaba. Se eligió así en vez de guardar campo
  * por campo porque una sola confirmación se entiende mejor.
  *
- * El rol sale de `viewRole` (el interruptor de la barra) y NO de `user.role`:
- * antes salía de user.role y quedaba incoherente con el calendario, que
- * siempre miró viewRole. Puede pasar que viewRole sea 'teacher' y la cuenta
- * tenga role 'student' — es esperable, el interruptor es un andamio de prueba,
- * y en ese caso se avisa con una línea abajo del nombre.
+ * El rol sale de `viewRole`, como en el resto de las pantallas: App lo saca
+ * de la cuenta (roleOf(user)), así que siempre coincide con user.role.
  *
  * El usuario guardado NO vive acá: esta pantalla se desmonta al navegar, así
  * que el estado se perdería. Al guardar se avisa para arriba con onUserChange
@@ -82,6 +79,31 @@ function ratesSignature(rates) {
  * arriba, cada sección como un grupo, y al final un grupo con lo que en
  * escritorio está en la barra lateral y en el teléfono no entra (Favoritos,
  * el modo oscuro) más "Cerrar sesión".
+ *
+ * Rol: docente, alumno (y admin, sin secciones extra). Ruta /perfil.
+ *
+ * Props (de App):
+ *   - user: el usuario de la sesión (forma de apiUser: telefono, subjectIds,
+ *     rates [{subjectId, modality, hourlyRateCents}], acceptsRewards,
+ *     approvalStatus, …), o null.
+ *   - viewRole: 'teacher' | 'student' | 'admin' (roleOf(user)).
+ *   - onUserChange(user): App reemplaza su `user` (tras guardar el perfil o
+ *     cambiar "acepto canjes" en NeuronasSetting).
+ *   - onLogout(): App cierra la sesión (logoutAccount).
+ *   - mobile: de withViewport.
+ *
+ * Datos (api/client.js):
+ *   - fetchSubjects → GET /api/subjects, solo como docente (al montar o al
+ *     cambiar de cuenta/rol).
+ *   - updateProfile → PATCH /api/users/me, al guardar.
+ *   AddressesSection y NeuronasSetting piden lo suyo por su cuenta.
+ *
+ * Estado (borrador; lo guardado sigue siendo props.user):
+ *   - telefono, subjectIds, rateInputs ({ [materia]: { virtual, in_person,
+ *     hybrid } } como texto, ver ratesToInputs): copiados de `user`.
+ *   - touched: campos ya tocados (para mostrar errores).
+ *   - subjects / subjectsLoading / subjectsError: catálogo de GET /api/subjects.
+ *   - saving / saveError / saved: del PATCH.
  */
 class ProfilePage extends Component {
   // Borrador de edición. Arranca copiando lo que vino por props: el usuario
@@ -105,17 +127,12 @@ class ProfilePage extends Component {
   }
 
   /**
-   * El interruptor de rol cambia viewRole SIN desmontar esta pantalla (App.jsx
-   * mantiene el mismo <Route> y solo cambia la prop), así que pasar de alumno a
-   * docente tiene que disparar la carga que al montar nos ahorramos. Sin esto
-   * el docente vería la lista vacía para siempre y parecería que no da ninguna
-   * materia.
+   * Si cambia la cuenta sin desmontar esta pantalla, el borrador (materias,
+   * tarifas, teléfono) se vuelve a copiar y, si ahora es docente, se pide el
+   * catálogo que al montar nos ahorramos. Guardar no lo dispara: vuelve el
+   * mismo id.
    */
   componentDidUpdate(prevProps) {
-    // Al recargar la página, App monta las pantallas antes de que vuelva
-    // /api/auth/me: el perfil arranca sin usuario y el borrador (materias,
-    // tarifas, teléfono) queda vacío. Cuando llega el usuario —o cambia de
-    // cuenta— se vuelve a copiar. Guardar no lo dispara: vuelve el mismo id.
     const otroUsuario = String(prevProps.user?.id) !== String(this.props.user?.id)
     if (otroUsuario) this.resetDraft()
 
@@ -140,11 +157,6 @@ class ProfilePage extends Component {
 
   esDocente() {
     return this.props.viewRole === 'teacher'
-  }
-
-  /** El rol que se está mirando no es el de la cuenta (culpa del andamio). */
-  rolDesalineado() {
-    return Boolean(this.props.user) && this.props.user.role !== this.props.viewRole
   }
 
   getTelefonoError() {
@@ -235,6 +247,7 @@ class ProfilePage extends Component {
     return ratesSignature(this.getRates()) !== ratesSignature(user.rates || [])
   }
 
+  /** Trae el catálogo con fetchSubjects (GET /api/subjects) → `subjects`. */
   loadSubjects = () => {
     this.setState({ subjectsLoading: true, subjectsError: null })
     fetchSubjects()
@@ -298,6 +311,13 @@ class ProfilePage extends Component {
     })
   }
 
+  /**
+   * Valida y manda { telefono, subjectIds, rates? } con updateProfile →
+   * PATCH /api/users/me (`rates` solo como docente, armadas por getRates en
+   * centavos). Con la respuesta (el usuario actualizado) avisa a App por
+   * onUserChange. Ojo: para un docente rechazado, guardar lo vuelve a
+   * `pending` (lo decide el backend).
+   */
   handleSubmit = (event) => {
     event.preventDefault()
 
@@ -519,14 +539,6 @@ class ProfilePage extends Component {
               <span className="profile-role">
                 {rolLabel[this.props.viewRole] || rolLabel.student}
               </span>
-              {/* El interruptor de rol es de prueba: si no coincide con la
-                  cuenta, avisamos para que no parezca un error de datos. */}
-              {this.rolDesalineado() ? (
-                <p className="profile-role-hint">
-                  Estás mirando el perfil como {esDocente ? 'docente' : 'alumno'}, pero tu cuenta
-                  es de {(rolLabel[user.role] || rolLabel.student).toLowerCase()}.
-                </p>
-              ) : null}
             </div>
           </div>
 

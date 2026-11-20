@@ -46,6 +46,19 @@ let nextFormId = 0
  * modalidad) y cuánto dura la clase, y paga según la tarifa por hora. Por eso
  * abajo de la modalidad se muestra qué va a poder elegir el alumno — o que no
  * hay nada, si el docente no tiene tarifas para esa modalidad.
+ *
+ * Rol: docente. Sin fetch ni estado propio.
+ *
+ * Props (de DayWindowsDialog):
+ *   - draft: el borrador (emptyDraft/draftFromWindow de utils/windows.js).
+ *   - iso: el día del modal (para "Repetir todos los lunes").
+ *   - rates: tarifas del perfil con nombre (de qué modalidades se puede cargar
+ *     y qué materias verá el alumno).
+ *   - addresses: direcciones guardadas (GET /api/teachers/me/addresses).
+ *   - isNew, originalRepeats: si es una ventana nueva y si la original era semanal.
+ *   - saving, showErrors, serverError: estado del guardado en el padre.
+ *   - onChange(draft) con el borrador entero actualizado, onToggleRepeat(bool),
+ *     onSubmit(), onCancel().
  */
 class WindowForm extends Component {
   constructor(props) {
@@ -57,6 +70,7 @@ class WindowForm extends Component {
     return `${this.idPrefix}-${name}`
   }
 
+  /** Mezcla `changes` en el borrador y se lo devuelve entero al padre (onChange). */
   update(changes) {
     this.props.onChange({ ...this.props.draft, ...changes })
   }

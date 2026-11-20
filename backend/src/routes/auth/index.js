@@ -2,6 +2,17 @@ import { createUser, findUserByEmail, findUserById } from '../../db/users.js';
 import { countExistingSubjectIds } from '../../db/subjects.js';
 import { checkPasswordStrength, hashPassword, verifyPassword } from '../../lib/password.js';
 import { toPublicUser } from '../../lib/publicUser.js';
+import { isUuid } from '../../lib/validators.js';
+
+// Rutas de autenticación, montadas en /api/auth (app.js):
+//   GET  /api/auth/csrf-token  cualquiera
+//   POST /api/auth/register    cualquiera (CSRF; 5/min) — solo teacher/student
+//   POST /api/auth/login       cualquiera (CSRF; 5/min)
+//   POST /api/auth/logout      cualquiera (CSRF)
+//   GET  /api/auth/me          con sesión (cualquier rol)
+// Usa: db/users.js, db/subjects.js, lib/password.js, lib/publicUser.js y la
+// sesión de plugins/session.js (app.createUserSession / destroyUserSession).
+// Los errores salen como { message } (+ `fields` en validaciones); no hay código `error`.
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // En inglés, como el resto del código: son los valores que viajan por la API
@@ -12,10 +23,20 @@ const ROLES = ['teacher', 'student'];
 export default async function authRoutes(app) {
   // El cliente pega acá primero para conseguir un token, y después lo manda
   // en el header `x-csrf-token` en register/login/logout.
+  // Respuesta: 200 { csrfToken }.
   app.get('/csrf-token', async (request, reply) => {
     return reply.send({ csrfToken: await reply.generateCsrf() });
   });
 
+  /**
+   * Alta de usuario + sesión. Un docente nace 'pending'.
+   *
+   * Body: { email, password, role: 'teacher'|'student', nombre, apellido,
+   *   telefono?, subjectIds? (solo docentes) }.
+   * Respuesta: 201 + usuario de toPublicUser; setea la cookie de sesión.
+   * Errores: 400 (email, rol, nombre, apellido, contraseña débil o materias
+   *   inválidas, con `fields`), 409 email ya registrado ({ fields: { email: 'taken' } }).
+   */
   app.post(
     '/register',
     {
@@ -62,6 +83,13 @@ export default async function authRoutes(app) {
       let cleanSubjectIds = [];
       if (role === 'teacher') {
         cleanSubjectIds = Array.isArray(subjectIds) ? [...new Set(subjectIds)] : [];
+        // Un id que no es UUID llegaría a `$1::uuid[]` y sería un 500.
+        if (!cleanSubjectIds.every(isUuid)) {
+          return reply.code(400).send({
+            message: 'Una o más materias seleccionadas no existen',
+            fields: { subjectIds: 'invalid' },
+          });
+        }
         if (cleanSubjectIds.length > 0) {
           const validCount = await countExistingSubjectIds(cleanSubjectIds);
           if (validCount !== cleanSubjectIds.length) {
@@ -98,6 +126,13 @@ export default async function authRoutes(app) {
     }
   );
 
+  /**
+   * Login con email y contraseña.
+   *
+   * Body: { email, password }.
+   * Respuesta: 200 + usuario de toPublicUser; setea la cookie de sesión.
+   * Errores: 400 faltan datos, 401 credenciales inválidas.
+   */
   app.post(
     '/login',
     {
@@ -126,6 +161,7 @@ export default async function authRoutes(app) {
     }
   );
 
+  /** Borra la sesión y la cookie. Respuesta: 204. */
   app.post('/logout', { onRequest: app.csrfProtection }, async (request, reply) => {
     await app.destroyUserSession(request, reply);
     return reply.code(204).send();
@@ -134,6 +170,7 @@ export default async function authRoutes(app) {
   // Devuelve el usuario completo, no el `request.user` de la sesión (que solo
   // trae id, email y rol): el front lo usa para recuperar la sesión al
   // refrescar, y ahí necesita los mismos campos que devuelve el login.
+  // Origen: request.user.id → findUserById. Respuesta: 200 usuario; 401 sin sesión.
   app.get('/me', { onRequest: app.requireAuth }, async (request, reply) => {
     const user = await findUserById(request.user.id);
     if (!user) {

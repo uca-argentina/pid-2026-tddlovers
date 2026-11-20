@@ -4,7 +4,9 @@ import {
   checkCorrect,
   checkSubmit,
   isPastDue,
+  isRecentGroupDate,
   isSafeLink,
+  recentGroupSince,
   validateFeedback,
   validateHomework,
   validateMessage,
@@ -126,5 +128,17 @@ describe('quién puede hacer qué', () => {
     expect(checkChat(sinEntregar).status).toBe(409);
     expect(checkChat(entregada)).toBeNull();
     expect(checkChat(corregida)).toBeNull();
+  });
+});
+
+describe('grupales recientes', () => {
+  it('admite las de los últimos 60 días y las que vienen', () => {
+    expect(recentGroupSince('2099-09-14')).toBe('2099-07-16');
+    expect(isRecentGroupDate('2099-07-16', '2099-09-14')).toBe(true);
+    expect(isRecentGroupDate('2099-10-01', '2099-09-14')).toBe(true);
+  });
+
+  it('rechaza una más vieja', () => {
+    expect(isRecentGroupDate('2099-07-15', '2099-09-14')).toBe(false);
   });
 });

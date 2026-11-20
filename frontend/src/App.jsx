@@ -1,6 +1,7 @@
 import { Component } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import AppLayout from './routes/AppLayout.jsx'
+import SessionLoading from './routes/SessionLoading.jsx'
 import AdminPage from './pages/Admin/AdminPage.jsx'
 import PacksPage from './pages/Packs/PacksPage.jsx'
 import AvailabilityPage from './pages/Availability/AvailabilityPage.jsx'
@@ -24,19 +25,32 @@ import { roleOf } from './utils/user.js'
  * refrescar no desloguea; si no, `user` queda en null y el perfil muestra el
  * cartel de "iniciá sesión".
  *
+ * Las pantallas de adentro no se montan hasta que /me contesta: el rol sale
+ * del usuario, y montarlas antes con un rol supuesto hacía que un docente
+ * que recargaba se perdiera lo que cada pantalla carga al montar (el aviso
+ * de solicitudes) o viera un instante el tablero del alumno.
+ *
  * Todas las redirecciones se hacen con <Navigate> y todos los links con
  * <Link>/<NavLink>: son componentes comunes, no hooks, así que esto sigue
  * siendo un class component como el resto de la app.
+ *
+ * Estado: `user` (el usuario público de /api/auth/me, login o PATCH
+ * /api/users/me; null sin sesión), `justRegisteredName` (para el saludo del
+ * login después de registrarse) y `sessionChecked`.
+ * A cada pantalla le pasa por props `viewRole` (roleOf(user), utils/user.js)
+ * y, a las que lo necesitan, `user` y los callbacks que lo actualizan.
+ * Rutas: /ingresar, /registro, y dentro de AppLayout: / (calendario, o
+ * /admin para el admin), /admin, /perfil, /reservas, /tareas, /neuronas,
+ * /paquetes, /favoritos y /disponibilidad (docente: sus ventanas; alumno: el
+ * tablero de reservas).
+ * Lo monta: main.jsx.
  */
 class App extends Component {
   state = {
     user: null,
     justRegisteredName: null,
-    // Desde qué rol se está mirando la app. ANDAMIO DE PRUEBA: el botón de la
-    // barra (RoleToggle) NO va a producción. Arranca en el rol del usuario que
-    // se loguea; el día que se borre el botón, esto se reemplaza por user.role
-    // y sale del estado.
-    viewRole: 'student',
+    // Si /api/auth/me ya contestó (con usuario o sin él).
+    sessionChecked: false,
   }
 
   /**
@@ -47,19 +61,20 @@ class App extends Component {
   componentDidMount() {
     fetchCurrentUser()
       .then((user) => {
-        this.setState({ user, viewRole: roleOf(user) })
+        this.setState({ user, sessionChecked: true })
       })
-      .catch(() => {})
+      .catch(() => {
+        this.setState({ sessionChecked: true })
+      })
   }
 
+  // LoginPage la llama con el usuario que devolvió POST /api/auth/login.
   handleLoginSuccess = (user) => {
-    this.setState({
-      user,
-      justRegisteredName: null,
-      viewRole: roleOf(user),
-    })
+    this.setState({ user, justRegisteredName: null })
   }
 
+  // RegisterPage la llama al terminar (con la respuesta de /register y el
+  // nombre tipeado); solo se guarda el nombre para el saludo del login.
   handleRegisterComplete = (_result, nombre) => {
     this.setState({ justRegisteredName: nombre })
   }
@@ -67,7 +82,8 @@ class App extends Component {
   /**
    * App es el dueño de `user`, así que el perfil avisa para acá cuando
    * guarda. Sin esto, salir del perfil lo desmonta y al volver se vería el
-   * dato viejo.
+   * dato viejo. Recibe el usuario que devolvió PATCH /api/users/me (o el
+   * cambio de acceptsRewards).
    */
   handleUserChange = (user) => {
     this.setState({ user })
@@ -82,19 +98,20 @@ class App extends Component {
    */
   handleLogout = () => {
     logoutAccount().catch(() => {})
-    this.setState({ user: null, viewRole: 'student', justRegisteredName: null })
+    this.setState({ user: null, justRegisteredName: null })
   }
 
   render() {
-    const { user, justRegisteredName, viewRole } = this.state
+    const { user, justRegisteredName, sessionChecked } = this.state
+    // Desde qué rol se mira la app: el de la cuenta ('student' sin sesión).
+    const viewRole = roleOf(user)
 
     return (
       <BrowserRouter>
         <Routes>
           {/* Sin guardia de "ya está logueado": la redirección después de
               entrar la hace LoginPage con su propio <Navigate>, así /ingresar
-              se puede visitar igual (hace falta ahora que la app arranca con
-              un usuario de prueba ya cargado). */}
+              se muestra enseguida, sin esperar a que /api/auth/me conteste. */}
           <Route
             path="/ingresar"
             element={
@@ -114,8 +131,14 @@ class App extends Component {
           />
 
           {/* Ruta sin path: solo aporta el layout (barra superior) a las de
-              adentro, y así el NavBar no se remonta al cambiar de pantalla. */}
-          <Route element={<AppLayout viewRole={viewRole} user={user} />}>
+              adentro, y así el NavBar no se remonta al cambiar de pantalla.
+              Mientras no se sabe quién es, en vez del layout va la carga, que
+              no tiene <Outlet />: ninguna pantalla se monta todavía. */}
+          <Route
+            element={
+              sessionChecked ? <AppLayout viewRole={viewRole} user={user} /> : <SessionLoading />
+            }
+          >
             {/* El admin no tiene calendario ni reservas: su pantalla de
                 entrada es la revisión de docentes. */}
             <Route

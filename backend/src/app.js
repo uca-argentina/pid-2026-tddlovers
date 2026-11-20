@@ -6,6 +6,7 @@ import authRoutes from './routes/auth/index.js';
 import subjectsRoutes from './routes/subjects/index.js';
 import usersRoutes from './routes/users/index.js';
 import teachersRoutes from './routes/teachers/index.js';
+import bookingsRoutes from './routes/bookings/index.js';
 import classesRoutes from './routes/classes/index.js';
 import availabilityRoutes from './routes/availability/index.js';
 import adminRoutes from './routes/admin/index.js';
@@ -15,10 +16,19 @@ import homeworkRoutes from './routes/homework/index.js';
 import neuronasRoutes from './routes/neuronas/index.js';
 
 /**
- * Arma la app de Fastify, pero no la levanta. Está separado de `index.js`
- * para que los tests puedan importar `buildApp()` y usar `app.inject()`: así
- * no se ocupa ningún puerto real, los tests son rápidos y no se pelean entre
- * ellos por el :4000.
+ * Arma la app de Fastify, pero no la levanta: registra el rate limit global,
+ * la sesión (plugins/session.js), la protección CSRF, el manejo de errores en
+ * español y todos los grupos de rutas bajo /api/* (cada uno en
+ * routes/<área>/index.js).
+ *
+ * Está separado de `index.js` para que los tests puedan importar `buildApp()`
+ * y usar `app.inject()`: así no se ocupa ningún puerto real, los tests son
+ * rápidos y no se pelean entre ellos por el :4000.
+ *
+ * @param {object} [opts] - opciones extra para Fastify() que pisan las de acá
+ *   (los tests pasan, por ejemplo, `{ logger: false }`).
+ * @returns {import('fastify').FastifyInstance} la app lista para `listen()` o `inject()`.
+ * Lo usan: index.js y los tests de routes/* y app.test.js.
  */
 export function buildApp(opts = {}) {
   // trustProxy: en producción los pedidos llegan a través de proxies (el
@@ -84,6 +94,7 @@ export function buildApp(opts = {}) {
   app.register(subjectsRoutes, { prefix: '/api/subjects' });
   app.register(usersRoutes, { prefix: '/api/users' });
   app.register(teachersRoutes, { prefix: '/api/teachers' });
+  app.register(bookingsRoutes, { prefix: '/api/bookings' });
   app.register(classesRoutes, { prefix: '/api/classes' });
   app.register(availabilityRoutes, { prefix: '/api/availability' });
   app.register(adminRoutes, { prefix: '/api/admin' });

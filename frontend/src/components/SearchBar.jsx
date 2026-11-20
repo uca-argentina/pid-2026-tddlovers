@@ -17,6 +17,16 @@ const LISTBOX_ID = 'search-suggest'
  * Reusa la forma del buscador de materias de SubjectPicker (ícono a la
  * izquierda, input con padding para no taparlo), pero redondeado como
  * pastilla para que se lea como parte de la barra.
+ *
+ * Rol: alumno. Lo renderizan NavBar (escritorio) y BookingBoard (teléfono),
+ * sin props; `router` llega de withRouter.
+ *
+ * Datos: al primer foco, fetchSubjects → GET /api/subjects y fetchTeachers →
+ * GET /api/teachers (el catálogo para sugerir; suggest() de utils/search.js
+ * filtra localmente).
+ *
+ * Estado: query (lo tipeado), open, activeIndex (sugerencia resaltada),
+ * catalog ({ subjects, teachers }) y panel (posición medida de la lista).
  */
 class SearchBar extends Component {
   state = {
@@ -81,6 +91,10 @@ class SearchBar extends Component {
     this.setState({ panel: { top: rect.bottom + 6, left: rect.left, width } })
   }
 
+  /**
+   * Pide una sola vez materias (GET /api/subjects) y docentes
+   * (GET /api/teachers) y los guarda en `catalog`.
+   */
   loadCatalog() {
     if (this.catalogRequested) return
     this.catalogRequested = true
@@ -100,6 +114,8 @@ class SearchBar extends Component {
     })
   }
 
+  // FILTRO: las sugerencias que pegan con lo tipeado (suggest en
+  // utils/search.js); los docentes ya vienen solo aprobados del backend.
   getSuggestions() {
     const { subjects, teachers } = suggest(this.state.query, this.state.catalog)
     const options = [
@@ -126,9 +142,9 @@ class SearchBar extends Component {
 
   select(option) {
     this.setState({ query: option.label, open: false, activeIndex: -1 })
-    // Las dos van por ?q=: resolveQuery ya distingue materia de docente y
-    // pisa también el filtro de docente que hubiera quedado de una búsqueda
-    // anterior.
+    // Las dos van por ?q=: resolveQuery (utils/search.js) ya distingue
+    // materia (nombre exacto) de texto libre y pisa también el texto que
+    // hubiera quedado de una búsqueda anterior.
     this.goTo(option.label)
   }
 
@@ -190,7 +206,7 @@ class SearchBar extends Component {
     //
     // Lo buscado lo interpreta la pantalla de reservar: si es una materia
     // queda elegida como si se hubiera tocado el chip, y si no se toma como
-    // nombre de docente (ver resolveQuery en utils/booking.js).
+    // texto libre que pega con docente o materia (resolveQuery, utils/search.js).
     this.goTo(q)
   }
 

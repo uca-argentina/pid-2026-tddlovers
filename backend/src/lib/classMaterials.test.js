@@ -1,13 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   MAX_FILE_BYTES,
-  MAX_FILES_PER_TURN,
-  MAX_TURN_BYTES,
+  MAX_FILES_PER_CLASS,
+  MAX_CLASS_BYTES,
   checkEditMaterial,
   checkUploadRoom,
   checkViewMaterial,
   contentDisposition,
-  hasEnded,
   inlineSafe,
   sanitizeFilename,
   validateSummary,
@@ -25,19 +24,6 @@ const clase = (over = {}) => ({
 const EN_CURSO = { iso: '2099-09-14', time: '14:29' };
 const TERMINADA = { iso: '2099-09-14', time: '14:30' };
 const DIAS_DESPUES = { iso: '2099-09-20', time: '09:00' };
-
-describe('hasEnded', () => {
-  it('termina justo a la hora de fin', () => {
-    expect(hasEnded(clase(), EN_CURSO)).toBe(false);
-    expect(hasEnded(clase(), TERMINADA)).toBe(true);
-  });
-
-  it('un fin "24:00" es la medianoche siguiente', () => {
-    const tarde = clase({ startTime: '23:00', endTime: '24:00' });
-    expect(hasEnded(tarde, { iso: '2099-09-14', time: '23:59' })).toBe(false);
-    expect(hasEnded(tarde, { iso: '2099-09-15', time: '00:00' })).toBe(true);
-  });
-});
 
 describe('checkEditMaterial', () => {
   const docente = (now) => ({ role: 'teacher', now });
@@ -127,10 +113,10 @@ describe('checkUploadRoom', () => {
     expect(checkUploadRoom(vacio, [{ sizeBytes: MAX_FILE_BYTES + 1 }])).toMatch(/hasta 10 MB/);
   });
 
-  it('suma lo que ya tiene el turno', () => {
-    const lleno = { count: MAX_FILES_PER_TURN, bytes: 0 };
+  it('suma lo que ya tiene la clase', () => {
+    const lleno = { count: MAX_FILES_PER_CLASS, bytes: 0 };
     expect(checkUploadRoom(lleno, [{ sizeBytes: 1 }])).toMatch(/hasta 20 archivos/);
-    const pesado = { count: 1, bytes: MAX_TURN_BYTES - 10 };
+    const pesado = { count: 1, bytes: MAX_CLASS_BYTES - 10 };
     expect(checkUploadRoom(pesado, [{ sizeBytes: 11 }])).toMatch(/hasta 25 MB/);
   });
 });

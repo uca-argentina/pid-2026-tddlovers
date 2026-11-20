@@ -3,8 +3,8 @@ import {
   listFavoriteTeachers,
   removeFavoriteTeacher,
 } from '../../db/favorites.js';
+import { isUuid } from '../../lib/validators.js';
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const NOT_FOUND = 'Ese docente no existe o no está disponible por ahora.';
 
 /**
@@ -13,6 +13,12 @@ const NOT_FOUND = 'Ese docente no existe o no está disponible por ahora.';
  *
  * PUT y DELETE en vez de un toggle: los dos son idempotentes, así un doble
  * clic o un reintento no deja el favorito al revés de lo que se pidió.
+ *
+ * Montado en /api/favorites (app.js). Solo role 'student' (403 si no):
+ *   GET    /api/favorites              → 200 [{ id, nombre, apellido, subjects }]
+ *   PUT    /api/favorites/:teacherId   (CSRF) → 204; 404 si no es un docente aprobado
+ *   DELETE /api/favorites/:teacherId   (CSRF) → 204; 404 si el id no es UUID
+ * Usa: db/favorites.js. Errores como { message }.
  */
 export default async function favoritesRoutes(app) {
   function onlyStudents(request, reply, done) {
@@ -33,14 +39,14 @@ export default async function favoritesRoutes(app) {
 
   app.put('/:teacherId', write, async (request, reply) => {
     const { teacherId } = request.params;
-    const done = UUID_RE.test(teacherId) && (await addFavoriteTeacher(request.user.id, teacherId));
+    const done = isUuid(teacherId) && (await addFavoriteTeacher(request.user.id, teacherId));
     if (!done) return reply.code(404).send({ message: NOT_FOUND });
     return reply.code(204).send();
   });
 
   app.delete('/:teacherId', write, async (request, reply) => {
     const { teacherId } = request.params;
-    if (!UUID_RE.test(teacherId)) return reply.code(404).send({ message: NOT_FOUND });
+    if (!isUuid(teacherId)) return reply.code(404).send({ message: NOT_FOUND });
     await removeFavoriteTeacher(request.user.id, teacherId);
     return reply.code(204).send();
   });

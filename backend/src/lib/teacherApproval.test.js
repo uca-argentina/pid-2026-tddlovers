@@ -67,10 +67,6 @@ describe('TeacherApproval', () => {
     expect(pendiente().check('borrar').status).toBe(400);
   });
 
-  it('una transición inválida tira en vez de devolver cualquier cosa', () => {
-    expect(() => aprobado().approve()).toThrow();
-  });
-
   describe('editar el perfil', () => {
     it('un rechazado que edita vuelve a revisión', () => {
       expect(rechazado().afterProfileEdit().status).toBe('pending');

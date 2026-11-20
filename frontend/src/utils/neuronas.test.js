@@ -3,8 +3,10 @@ import {
   homeworkEarns,
   levelProgress,
   movementLabel,
+  rewardApplies,
   rewardFits,
   rewardLabel,
+  rewardsOffered,
   rewardPriceCents,
 } from './neuronas.js'
 
@@ -22,6 +24,22 @@ describe('neuronas', () => {
     expect(rewardFits('free_60', 30)).toBe(false)
     expect(rewardFits('free_60', 60)).toBe(true)
     expect(rewardFits('discount_10', 30)).toBe(true)
+  })
+
+  it('no ofrece canjes si el docente no los acepta o la materia es gratis', () => {
+    expect(rewardsOffered({ acceptsRewards: true, hourlyRateCents: 500000 })).toBe(true)
+    expect(rewardsOffered({ acceptsRewards: false, hourlyRateCents: 500000 })).toBe(false)
+    expect(rewardsOffered({ acceptsRewards: true, hourlyRateCents: 0 })).toBe(false)
+  })
+
+  it('un canje vale con lo mismo que chequea el backend', () => {
+    const clase = { acceptsRewards: true, hourlyRateCents: 500000, minutes: 60, balance: 1000 }
+    expect(rewardApplies('free_60', clase)).toBe(true)
+    // Matemática con canje y después Física a $ 0: el backend respondería 409.
+    expect(rewardApplies('free_30', { ...clase, hourlyRateCents: 0 })).toBe(false)
+    expect(rewardApplies('free_60', { ...clase, minutes: 30 })).toBe(false)
+    expect(rewardApplies('free_60', { ...clase, balance: 999 })).toBe(false)
+    expect(rewardApplies('free_60', { ...clase, acceptsRewards: false })).toBe(false)
   })
 
   it('formatea en singular y plural', () => {

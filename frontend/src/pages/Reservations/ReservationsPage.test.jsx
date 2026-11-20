@@ -2,37 +2,37 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import ReservationsPage from './ReservationsPage.jsx'
-import { apiClass } from '../../testing/fixtures.js'
+import { apiBooking } from '../../testing/fixtures.js'
 
-const { acceptTurn, addFavoriteTeacher, fetchClasses, fetchFavoriteTeachers, markAttendance } =
+const { acceptClass, addFavoriteTeacher, fetchBookings, fetchFavoriteTeachers, markAttendance } =
   vi.hoisted(() => ({
-    acceptTurn: vi.fn(),
+    acceptClass: vi.fn(),
     addFavoriteTeacher: vi.fn(),
-    fetchClasses: vi.fn(),
+    fetchBookings: vi.fn(),
     fetchFavoriteTeachers: vi.fn(),
     markAttendance: vi.fn(),
   }))
 
 vi.mock('../../api/client.js', () => ({
-  acceptLesson: vi.fn(),
-  acceptTurn,
-  cancelTurn: vi.fn(),
+  acceptBooking: vi.fn(),
+  acceptClass,
+  cancelClass: vi.fn(),
   addFavoriteTeacher,
-  cancelLesson: vi.fn(),
-  classFileUrl: (id, fileId) => `/api/classes/${id}/material/files/${fileId}`,
+  cancelBooking: vi.fn(),
+  classFileUrl: (classId, fileId) => `/api/classes/${classId}/material/files/${fileId}`,
   deleteClassFile: vi.fn(),
-  fetchClasses,
+  fetchBookings,
   fetchClassMaterial: vi.fn().mockResolvedValue({ summary: '', updatedAt: null, files: [] }),
   fetchFavoriteTeachers,
   markAttendance,
-  payLesson: vi.fn(),
+  payBooking: vi.fn(),
   saveClassSummary: vi.fn(),
   uploadClassFiles: vi.fn(),
 }))
 
 // "Ahora" fijo: domingo 13/9/2099 a las 11:35.
 const AHORA = { iso: '2099-09-13', time: '11:35' }
-const reserva = (over = {}) => apiClass({ id: 'r1', ...over })
+const reserva = (over = {}) => apiBooking({ id: 'r1', ...over })
 
 function renderPage(viewRole = 'student') {
   return render(
@@ -45,8 +45,8 @@ function renderPage(viewRole = 'student') {
 const categoria = (name) => screen.getByRole('button', { name: new RegExp(`^${name}`) })
 
 beforeEach(() => {
-  fetchClasses.mockReset()
-  acceptTurn.mockReset()
+  fetchBookings.mockReset()
+  acceptClass.mockReset()
   markAttendance.mockReset()
   fetchFavoriteTeachers.mockReset().mockResolvedValue([])
   addFavoriteTeacher.mockReset().mockResolvedValue(null)
@@ -54,7 +54,7 @@ beforeEach(() => {
 
 describe('ReservationsPage', () => {
   it('muestra las cinco categorías, con la cantidad solo en las que esperan algo', async () => {
-    fetchClasses.mockResolvedValue([
+    fetchBookings.mockResolvedValue([
       reserva({ id: 'a' }),
       reserva({ id: 'b', startTime: '15:00', endTime: '16:00' }),
       reserva({ id: 'c', status: 'confirmada', date: '2099-09-20' }),
@@ -73,7 +73,7 @@ describe('ReservationsPage', () => {
   })
 
   it('tocar una categoría abre su lista, con las que vienen de la más cercana a la más lejana', async () => {
-    fetchClasses.mockResolvedValue([
+    fetchBookings.mockResolvedValue([
       reserva({ id: 'lejos', subjectName: 'Química', date: '2099-10-01' }),
       reserva({ id: 'cerca', subjectName: 'Física', date: '2099-09-20' }),
     ])
@@ -89,7 +89,7 @@ describe('ReservationsPage', () => {
   })
 
   it('las canceladas dicen por qué, de la más nueva a la más vieja', async () => {
-    fetchClasses.mockResolvedValue([
+    fetchBookings.mockResolvedValue([
       reserva({ id: 'vieja', status: 'cancelada', date: '2099-08-01', subjectName: 'Historia' }),
       reserva({
         id: 'nueva',
@@ -111,7 +111,7 @@ describe('ReservationsPage', () => {
   })
 
   it('arriba están la próxima clase (aunque esté en curso) y la última', async () => {
-    fetchClasses.mockResolvedValue([
+    fetchBookings.mockResolvedValue([
       reserva({ id: 'ayer', status: 'realizada', date: '2099-09-12', subjectName: 'Biología' }),
       reserva({
         id: 'ahora',
@@ -134,20 +134,20 @@ describe('ReservationsPage', () => {
   })
 
   it('sin clases, lo dice en las dos tarjetas', async () => {
-    fetchClasses.mockResolvedValue([])
+    fetchBookings.mockResolvedValue([])
 
     renderPage()
 
     expect(await screen.findByText('No tenés clases próximas.')).toBeInTheDocument()
     expect(screen.getByText('Todavía no tuviste ninguna clase.')).toBeInTheDocument()
-    const pedido = fetchClasses.mock.calls[0][0]
+    const pedido = fetchBookings.mock.calls[0][0]
     expect(pedido.status).toBeUndefined()
     expect(pedido.from < pedido.to).toBe(true)
   })
 
   it('el docente acepta desde la tarjeta y la reserva cambia de categoría', async () => {
-    fetchClasses.mockResolvedValue([reserva({ date: '2099-09-20' })])
-    acceptTurn.mockResolvedValue([reserva({ date: '2099-09-20', status: 'aceptada' })])
+    fetchBookings.mockResolvedValue([reserva({ date: '2099-09-20' })])
+    acceptClass.mockResolvedValue([reserva({ date: '2099-09-20', status: 'aceptada' })])
 
     renderPage('teacher')
     await userEvent.click(await screen.findByRole('button', { name: /^Pendientes/ }))
@@ -164,7 +164,7 @@ describe('ReservationsPage', () => {
 
   it('en la tarjeta no se toma lista: eso va en el detalle', async () => {
     const pasada = reserva({ status: 'confirmada', date: '2099-09-12' })
-    fetchClasses.mockResolvedValue([pasada])
+    fetchBookings.mockResolvedValue([pasada])
     markAttendance.mockResolvedValue({ ...pasada, status: 'realizada' })
 
     renderPage('teacher')
@@ -183,7 +183,7 @@ describe('ReservationsPage', () => {
   })
 
   it('tocar la última clase abre su detalle', async () => {
-    fetchClasses.mockResolvedValue([reserva({ status: 'realizada', date: '2099-09-12' })])
+    fetchBookings.mockResolvedValue([reserva({ status: 'realizada', date: '2099-09-12' })])
 
     renderPage()
     const ultima = await screen.findByRole('region', { name: 'Última clase' })
@@ -194,7 +194,7 @@ describe('ReservationsPage', () => {
   })
 
   it('si no carga, lo dice', async () => {
-    fetchClasses.mockRejectedValue(new Error('Se cayó todo'))
+    fetchBookings.mockRejectedValue(new Error('Se cayó todo'))
 
     renderPage()
 
@@ -202,7 +202,7 @@ describe('ReservationsPage', () => {
   })
 
   it('el alumno marca como favorito al docente de una reserva', async () => {
-    fetchClasses.mockResolvedValue([reserva({ teacherId: 't1', teacherName: 'Laura Gómez' })])
+    fetchBookings.mockResolvedValue([reserva({ teacherId: 't1', teacherName: 'Laura Gómez' })])
 
     renderPage()
 
@@ -216,11 +216,11 @@ describe('ReservationsPage', () => {
   })
 
   it('una grupal del docente es una sola tarjeta, y "Aceptar" acepta a todos', async () => {
-    const turno = { date: '2099-09-20', startTime: '10:00', endTime: '11:00', maxStudents: 3 }
-    const sofia = reserva({ ...turno, id: 'a', studentName: 'Sofía Ramírez' })
-    const ana = reserva({ ...turno, id: 'b', studentName: 'Ana Pérez' })
-    fetchClasses.mockResolvedValue([sofia, ana])
-    acceptTurn.mockResolvedValue([
+    const clase = { date: '2099-09-20', startTime: '10:00', endTime: '11:00', maxStudents: 3 }
+    const sofia = reserva({ ...clase, id: 'a', studentName: 'Sofía Ramírez' })
+    const ana = reserva({ ...clase, id: 'b', studentName: 'Ana Pérez' })
+    fetchBookings.mockResolvedValue([sofia, ana])
+    acceptClass.mockResolvedValue([
       { ...sofia, status: 'aceptada' },
       { ...ana, status: 'aceptada' },
     ])
@@ -234,14 +234,14 @@ describe('ReservationsPage', () => {
     await userEvent.click(within(lista).getByRole('button', { name: 'Aceptar a los 2' }))
 
     // Un solo pedido por la clase entera: todo o nada.
-    expect(acceptTurn).toHaveBeenCalledTimes(1)
+    expect(acceptClass).toHaveBeenCalledTimes(1)
     expect(await within(lista).findByText('No hay clases pendientes.')).toBeInTheDocument()
   })
 
   it('en la lista de una categoría se filtra por nombre, materia y fecha', async () => {
     const mate = { subjectId: 'm', subjectName: 'Matemática' }
     const finalizada = (over) => reserva({ status: 'realizada', ...over })
-    fetchClasses.mockResolvedValue([
+    fetchBookings.mockResolvedValue([
       finalizada({ ...mate, id: 'a', date: '2099-09-01', teacherName: 'Laura Gómez' }),
       finalizada({
         id: 'b',
@@ -275,7 +275,7 @@ describe('ReservationsPage', () => {
   })
 
   it('el docente busca por nombre de alumno', async () => {
-    fetchClasses.mockResolvedValue([reserva({ date: '2099-09-20' })])
+    fetchBookings.mockResolvedValue([reserva({ date: '2099-09-20' })])
 
     renderPage('teacher')
     await userEvent.click(await screen.findByRole('button', { name: /^Pendientes/ }))
@@ -284,7 +284,7 @@ describe('ReservationsPage', () => {
   })
 
   it('el docente no ve corazones', async () => {
-    fetchClasses.mockResolvedValue([reserva()])
+    fetchBookings.mockResolvedValue([reserva()])
 
     renderPage('teacher')
 

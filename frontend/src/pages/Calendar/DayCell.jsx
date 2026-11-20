@@ -8,8 +8,8 @@ import { formatDayLong } from '../../utils/calendar.js'
  * quedaron afuera.
  *
  * Cuántas líneas entran no lo decide este componente: se lo pasa
- * CalendarPage en `maxVisible`, que mide el alto real de una celda (ver
- * measureVisibleEvents).
+ * MonthPane (vía MonthGrid) en `maxVisible`: MonthPane mide el alto real de
+ * una celda (ver measureVisibleEvents).
  *
  * Es un botón, así que va como clase y no como función (las funciones quedan
  * solo para los íconos SVG, que son pura presentación — ver icons.jsx). El
@@ -17,6 +17,10 @@ import { formatDayLong } from '../../utils/calendar.js'
  *
  * Los estilos están en MonthGrid.css, no en un DayCell.css: fuera de la
  * grilla no significan nada.
+ *
+ * Props (de MonthGrid): cell ({ iso, … } de buildMonthGrid), events (clases
+ * de ese día), freeCount (tarjetas reservables, solo en Reservar), maxVisible,
+ * selected y onSelect.
  */
 class DayCell extends Component {
   /**

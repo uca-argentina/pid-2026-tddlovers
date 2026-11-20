@@ -1,9 +1,17 @@
-// Las direcciones del docente. La validación es un ESPEJO de
-// backend/src/lib/addresses.js y sirve solo para marcar los campos antes de
-// mandar: el backend vuelve a chequear todo. Si se toca allá, va acá.
+// Las direcciones presenciales del docente (tabla teacher_addresses): pasar
+// entre la forma de la API y la del formulario, validar y armar la línea
+// para mostrar.
+//
+// Espejo: backend/src/lib/addresses.js (topes de largo, campos obligatorios y
+// formatAddress). Acá sirve solo para marcar los campos antes de mandar: el
+// backend vuelve a chequear todo. Si se toca allá, va acá.
 //
 // `locality` es lo que ve cualquier alumno antes de pagar; el resto es la
 // dirección exacta.
+//
+// Lo usan: components/AddressFields.jsx, pages/Profile/AddressDialog.jsx,
+// pages/Profile/AddressesSection.jsx, pages/Availability/WindowForm.jsx y
+// WindowCard.jsx, y utils/windows.js (la dirección dentro del borrador de ventana).
 
 export const MAX_LABEL_LENGTH = 40
 
@@ -37,14 +45,28 @@ export const EMPTY_ADDRESS = {
   notes: '',
 }
 
-/** Una dirección de la API como valores del formulario (los null pasan a ''). */
+/**
+ * Una dirección de la API como valores del formulario (los null pasan a '').
+ *
+ * @param {object|null} address - una dirección como la devuelve
+ *   GET /api/teachers/me/addresses, o el `address` de una ventana.
+ * @returns {object} los campos de EMPTY_ADDRESS, todos string.
+ * Lo usan: pages/Profile/AddressDialog.jsx, utils/windows.js (draftFromWindow).
+ */
 export function addressToForm(address) {
   const form = { ...EMPTY_ADDRESS }
   for (const key of Object.keys(EMPTY_ADDRESS)) form[key] = address?.[key] ?? ''
   return form
 }
 
-/** Lo que va al backend: sin espacios de más. Los opcionales vacíos los pasa a null el backend. */
+/**
+ * Lo que va al backend: sin espacios de más. Los opcionales vacíos los pasa a null el backend.
+ *
+ * @param {object} form - los valores del formulario (ver addressToForm).
+ * @returns {object} { label, street, number, postalCode, locality, city, floor, apartment, notes }
+ *   recortados, para POST/PUT /api/teachers/me/addresses o el `address` de una ventana.
+ * Lo usan: pages/Profile/AddressDialog.jsx, utils/windows.js (draftToPayload).
+ */
 export function addressToPayload(form) {
   const payload = {}
   for (const key of Object.keys(EMPTY_ADDRESS)) payload[key] = String(form[key] ?? '').trim()
@@ -54,6 +76,13 @@ export function addressToPayload(form) {
 /**
  * { campo: mensaje } con lo que falta o sobra. El nombre ("Casa") solo es
  * obligatorio si se guarda: una dirección de una sola ventana no lo necesita.
+ *
+ * @param {object} form - los valores del formulario.
+ * @param {{saving: boolean}} options - saving: true si va a quedar guardada
+ *   (perfil, o "Guardar esta dirección" en el formulario de ventana).
+ * @returns {object} { campo: mensaje }; vacío si está todo bien.
+ * Lo usan: pages/Profile/AddressDialog.jsx, utils/windows.js (validateDraft).
+ * Espejo: backend/src/lib/addresses.js.
  */
 export function addressErrors(form, { saving }) {
   const errors = {}
@@ -72,6 +101,11 @@ export function addressErrors(form, { saving }) {
 /**
  * La dirección completa en una línea, igual que la arma el backend para la
  * clase: "Av. Corrientes 1234, piso 3, depto. B · CP 1043 · Balvanera, CABA · Timbre 3B".
+ *
+ * @param {object|null} address - una dirección de la API (perfil o `address` de una ventana).
+ * @returns {string} la línea, o '' si no hay dirección.
+ * Lo usan: pages/Profile/AddressesSection.jsx, pages/Availability/WindowForm.jsx y WindowCard.jsx.
+ * Espejo: formatAddress de backend/src/lib/addresses.js (el que llena classes.address).
  */
 export function formatAddress(address) {
   if (!address) return ''

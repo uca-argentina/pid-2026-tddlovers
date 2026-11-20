@@ -5,6 +5,7 @@ import {
   formatDuration,
   formatMonthTitle,
   fromISODate,
+  groupByDate,
   isSameDay,
   mondayIndex,
   toISODate,
@@ -81,8 +82,8 @@ describe('formatDuration', () => {
     expect(formatDuration('09:00', '10:30')).toBe('1 h 30 min')
   })
 
-  it('maneja la clase que cruza la medianoche', () => {
-    expect(formatDuration('23:30', '00:30')).toBe('1 h')
+  it('una clase que termina a medianoche se escribe 24:00', () => {
+    expect(formatDuration('23:30', '24:00')).toBe('30 min')
   })
 })
 
@@ -158,5 +159,23 @@ describe('buildMonthGrid', () => {
 describe('formatMonthTitle', () => {
   it('devuelve el mes y el año capitalizados', () => {
     expect(formatMonthTitle(new Date(2026, 8, 1))).toBe('Septiembre de 2026')
+  })
+})
+
+describe('groupByDate', () => {
+  it('agrupa por fecha y ordena cada día por hora de inicio', () => {
+    const items = [
+      { id: 'b', date: '2099-09-14', startTime: '13:00' },
+      { id: 'c', date: '2099-09-15', startTime: '09:00' },
+      { id: 'a', date: '2099-09-14', startTime: '09:30' },
+    ]
+    const map = groupByDate(items)
+    expect(Object.keys(map).sort()).toEqual(['2099-09-14', '2099-09-15'])
+    expect(map['2099-09-14'].map((item) => item.id)).toEqual(['a', 'b'])
+    expect(map['2099-09-15'].map((item) => item.id)).toEqual(['c'])
+  })
+
+  it('sin items, un objeto vacío', () => {
+    expect(groupByDate([])).toEqual({})
   })
 })

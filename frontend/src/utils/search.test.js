@@ -1,4 +1,4 @@
-import { suggest, teacherFullName } from './search.js'
+import { resolveQuery, suggest, teacherFullName } from './search.js'
 
 const MATERIAS = [
   { id: 's1', name: 'Matemática' },
@@ -55,5 +55,42 @@ describe('suggest', () => {
     }))
 
     expect(suggest('mate', { subjects: muchas }).subjects).toHaveLength(5)
+  })
+})
+
+describe('resolveQuery', () => {
+  const subjects = [
+    { id: 1, name: 'Matemática' },
+    { id: 2, name: 'Física' },
+    { id: 3, name: 'Análisis' },
+  ]
+
+  it('el nombre exacto de una materia es un filtro de materia', () => {
+    expect(resolveQuery('Matemática', subjects)).toEqual({ subjectId: 1, teacherQuery: '' })
+  })
+
+  it('no le importan los acentos ni las mayúsculas', () => {
+    expect(resolveQuery('matematica', subjects)).toEqual({ subjectId: 1, teacherQuery: '' })
+    expect(resolveQuery(' FISICA ', subjects)).toEqual({ subjectId: 2, teacherQuery: '' })
+  })
+
+  it('el nombre exacto gana sobre otro que empieza igual', () => {
+    const conSegunda = [
+      { id: 5, name: 'Física II' },
+      { id: 2, name: 'Física' },
+    ]
+    expect(resolveQuery('Física', conSegunda)).toEqual({ subjectId: 2, teacherQuery: '' })
+  })
+
+  it('un pedazo de nombre queda como texto libre (docente o materia)', () => {
+    // Bug: "Ana" se resolvía como Análisis y nunca buscaba a la docente Ana.
+    expect(resolveQuery('Ana', subjects)).toEqual({ subjectId: null, teacherQuery: 'Ana' })
+    expect(resolveQuery('mate', subjects)).toEqual({ subjectId: null, teacherQuery: 'mate' })
+    expect(resolveQuery('gómez', subjects)).toEqual({ subjectId: null, teacherQuery: 'gómez' })
+  })
+
+  it('vacío no filtra nada', () => {
+    expect(resolveQuery('', subjects)).toEqual({ subjectId: null, teacherQuery: '' })
+    expect(resolveQuery('   ', subjects)).toEqual({ subjectId: null, teacherQuery: '' })
   })
 })

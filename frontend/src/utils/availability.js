@@ -15,6 +15,9 @@
 //     termina en '24:00' y no en '00:00': si no, se rompe start < end para
 //     cualquiera que ordene o valide (incluida la base). formatRangeLabel lo
 //     muestra tal cual llega.
+//
+// Lo usan: utils/booking.js y utils/windows.js, pages/Booking/BookingFilters.jsx,
+// y formatRangeLabel casi todas las tarjetas de clase y de ventana.
 
 export const DAY_KEYS = [
   'lunes',
@@ -41,12 +44,21 @@ const LABEL_BY_KEY = DAY_KEYS.reduce((acc, key, index) => {
   return acc
 }, {})
 
-/** 'miercoles' -> 'Miércoles'. */
+/** 'miercoles' -> 'Miércoles'. Una clave desconocida sale tal cual. Lo usa: utils/windows.js. */
 export function dayLabel(dayKey) {
   return LABEL_BY_KEY[dayKey] || dayKey
 }
 
-/** '14:00 – 15:00'. Raya (–), no guion, y 24 h como el resto de la app. */
+/**
+ * '14:00 – 15:00'. Raya (–), no guion, y 24 h como el resto de la app.
+ *
+ * @param {string} start - 'HH:MM' (startTime/endTime de una clase, start/end de una ventana o tramo).
+ * @param {string} end - 'HH:MM', exclusivo; puede ser '24:00'.
+ * @returns {string}
+ * Lo usan: utils/booking.js, components/ClassCard.jsx y ClassDetailDialog.jsx,
+ * pages/Calendar/DayAgenda.jsx, pages/Booking/BookingCard.jsx y BookingDialog.jsx,
+ * pages/Availability/WindowCard.jsx y WeekCalendar.jsx.
+ */
 export function formatRangeLabel(start, end) {
   return `${start} – ${end}`
 }

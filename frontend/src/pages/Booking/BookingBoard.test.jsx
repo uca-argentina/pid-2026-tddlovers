@@ -5,16 +5,16 @@ import BookingBoard from './BookingBoard.jsx'
 import withRouter from '../../routes/withRouter.jsx'
 import { toISODate } from '../../utils/calendar.js'
 import { dayKeyFromIso } from '../../utils/booking.js'
-import { apiClass, apiUser } from '../../testing/fixtures.js'
+import { apiBooking, apiStudentPack, apiUser, startsBetween } from '../../testing/fixtures.js'
 
-const { bookLesson, fetchAvailability, fetchClass, fetchMyLessons, fetchSubjects, rescheduleLesson } =
+const { createBooking, fetchAvailability, fetchBooking, fetchMyBookings, fetchSubjects, rescheduleBooking } =
   vi.hoisted(() => ({
-    bookLesson: vi.fn(),
+    createBooking: vi.fn(),
     fetchAvailability: vi.fn(),
-    fetchClass: vi.fn(),
-    fetchMyLessons: vi.fn(),
+    fetchBooking: vi.fn(),
+    fetchMyBookings: vi.fn(),
     fetchSubjects: vi.fn(),
-    rescheduleLesson: vi.fn(),
+    rescheduleBooking: vi.fn(),
   }))
 
 // Los paquetes del alumno: el tablero los pide para ofrecer reservar con
@@ -31,19 +31,19 @@ const { addFavoriteTeacher, fetchFavoriteTeachers, removeFavoriteTeacher } = vi.
 }))
 
 // La fábrica reemplaza el módulo ENTERO: lo que no esté acá llega como
-// undefined. bookLesson lo usa BookingDialog, no el tablero.
+// undefined. createBooking lo usa BookingDialog, no el tablero.
 vi.mock('../../api/client.js', () => ({
   addFavoriteTeacher,
-  bookLesson,
+  createBooking,
   fetchAvailability,
-  fetchClass,
+  fetchBooking,
   fetchFavoriteTeachers,
-  fetchMyLessons,
+  fetchMyBookings,
   fetchMyPacks,
   fetchNeuronas,
   fetchSubjects,
   removeFavoriteTeacher,
-  rescheduleLesson,
+  rescheduleBooking,
 }))
 
 const MATERIAS = [
@@ -79,7 +79,7 @@ function slot(overrides = {}) {
     maxStudents: 1,
     locality: null,
     subjects: [{ id: 1, name: 'Matemática', hourlyRateCents: 500000 }],
-    free: [{ start: '13:00', end: '17:00' }],
+    starts: startsBetween('13:00', '17:00'),
     groups: [],
     ...overrides,
   }
@@ -101,11 +101,16 @@ const carla = (overrides = {}) =>
       { id: 2, name: 'Física', hourlyRateCents: 800000 },
       { id: 1, name: 'Matemática', hourlyRateCents: 700000 },
     ],
-    free: [{ start: '09:00', end: '11:00' }],
+    starts: startsBetween('09:00', '11:00'),
     ...overrides,
   })
 
 const RESERVAR_CARLA = 'Reservar con Carla Benítez, 09:00 – 11:00'
+
+// Un paquete del alumno tal como lo manda /api/packs/mine: dos clases de 1 h
+// con Carla.
+const paquete = (overrides = {}) =>
+  apiStudentPack({ teacherId: 4, teacherName: 'Carla Benítez', ...overrides })
 
 // BookingBoard recibe `router` por props, así que para el test lo envolvemos
 // igual que hace AvailabilityPage.
@@ -137,9 +142,9 @@ async function abrirFiltro(nombre) {
 
 describe('BookingBoard', () => {
   beforeEach(() => {
-    bookLesson.mockReset().mockResolvedValue(apiClass({ id: 'nueva' }))
+    createBooking.mockReset().mockResolvedValue(apiBooking({ id: 'nueva' }))
     fetchSubjects.mockReset().mockResolvedValue(MATERIAS)
-    fetchMyLessons.mockReset().mockResolvedValue([])
+    fetchMyBookings.mockReset().mockResolvedValue([])
     fetchAvailability.mockReset().mockResolvedValue([slot()])
     fetchFavoriteTeachers.mockReset().mockResolvedValue([])
     addFavoriteTeacher.mockReset().mockResolvedValue(null)
@@ -181,8 +186,17 @@ describe('BookingBoard', () => {
   it('una grupal con lugar invita a sumarse', async () => {
     fetchAvailability.mockResolvedValue([
       carla({
-        free: [{ start: '10:00', end: '11:00' }],
-        groups: [{ start: '09:00', end: '10:00', subjectId: 2, subjectName: 'Física', enrolled: 2 }],
+        starts: startsBetween('10:00', '11:00'),
+        groups: [
+          {
+            start: '09:00',
+            end: '10:00',
+            subjectId: 2,
+            subjectName: 'Física',
+            enrolled: 2,
+            maxStudents: 4,
+          },
+        ],
       }),
     ])
     renderBoard()
@@ -193,25 +207,34 @@ describe('BookingBoard', () => {
     ).toBeInTheDocument()
   })
 
-  it('avisa cuando se superpone con una clase propia', async () => {
-    fetchMyLessons.mockResolvedValue([
-      apiClass({
-        id: 'sl-1',
-        date: HOY,
-        teacherId: 4,
-        teacherName: 'Carla Benítez',
-        subjectId: 2,
-        subjectName: 'Física',
-        startTime: '14:00',
-        endTime: '15:00',
-      }),
+  it('muestra lo que manda el backend sin recalcular choques con las clases propias', async () => {
+    // El backend ya recortó los inicios con las clases del alumno: el
+    // tablero no vuelve a cruzarlas ni avisa superposiciones.
+    fetchMyBookings.mockResolvedValue([
+      apiBooking({ id: 'sl-1', date: HOY, teacherId: 4, startTime: '14:00', endTime: '15:00' }),
     ])
     renderBoard()
     await esperarCarga()
 
-    expect(await screen.findByText(/Se superpone con Física con Carla Benítez/)).toBeInTheDocument()
-    // Sigue reservable: quedan 13:00–14:00 y 15:00–17:00.
+    expect(await screen.findByText('13:00 – 17:00')).toBeInTheDocument()
+    expect(screen.queryByText(/Se superpone/)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^Reservar / })).toBeEnabled()
+  })
+
+  it('un día de licencia se ve en gris, no se reserva y no cuenta', async () => {
+    fetchAvailability.mockResolvedValue([
+      slot({ onVacation: true, starts: [], groups: [] }),
+      carla(),
+    ])
+    renderBoard()
+    await esperarCarga()
+
+    expect(await screen.findByText('El docente está de licencia este día.')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Reservar con Laura Gómez, 13:00 – 17:00, de licencia' }),
+    ).toBeDisabled()
+    expect(screen.getByText('1 clase para reservar')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /1 horario libre$/ })).toBeInTheDocument()
   })
 
   it('filtra por día', async () => {
@@ -225,6 +248,34 @@ describe('BookingBoard', () => {
     await userEvent.click(screen.getByRole('button', { name: otroDia }))
 
     expect(screen.queryByText('13:00 – 17:00')).not.toBeInTheDocument()
+  })
+
+  it('filtra por materia: una tarjeta cuya única grupal es de otra materia no pasa', async () => {
+    fetchAvailability.mockResolvedValue([
+      carla({
+        starts: [],
+        groups: [
+          {
+            start: '09:00',
+            end: '10:00',
+            subjectId: 2,
+            subjectName: 'Física',
+            enrolled: 1,
+            maxStudents: 4,
+          },
+        ],
+      }),
+    ])
+    renderBoard()
+    await esperarCarga()
+
+    await abrirFiltro('Materias')
+    await userEvent.click(await screen.findByRole('button', { name: 'Matemática' }))
+    expect(screen.queryByText('09:00 – 11:00')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Matemática' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Física' }))
+    expect(screen.getByText('09:00 – 11:00')).toBeInTheDocument()
   })
 
   it('filtra por materia: pasa el horario que la ofrece entre otras', async () => {
@@ -316,7 +367,7 @@ describe('BookingBoard', () => {
     expect(await screen.findAllByRole('button', { name: /^Reservar / })).toHaveLength(2)
   })
 
-  it('buscar una materia la deja elegida', async () => {
+  it('buscar una materia por su nombre la deja elegida', async () => {
     renderBoard('/disponibilidad?q=matematica')
     await esperarCarga()
 
@@ -331,11 +382,32 @@ describe('BookingBoard', () => {
     await esperarCarga()
 
     expect(await screen.findByText('13:00 – 17:00')).toBeInTheDocument()
-    const chip = screen.getByLabelText('Quitar el filtro por docente')
+    const chip = screen.getByLabelText('Quitar la búsqueda')
     expect(chip).toHaveTextContent('gomez')
 
     await userEvent.click(chip)
-    expect(screen.queryByLabelText('Quitar el filtro por docente')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Quitar la búsqueda')).not.toBeInTheDocument()
+  })
+
+  it('un pedazo de nombre busca docentes y materias, sin elegir una materia', async () => {
+    // Bug: "Ana" se resolvía como Análisis y nunca buscaba a la docente Ana.
+    fetchSubjects.mockResolvedValue([...MATERIAS, { id: 3, name: 'Análisis' }])
+    fetchAvailability.mockResolvedValue([slot({ teacherName: 'Ana Pérez' }), carla()])
+    renderBoard('/disponibilidad?q=Ana')
+    await esperarCarga()
+
+    expect(await screen.findByText('13:00 – 17:00')).toBeInTheDocument()
+    expect(screen.queryByText('09:00 – 11:00')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Quitar la búsqueda')).toHaveTextContent('Ana')
+  })
+
+  it('el texto libre también encuentra por materia', async () => {
+    fetchAvailability.mockResolvedValue([slot(), carla()])
+    renderBoard('/disponibilidad?q=fisi')
+    await esperarCarga()
+
+    expect(await screen.findByText('09:00 – 11:00')).toBeInTheDocument()
+    expect(screen.queryByText('13:00 – 17:00')).not.toBeInTheDocument()
   })
 
   it('buscar un docente que no existe no deja nada', async () => {
@@ -517,7 +589,7 @@ describe('BookingBoard', () => {
 
       await userEvent.click(within(modal).getByRole('button', { name: 'Confirmar reserva' }))
       await waitFor(() =>
-        expect(bookLesson).toHaveBeenCalledWith(expect.objectContaining({ rewardType: 'free_60' })),
+        expect(createBooking).toHaveBeenCalledWith(expect.objectContaining({ rewardType: 'free_60' })),
       )
     })
 
@@ -544,8 +616,8 @@ describe('BookingBoard', () => {
 
       expect(within(modal).queryByText('Cubierta con neuronas')).not.toBeInTheDocument()
       await userEvent.click(within(modal).getByRole('button', { name: 'Confirmar reserva' }))
-      await waitFor(() => expect(bookLesson).toHaveBeenCalled())
-      expect(bookLesson.mock.calls.at(-1)[0].rewardType).toBeUndefined()
+      await waitFor(() => expect(createBooking).toHaveBeenCalled())
+      expect(createBooking.mock.calls.at(-1)[0].rewardType).toBeUndefined()
     })
 
     it('sin canjes activos no se ofrece', async () => {
@@ -590,9 +662,9 @@ describe('BookingBoard', () => {
 
     await userEvent.click(within(modal).getByRole('button', { name: 'Confirmar reserva' }))
 
-    await waitFor(() => expect(bookLesson).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(createBooking).toHaveBeenCalledTimes(1))
     // El precio no se manda: lo calcula el backend.
-    expect(bookLesson).toHaveBeenCalledWith({
+    expect(createBooking).toHaveBeenCalledWith({
       windowId: 'w-laura',
       date: HOY,
       startTime: '14:00',
@@ -622,7 +694,7 @@ describe('BookingBoard', () => {
     await userEvent.click(within(modal).getByRole('button', { name: 'Confirmar reserva' }))
 
     await waitFor(() =>
-      expect(bookLesson).toHaveBeenCalledWith(expect.objectContaining({ subjectId: 2 })),
+      expect(createBooking).toHaveBeenCalledWith(expect.objectContaining({ subjectId: 2 })),
     )
   })
 
@@ -656,8 +728,17 @@ describe('BookingBoard', () => {
   it('en una grupal se puede sumar a una clase armada: materia, hora y duración vienen con ella', async () => {
     fetchAvailability.mockResolvedValue([
       carla({
-        free: [{ start: '10:00', end: '11:00' }],
-        groups: [{ start: '09:00', end: '09:45', subjectId: 2, subjectName: 'Física', enrolled: 3 }],
+        starts: startsBetween('10:00', '11:00'),
+        groups: [
+          {
+            start: '09:00',
+            end: '09:45',
+            subjectId: 2,
+            subjectName: 'Física',
+            enrolled: 3,
+            maxStudents: 4,
+          },
+        ],
       }),
     ])
     renderBoard()
@@ -680,7 +761,7 @@ describe('BookingBoard', () => {
     await userEvent.click(within(modal).getByRole('button', { name: 'Confirmar reserva' }))
 
     await waitFor(() =>
-      expect(bookLesson).toHaveBeenCalledWith({
+      expect(createBooking).toHaveBeenCalledWith({
         windowId: 'w-carla',
         date: HOY,
         startTime: '09:00',
@@ -693,8 +774,17 @@ describe('BookingBoard', () => {
   it('cambiar de materia suelta la grupal elegida', async () => {
     fetchAvailability.mockResolvedValue([
       carla({
-        free: [{ start: '10:00', end: '11:00' }],
-        groups: [{ start: '09:00', end: '10:00', subjectId: 2, subjectName: 'Física', enrolled: 1 }],
+        starts: startsBetween('10:00', '11:00'),
+        groups: [
+          {
+            start: '09:00',
+            end: '10:00',
+            subjectId: 2,
+            subjectName: 'Física',
+            enrolled: 1,
+            maxStudents: 4,
+          },
+        ],
       }),
     ])
     renderBoard()
@@ -725,16 +815,15 @@ describe('BookingBoard', () => {
     ).toBeInTheDocument()
   })
 
-  it('una clase propia bloquea los inicios que pisa y acorta los de antes', async () => {
-    fetchMyLessons.mockResolvedValue([
-      apiClass({
-        id: 'mia',
-        date: HOY,
-        teacherId: 4,
-        teacherName: 'Carla Benítez',
-        subjectName: 'Física',
-        startTime: '14:30',
-        endTime: '15:00',
+  it('arma inicios y duraciones con lo que manda el backend', async () => {
+    // El backend ya sacó 13:30–14:30 (le chocan con una clase propia de las
+    // 14:30) y cortó 13:00 en 1 h 30 min.
+    fetchAvailability.mockResolvedValue([
+      slot({
+        starts: [
+          { start: '13:00', maxMinutes: 90 },
+          { start: '15:00', maxMinutes: 120 },
+        ],
       }),
     ])
     renderBoard()
@@ -742,17 +831,19 @@ describe('BookingBoard', () => {
     await userEvent.click(await screen.findByRole('button', { name: /^Reservar / }))
     const modal = screen.getByRole('dialog')
 
-    expect(within(modal).getByRole('button', { name: '14:30, ya tenés otra clase' })).toBeDisabled()
+    expect(within(modal).queryByRole('button', { name: '14:30' })).not.toBeInTheDocument()
     expect(within(modal).getByRole('button', { name: '15:00' })).toBeEnabled()
 
-    // De 13:00 hasta su clase de las 14:30: como mucho 1 h 30 min.
     await userEvent.click(within(modal).getByRole('button', { name: '13:00' }))
-    expect(within(modal).getByLabelText('¿Cuánto dura?')).toHaveAttribute('max', '90')
+    const duracion = within(modal).getByLabelText('¿Cuánto dura?')
+    expect(duracion).toHaveAttribute('min', '30')
+    expect(duracion).toHaveAttribute('max', '90')
+    expect(duracion).toHaveAttribute('step', '5')
   })
 
   it('con un solo horario posible llega elegido', async () => {
     // 13:00 a 13:45: solo entra arrancar 13:00 (a las 13:30 no entran 30 min).
-    fetchAvailability.mockResolvedValue([slot({ free: [{ start: '13:00', end: '13:45' }] })])
+    fetchAvailability.mockResolvedValue([slot({ starts: startsBetween('13:00', '13:45') })])
     renderBoard()
     await esperarCarga()
     await userEvent.click(await screen.findByRole('button', { name: /^Reservar / }))
@@ -761,7 +852,7 @@ describe('BookingBoard', () => {
   })
 
   it('si falla la reserva el modal se queda con el error', async () => {
-    bookLesson.mockRejectedValue(new Error('Ya la tomó otro.'))
+    createBooking.mockRejectedValue(new Error('Ya la tomó otro.'))
     renderBoard()
     await esperarCarga()
     await userEvent.click(await screen.findByRole('button', { name: /^Reservar / }))
@@ -781,20 +872,108 @@ describe('BookingBoard', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(bookLesson).not.toHaveBeenCalled()
+    expect(createBooking).not.toHaveBeenCalled()
   })
 
-  it('sin usuario no pide las clases propias ni marca superposiciones', async () => {
+  it('mientras se envía la reserva el modal no se cierra, y al volver avisa y recarga', async () => {
+    let resolver
+    createBooking.mockReturnValue(
+      new Promise((resolve) => {
+        resolver = resolve
+      }),
+    )
+    renderBoard()
+    await esperarCarga()
+    await userEvent.click(await screen.findByRole('button', { name: /^Reservar / }))
+    await userEvent.click(screen.getByRole('button', { name: '14:00' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmar reserva' }))
+
+    await userEvent.keyboard('{Escape}')
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cerrar' })).toBeDisabled()
+
+    resolver(apiBooking({ id: 'nueva' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Reservaste Matemática')
+    await waitFor(() => expect(fetchAvailability).toHaveBeenCalledTimes(2))
+  })
+
+  it('con un paquete ya reservado entero explica que la clase se paga aparte', async () => {
+    fetchMyPacks.mockResolvedValue([paquete({ teacherId: 2, available: 0, usable: false })])
+    renderBoard()
+    await esperarCarga()
+    await waitFor(() => expect(fetchMyPacks).toHaveBeenCalled())
+    await userEvent.click(await screen.findByRole('button', { name: /^Reservar / }))
+
+    expect(
+      within(screen.getByRole('dialog')).getByText(
+        'Ya reservaste todas las clases de tu paquete con este docente: esta clase se paga aparte.',
+      ),
+    ).toBeInTheDocument()
+    fetchMyPacks.mockReset().mockResolvedValue([])
+  })
+
+  it('un canje elegido deja de aplicarse al pasar a una materia sin cargo', async () => {
+    fetchNeuronas.mockResolvedValue({ balance: 1000 })
+    fetchAvailability.mockResolvedValue([
+      carla({
+        teacherAcceptsRewards: true,
+        subjects: [
+          { id: 2, name: 'Física', hourlyRateCents: 0 },
+          { id: 1, name: 'Matemática', hourlyRateCents: 700000 },
+        ],
+      }),
+    ])
+    renderBoard()
+    await esperarCarga()
+    await waitFor(() => expect(fetchNeuronas).toHaveBeenCalled())
+    await userEvent.click(await screen.findByRole('button', { name: RESERVAR_CARLA }))
+    const modal = screen.getByRole('dialog')
+
+    await userEvent.click(within(modal).getByRole('button', { name: '09:00' }))
+    await userEvent.click(within(modal).getByRole('button', { name: /^Matemática/ }))
+    await userEvent.click(within(modal).getByRole('button', { name: /30 min gratis/ }))
+    await userEvent.click(within(modal).getByRole('button', { name: /^Física/ }))
+
+    expect(within(modal).queryByText('Usar neuronas')).not.toBeInTheDocument()
+    expect(modal.querySelector('.booking-dialog-price')).toHaveTextContent(/^Sin cargo$/)
+    await userEvent.click(within(modal).getByRole('button', { name: 'Confirmar reserva' }))
+    await waitFor(() => expect(createBooking).toHaveBeenCalled())
+    expect(createBooking.mock.calls[0][0].rewardType).toBeUndefined()
+    fetchNeuronas.mockReset().mockResolvedValue({ balance: 0 })
+  })
+
+  it('si el usuario llega después de cargar el mes, vuelve a pedirlo con sus clases', async () => {
+    // Los horarios dependen del alumno de la sesión (el backend los recorta
+    // con sus clases), así que se vuelven a pedir.
+    const tree = (user) => (
+      <MemoryRouter initialEntries={['/disponibilidad']}>
+        <Routes>
+          <Route path="/disponibilidad" element={<BoardConRouter user={user} />} />
+        </Routes>
+      </MemoryRouter>
+    )
+    const { rerender } = render(tree(null))
+    await esperarCarga()
+    expect(fetchMyBookings).not.toHaveBeenCalled()
+    expect(fetchAvailability).toHaveBeenCalledTimes(1)
+
+    rerender(tree(alumno))
+
+    await waitFor(() => expect(fetchMyBookings).toHaveBeenCalledTimes(1))
+    expect(fetchAvailability).toHaveBeenCalledTimes(2)
+  })
+
+  it('sin usuario no pide las clases propias', async () => {
     renderBoard('/disponibilidad', { user: null })
     await esperarCarga()
 
-    expect(fetchMyLessons).not.toHaveBeenCalled()
-    expect(screen.queryByText(/Se superpone/)).not.toBeInTheDocument()
+    expect(fetchMyBookings).not.toHaveBeenCalled()
+    expect(screen.getByText('13:00 – 17:00')).toBeInTheDocument()
   })
 
   describe('reprogramar', () => {
     // Una clase de Física con Carla, hoy de 9 a 10, ya pagada.
-    const vieja = apiClass({
+    const vieja = apiBooking({
       id: 'c9',
       date: HOY,
       startTime: '09:00',
@@ -808,27 +987,32 @@ describe('BookingBoard', () => {
     })
 
     beforeEach(() => {
-      fetchClass.mockReset().mockResolvedValue(vieja)
-      rescheduleLesson.mockReset().mockResolvedValue(apiClass({ id: 'nueva', teacherId: 4 }))
-      fetchAvailability.mockResolvedValue([slot(), carla()])
-      // La clase vieja también llega entre las propias.
-      fetchMyLessons.mockResolvedValue([vieja])
+      fetchBooking.mockReset().mockResolvedValue(vieja)
+      rescheduleBooking.mockReset().mockResolvedValue(apiBooking({ id: 'nueva', teacherId: 4 }))
+      // Con excludeBookingId el backend manda solo a Carla, recortada a Física
+      // (la materia de la clase vieja) y sin contar la vieja como ocupada.
+      fetchAvailability.mockImplementation(({ excludeBookingId }) =>
+        Promise.resolve(
+          excludeBookingId
+            ? [carla({ subjects: [{ id: 2, name: 'Física', hourlyRateCents: 800000 }] })]
+            : [slot(), carla()],
+        ),
+      )
+      fetchMyBookings.mockResolvedValue([vieja])
     })
 
-    it('muestra solo los horarios del mismo docente, con la misma materia', async () => {
+    it('muestra lo que manda el backend para reprogramar', async () => {
       renderBoard('/disponibilidad?reprogramar=c9')
       await esperarCarga()
 
       expect(await screen.findByText(/Reprogramando tu clase de/)).toHaveTextContent('Física')
-      expect(fetchClass).toHaveBeenCalledWith('c9')
+      expect(fetchBooking).toHaveBeenCalledWith('c9')
       expect(screen.getByRole('button', { name: RESERVAR_CARLA })).toBeInTheDocument()
       expect(screen.queryByRole('button', { name: /Reservar con Laura Gómez/ })).not.toBeInTheDocument()
 
       await userEvent.click(screen.getByRole('button', { name: RESERVAR_CARLA }))
       const modal = screen.getByRole('dialog', { name: 'Reprogramar clase' })
-      // Carla también da Matemática, pero se reprograma la misma materia.
       expect(within(modal).queryByText('Matemática')).not.toBeInTheDocument()
-      // La clase vieja no choca con su propio horario: se puede correr ahí.
       expect(within(modal).getByRole('button', { name: '09:00' })).toBeEnabled()
     })
 
@@ -841,12 +1025,44 @@ describe('BookingBoard', () => {
       await userEvent.click(within(modal).getByRole('button', { name: '10:00' }))
       await userEvent.click(within(modal).getByRole('button', { name: 'Pedir nuevo horario' }))
 
-      expect(rescheduleLesson).toHaveBeenCalledWith(
+      expect(rescheduleBooking).toHaveBeenCalledWith(
         'c9',
         expect.objectContaining({ windowId: 'w-carla', startTime: '10:00' }),
       )
-      expect(bookLesson).not.toHaveBeenCalled()
+      expect(createBooking).not.toHaveBeenCalled()
       expect(await screen.findByText(/Pediste el nuevo horario de Física/)).toBeInTheDocument()
+    })
+
+    it('pide la disponibilidad sin contar la clase vieja como ocupada', async () => {
+      renderBoard('/disponibilidad?reprogramar=c9')
+      await esperarCarga()
+
+      expect(fetchAvailability).toHaveBeenCalledWith(
+        expect.objectContaining({ excludeBookingId: 'c9' }),
+      )
+    })
+
+    it('las clases del paquete que usaba la vieja vuelven a estar para la nueva', async () => {
+      // Paquete de 2: una ya realizada y la otra es la que se reprograma.
+      fetchBooking.mockResolvedValue({ ...vieja, studentPackId: 'p1', packTokens: 1, priceCents: 0 })
+      // El backend lo manda no usable: sin contar la vieja no le queda ninguna.
+      fetchMyPacks.mockResolvedValue([paquete({ remaining: 1, available: 0, usable: false })])
+      renderBoard('/disponibilidad?reprogramar=c9')
+      await esperarCarga()
+      await screen.findByText(/Reprogramando tu clase de/)
+      await waitFor(() => expect(fetchMyPacks).toHaveBeenCalled())
+      await userEvent.click(await screen.findByRole('button', { name: RESERVAR_CARLA }))
+      const modal = screen.getByRole('dialog')
+
+      await userEvent.click(within(modal).getByRole('button', { name: '10:00' }))
+      expect(within(modal).getByText('Incluida en tu paquete')).toBeInTheDocument()
+      await userEvent.click(within(modal).getByRole('button', { name: 'Pedir nuevo horario' }))
+
+      expect(rescheduleBooking).toHaveBeenCalledWith(
+        'c9',
+        expect.objectContaining({ packId: 'p1', packTokens: 1 }),
+      )
+      fetchMyPacks.mockReset().mockResolvedValue([])
     })
 
     it('se puede dejar de reprogramar y volver a ver todo', async () => {

@@ -11,6 +11,16 @@ import SubmissionContent from './SubmissionContent.jsx'
  * Una tarea vista por el alumno: la consigna, su entrega y, una vez entregada,
  * el chat con el docente. Puede cambiar la entrega hasta que se la corrijan;
  * después del vencimiento también, pero queda fuera de término.
+ *
+ * Props (de HomeworkPage): homework (de GET /api/homework, con su
+ * `submission`), now, onChange(tarea actualizada) y onClose().
+ *
+ * Datos: submitHomework → PUT /api/homework/:id/submission con { text,
+ * linkUrl }; devuelve la tarea entera. El chat va en HomeworkChat.
+ *
+ * Estado: text/linkUrl (copiados de la entrega), editing (formulario
+ * abierto; arranca abierto si no entregó), saving, error y fieldError (la
+ * clave de `fields` que marcó el backend).
  */
 class StudentHomeworkDialog extends Component {
   constructor(props) {

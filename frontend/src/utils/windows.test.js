@@ -1,4 +1,5 @@
 import {
+  windowOffered,
   capacityLabel,
   draftFromWindow,
   draftToPayload,
@@ -246,5 +247,13 @@ describe('modalityPlural', () => {
     expect(modalityPlural('virtual')).toBe('virtuales')
     expect(modalityPlural('in_person')).toBe('presenciales')
     expect(modalityPlural('hybrid')).toBe('híbridas')
+  })
+})
+
+describe('windowOffered', () => {
+  it('solo se ofrece si hay alguna tarifa en esa modalidad', () => {
+    expect(windowOffered([{ subjectId: 's1', modality: 'virtual', hourlyRateCents: 0 }])).toBe(true)
+    expect(windowOffered([])).toBe(false)
+    expect(windowOffered(null)).toBe(false)
   })
 })

@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import ClassMaterial from './ClassMaterial.jsx'
-import { apiClass } from '../testing/fixtures.js'
+import { apiBooking } from '../testing/fixtures.js'
 
 const { deleteClassFile, fetchClassMaterial, saveClassSummary, uploadClassFiles } = vi.hoisted(
   () => ({
@@ -13,7 +13,7 @@ const { deleteClassFile, fetchClassMaterial, saveClassSummary, uploadClassFiles 
 )
 
 vi.mock('../api/client.js', () => ({
-  classFileUrl: (id, fileId) => `/api/classes/${id}/material/files/${fileId}`,
+  classFileUrl: (classId, fileId) => `/api/classes/${classId}/material/files/${fileId}`,
   deleteClassFile,
   fetchClassMaterial,
   saveClassSummary,
@@ -23,7 +23,8 @@ vi.mock('../api/client.js', () => ({
 // La clase es el 14/9 de 13:00 a 14:00.
 const TERMINADA = { iso: '2099-09-14', time: '15:00' }
 const EN_CURSO = { iso: '2099-09-14', time: '13:30' }
-const clase = (over = {}) => apiClass({ status: 'realizada', ...over })
+// El material se pide con el classId de la reserva (la clase), no con su id.
+const reserva = (over = {}) => apiBooking({ status: 'realizada', classId: 'k1', ...over })
 const material = (over = {}) => ({ summary: '', updatedAt: null, files: [], ...over })
 const archivo = (over = {}) => ({
   id: 'f1',
@@ -40,7 +41,7 @@ beforeEach(() => {
 
 describe('ClassMaterial', () => {
   it('antes de que termine la clase no pide nada y avisa desde cuándo', () => {
-    render(<ClassMaterial cls={clase({ status: 'confirmada' })} viewRole="teacher" now={EN_CURSO} />)
+    render(<ClassMaterial cls={reserva({ status: 'confirmada' })} viewRole="teacher" now={EN_CURSO} />)
 
     expect(screen.getByText(/cuando termine la clase/)).toBeInTheDocument()
     expect(fetchClassMaterial).not.toHaveBeenCalled()
@@ -54,16 +55,22 @@ describe('ClassMaterial', () => {
       }),
     )
 
-    render(<ClassMaterial cls={clase()} viewRole="student" now={TERMINADA} />)
+    render(<ClassMaterial cls={reserva()} viewRole="student" now={TERMINADA} />)
 
     expect(await screen.findByText(/Vimos derivadas/)).toBeInTheDocument()
     expect(screen.getByText('apunte.pdf')).toBeInTheDocument()
     expect(screen.getAllByText('2 KB')).toHaveLength(2)
     expect(screen.getByRole('img', { name: 'pizarron.jpg' })).toHaveAttribute(
       'src',
-      '/api/classes/c1/material/files/f2',
+      '/api/classes/k1/material/files/f2',
     )
-    expect(screen.getAllByRole('link', { name: /Descargar/ })[0]).toHaveAttribute('download', 'apunte.pdf')
+    const [pdf, imagen] = screen.getAllByRole('link', { name: /Descargar/ })
+    expect(pdf).toHaveAttribute('download', 'apunte.pdf')
+    expect(pdf).not.toHaveAttribute('target')
+    // La imagen se sirve inline desde el bucket (otro origen, `download` no
+    // corre): en la misma pestaña reemplazaría a la app.
+    expect(imagen).toHaveAttribute('target', '_blank')
+    expect(imagen).toHaveAttribute('rel', 'noreferrer')
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Adjuntar/ })).not.toBeInTheDocument()
   })
@@ -71,7 +78,7 @@ describe('ClassMaterial', () => {
   it('al alumno le dice si todavía no hay material', async () => {
     fetchClassMaterial.mockResolvedValue(material())
 
-    render(<ClassMaterial cls={clase()} viewRole="student" now={TERMINADA} />)
+    render(<ClassMaterial cls={reserva()} viewRole="student" now={TERMINADA} />)
 
     expect(
       await screen.findByText('El docente todavía no cargó material de esta clase.'),
@@ -83,11 +90,11 @@ describe('ClassMaterial', () => {
     saveClassSummary.mockResolvedValue(material({ summary: 'Vimos límites' }))
     const onChange = vi.fn()
 
-    render(<ClassMaterial cls={clase()} viewRole="teacher" now={TERMINADA} onChange={onChange} />)
+    render(<ClassMaterial cls={reserva()} viewRole="teacher" now={TERMINADA} onChange={onChange} />)
     await userEvent.type(await screen.findByLabelText('Resumen de la clase'), 'Vimos límites')
     await userEvent.click(screen.getByRole('button', { name: 'Guardar resumen' }))
 
-    expect(saveClassSummary).toHaveBeenCalledWith('c1', 'Vimos límites')
+    expect(saveClassSummary).toHaveBeenCalledWith('k1', 'Vimos límites')
     expect(await screen.findByText('Resumen guardado.')).toBeInTheDocument()
     expect(onChange).toHaveBeenCalledWith(true)
   })
@@ -100,11 +107,11 @@ describe('ClassMaterial', () => {
     const pdf = new File(['%PDF'], 'apunte.pdf', { type: 'application/pdf' })
     const py = new File(['print(1)'], 'tp.py', { type: 'text/x-python' })
 
-    render(<ClassMaterial cls={clase()} viewRole="teacher" now={TERMINADA} />)
+    render(<ClassMaterial cls={reserva()} viewRole="teacher" now={TERMINADA} />)
     await screen.findByLabelText('Resumen de la clase')
     await userEvent.upload(screen.getByLabelText('Elegir archivos'), [pdf, py])
 
-    expect(uploadClassFiles).toHaveBeenCalledWith('c1', [pdf, py])
+    expect(uploadClassFiles).toHaveBeenCalledWith('k1', [pdf, py])
     expect(await screen.findByText('Se subieron 2 archivos.')).toBeInTheDocument()
     expect(screen.getByText('tp.py')).toBeInTheDocument()
   })
@@ -114,7 +121,7 @@ describe('ClassMaterial', () => {
     const grande = new File(['x'], 'video.mp4', { type: 'video/mp4' })
     Object.defineProperty(grande, 'size', { value: 11 * 1024 * 1024 })
 
-    render(<ClassMaterial cls={clase()} viewRole="teacher" now={TERMINADA} />)
+    render(<ClassMaterial cls={reserva()} viewRole="teacher" now={TERMINADA} />)
     await screen.findByLabelText('Resumen de la clase')
     await userEvent.upload(screen.getByLabelText('Elegir archivos'), grande)
 
@@ -127,12 +134,12 @@ describe('ClassMaterial', () => {
     deleteClassFile.mockResolvedValue(material())
     const onChange = vi.fn()
 
-    render(<ClassMaterial cls={clase()} viewRole="teacher" now={TERMINADA} onChange={onChange} />)
+    render(<ClassMaterial cls={reserva()} viewRole="teacher" now={TERMINADA} onChange={onChange} />)
     await userEvent.click(await screen.findByRole('button', { name: 'Borrar apunte.pdf' }))
     expect(deleteClassFile).not.toHaveBeenCalled()
     await userEvent.click(screen.getByRole('button', { name: 'Sí, borrar' }))
 
-    expect(deleteClassFile).toHaveBeenCalledWith('c1', 'f1')
+    expect(deleteClassFile).toHaveBeenCalledWith('k1', 'f1')
     expect(onChange).toHaveBeenCalledWith(false)
   })
 })

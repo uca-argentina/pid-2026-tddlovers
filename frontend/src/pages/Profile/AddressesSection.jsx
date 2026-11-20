@@ -18,6 +18,19 @@ import './AddressesSection.css'
  *
  * Una dirección que usa algún horario no se puede borrar: el backend lo
  * frena y dice cuántos son, y eso se muestra tal cual.
+ *
+ * Rol: docente. ProfilePage la renderiza sin props.
+ *
+ * Datos (api/client.js):
+ *   - fetchMyAddresses → GET /api/teachers/me/addresses, al montar y después
+ *     de cada cambio.
+ *   - setDefaultAddress → POST /api/teachers/me/addresses/:id/default.
+ *   - deleteAddress → DELETE /api/teachers/me/addresses/:id (409 si la usa
+ *     algún horario).
+ *   - Crear/editar lo hace AddressDialog.
+ *
+ * Estado: addresses (solo las guardadas, `saved`), loading, error, notice,
+ * dialog (AddressDialog abierto), confirmDeleteId y busyId.
  */
 class AddressesSection extends Component {
   state = {
@@ -42,6 +55,7 @@ class AddressesSection extends Component {
     this.token += 1
   }
 
+  /** Trae las direcciones con fetchMyAddresses (GET /api/teachers/me/addresses) → `addresses`. */
   load() {
     const token = ++this.token
     return fetchMyAddresses()
@@ -77,6 +91,7 @@ class AddressesSection extends Component {
     this.load()
   }
 
+  /** La marca como predeterminada (POST /api/teachers/me/addresses/:id/default) y recarga. */
   handleDefault = (address) => () => {
     if (this.state.busyId) return
     this.setState({ busyId: address.id, error: null, notice: null })
@@ -95,6 +110,7 @@ class AddressesSection extends Component {
 
   handleKeep = () => this.setState({ confirmDeleteId: null })
 
+  /** La borra (DELETE /api/teachers/me/addresses/:id) y recarga; el 409 se muestra tal cual. */
   handleDelete = (address) => () => {
     if (this.state.busyId) return
     this.setState({ busyId: address.id, error: null })

@@ -16,12 +16,15 @@ import './AvailabilityPage.css'
  *     pages/Booking).
  *
  * Por eso el primer guard de renderBody es el rol y no el usuario.
+ *
+ * Ruta /disponibilidad. Props: viewRole y user (de App), router (de
+ * withRouter, se le pasa a BookingBoard). Sin fetch ni estado propio.
  */
 class AvailabilityPage extends Component {
   /**
-   * La pantalla del alumno: buscar horarios libres y (desde la ronda 2)
-   * reservar. Va PRIMERO en renderBody y sin pedir usuario, igual que el
-   * placeholder que reemplaza — las rutas de la app no tienen portero.
+   * La pantalla del alumno: buscar horarios libres y reservar. Va PRIMERO en
+   * renderBody y sin pedir usuario: las rutas de la app no tienen portero
+   * (reservar sin sesión lo rechaza el backend).
    *
    * Se le pasa `router` en vez de envolver BookingBoard en otro withRouter:
    * con un puente por ruta alcanza, y así sigue siendo obvio que los hooks
@@ -39,9 +42,10 @@ class AvailabilityPage extends Component {
   renderBody() {
     const { user, viewRole } = this.props
 
-    // La vista de alumno va PRIMERO y no pide usuario: es informativa y las
-    // rutas de la app no tienen portero (ver App.jsx). El login solo hace
-    // falta para editar.
+    // FILTRO: el docente ve su disponibilidad; cualquier otro rol, el
+    // tablero de reservar (regla de pantalla). La vista de alumno va PRIMERO
+    // y no pide usuario: es informativa y las rutas de la app no tienen
+    // portero (ver App.jsx). El login solo hace falta para editar.
     if (viewRole !== 'teacher') return this.renderStudentBooking()
 
     if (!user) {

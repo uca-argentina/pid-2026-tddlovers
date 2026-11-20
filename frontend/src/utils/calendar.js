@@ -6,6 +6,12 @@
 // Dos convenciones que valen para todo el archivo:
 //   - `month` es 0-indexed (0 = enero), igual que `Date`.
 //   - La semana arranca en LUNES (Argentina), no en domingo.
+//
+// Las fechas de la API ('YYYY-MM-DD', hora local) entran con fromISODate y
+// salen con toISODate. Lo usan casi todas las pantallas con fechas: el
+// calendario (pages/Calendar/), Disponibilidad, el tablero de reservas,
+// Mis reservas, Tareas, components/WeekStrip.jsx y los utils booking.js,
+// windows.js, bookingStates.js y homework.js.
 
 const WEEKS_IN_GRID = 6
 const DAYS_IN_WEEK = 7
@@ -31,15 +37,23 @@ function capitalize(text) {
   return text.charAt(0).toUpperCase() + text.slice(1)
 }
 
-/** Índice de día con la semana arrancando en lunes: 0 = lunes, 6 = domingo. */
+/**
+ * Índice de día con la semana arrancando en lunes: 0 = lunes, 6 = domingo.
+ * Lo usan: utils/booking.js y utils/windows.js (pasar de fecha a clave 'lunes'…'domingo').
+ */
 export function mondayIndex(date) {
   return (date.getDay() + 6) % 7
 }
 
+/** El día 1 de ese mes (`month` 0-indexed). Lo usa: pages/Calendar/MonthPane.jsx. */
 export function startOfMonth(year, month) {
   return new Date(year, month, 1)
 }
 
+/**
+ * Un Date nuevo `amount` días después (o antes, si es negativo), a medianoche
+ * local: no arrastra la hora ni sufre el cambio de horario.
+ */
 export function addDays(date, amount) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() + amount)
 }
@@ -53,6 +67,7 @@ export function addMonths(date, amount) {
   return new Date(date.getFullYear(), date.getMonth() + amount, 1)
 }
 
+/** Si dos Date caen el mismo día (ignora la hora). Lo usa buildMonthGrid para `isToday`. */
 export function isSameDay(a, b) {
   return (
     a.getFullYear() === b.getFullYear() &&
@@ -73,6 +88,11 @@ export function toISODate(date) {
   return `${year}-${month}-${day}`
 }
 
+/**
+ * 'YYYY-MM-DD' (como viajan las fechas de la API: `date` de una clase,
+ * `dueDate` de una tarea...) -> Date a medianoche LOCAL. `new Date(iso)` lo
+ * leería como UTC y en Argentina caería el día anterior.
+ */
 export function fromISODate(iso) {
   const [year, month, day] = iso.split('-').map(Number)
   return new Date(year, month - 1, day)
@@ -101,18 +121,23 @@ export function formatDayLongWithYear(date) {
 }
 
 /**
- * Minutos entre dos horas 'HH:MM'. Si la segunda es menor que la primera se
- * asume que cruzó la medianoche (una clase que arranca 23:30 termina 00:30).
+ * Minutos entre dos horas 'HH:MM'. Nada cruza la medianoche: el fin más
+ * tarde posible se escribe '24:00' (1440), así que alcanza con restar.
  */
 function minutesBetween(startTime, endTime) {
   const [startHours, startMinutes] = startTime.split(':').map(Number)
   const [endHours, endMinutes] = endTime.split(':').map(Number)
-  const start = startHours * 60 + startMinutes
-  const end = endHours * 60 + endMinutes
-  return end >= start ? end - start : end + 24 * 60 - start
+  return endHours * 60 + endMinutes - (startHours * 60 + startMinutes)
 }
 
-/** '09:00' + '10:30' -> '1 h 30 min'. Cada docente elige cuánto duran sus clases. */
+/**
+ * '09:00' + '10:30' -> '1 h 30 min'. Cada docente elige cuánto duran sus clases.
+ *
+ * @param {string} startTime - 'HH:MM' (startTime de una reserva de GET /api/bookings).
+ * @param {string} endTime - 'HH:MM' (su endTime).
+ * @returns {string}
+ * Lo usan: components/ClassDetailDialog.jsx, pages/Calendar/DayAgenda.jsx.
+ */
 export function formatDuration(startTime, endTime) {
   const total = minutesBetween(startTime, endTime)
   const hours = Math.floor(total / 60)
@@ -132,6 +157,11 @@ export function formatDuration(startTime, endTime) {
  *
  * Devuelve Cell[6][7], con
  * Cell = { date, iso, day, inMonth, isToday, isWeekend }.
+ *
+ * @param {number} year
+ * @param {number} month - 0-indexed.
+ * @param {Date} [referenceDate] - "hoy", para marcar isToday.
+ * Lo usa: pages/Calendar/MonthPane.jsx.
  */
 export function buildMonthGrid(year, month, referenceDate = new Date()) {
   const first = startOfMonth(year, month)
@@ -155,4 +185,26 @@ export function buildMonthGrid(year, month, referenceDate = new Date()) {
   }
 
   return weeks
+}
+
+/**
+ * { 'YYYY-MM-DD': [item, ...] } a partir de cualquier lista con `date` y
+ * `startTime`, cada día ordenado por hora. Los inicios son siempre :00 o :30
+ * en 'HH:MM', así que comparar los textos alcanza para ordenar.
+ *
+ * @param {Array<{date: string, startTime: string}>} items - p. ej. las clases 
+ *   de GET /api/bookings.
+ * @returns {Object<string, Array>} por fecha ISO.
+ * Lo usa: pages/Calendar/CalendarPage.jsx.
+ */
+export function groupByDate(items) {
+  const map = {}
+  for (const item of items) {
+    if (!map[item.date]) map[item.date] = []
+    map[item.date].push(item)
+  }
+  for (const iso of Object.keys(map)) {
+    map[iso].sort((a, b) => a.startTime.localeCompare(b.startTime))
+  }
+  return map
 }

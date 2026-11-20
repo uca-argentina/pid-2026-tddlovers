@@ -1,465 +1,75 @@
 import { getPool } from './pool.js';
-import { formatAddress } from '../lib/addresses.js';
-import { hasBalanceFor, syncTurnCredits } from './neuronas.js';
 
-// La fila tal como la espera el front (ver CLAUDE.md en la raíz): fechas
-// 'YYYY-MM-DD' y horas 'HH:MM', sin zona horaria. Mandar un timestamp UTC
-// correría el día para nuestros usuarios.
-const CLASS_COLUMNS = `
-  c.id,
-  to_char(c.class_date, 'YYYY-MM-DD') AS date,
-  to_char(c.start_time, 'HH24:MI') AS "startTime",
-  to_char(c.end_time, 'HH24:MI') AS "endTime",
-  c.subject_id AS "subjectId",
-  s.name AS "subjectName",
-  c.teacher_id AS "teacherId",
-  t.nombre || ' ' || t.apellido AS "teacherName",
-  c.student_id AS "studentId",
-  a.nombre || ' ' || a.apellido AS "studentName",
-  c.status,
-  c.availability_id AS "availabilityId",
-  c.modality,
-  c.max_students AS "maxStudents",
-  c.meeting_url AS "meetingUrl",
-  c.address,
-  c.locality,
-  c.price_cents AS "priceCents",
-  c.paid_at AS "paidAt",
-  c.cancelled_by AS "cancelledBy",
-  c.cancel_reason AS "cancelReason",
-  c.rescheduled_from AS "rescheduledFrom",
-  c.student_pack_id AS "studentPackId",
-  c.pack_tokens AS "packTokens",
-  c.reward_type AS "rewardType",
-  c.reward_neuronas AS "rewardNeuronas",
-  (
-    -- Cuántos hay anotados en ese turno (una grupal son varias filas con el
-    -- mismo docente, fecha e inicio). Un número y no nombres: el alumno ve
-    -- cuánta gente va a haber, no quién.
-    SELECT count(*)::int FROM classes o
-    WHERE o.teacher_id = c.teacher_id AND o.class_date = c.class_date
-      AND o.start_time = c.start_time AND o.status <> 'cancelada'
-  ) AS enrolled,
-  (
-    -- Si el turno tiene material (resumen o archivos), para marcarlo en la
-    -- tarjeta. El material es del turno, no de la fila: ver migración 018.
-    EXISTS (
-      SELECT 1 FROM class_materials m
-      WHERE m.teacher_id = c.teacher_id AND m.class_date = c.class_date
-        AND m.start_time = c.start_time
-        AND (m.summary <> '' OR EXISTS (
-          SELECT 1 FROM class_material_files f
-          WHERE f.teacher_id = m.teacher_id AND f.class_date = m.class_date
-            AND f.start_time = m.start_time
-        ))
-    )
-  ) AS "hasMaterial"
-`;
-
-const CLASS_JOINS = `
-  FROM classes c
-  JOIN subjects s ON s.id = c.subject_id
-  JOIN users t ON t.id = c.teacher_id
-  JOIN users a ON a.id = c.student_id
-`;
+// Las clases (classes, migración 023): una fila por clase, con docente,
+// materia, fecha, horario y lo copiado de la ventana en la primera reserva.
+// Una grupal con varios alumnos es UNA clase. Lo de cada alumno (estado,
+// pago...) está en class_bookings y se lee desde db/bookings.js; las
+// reservas de una clase, con findClassBookings de ahí.
+// Las clases se crean al reservar (insertBooking en db/bookings.js) y
+// classes.active lo mantiene el trigger class_bookings_sync_active.
+// Lo usan: routes/availability, routes/classes y routes/homework.
 
 /**
- * Las clases de UN usuario en un rango. Sirve para las dos pantallas: como
- * docente devuelve las que da, como alumno las que reservó, según el rol de
- * la sesión. Nadie ve la agenda de otro.
+ * Una clase por su id, sin sus reservas. No chequea dueño: eso lo hace quien
+ * llama.
+ *
+ * @param {string} classId - classes.id: el `classId` de una reserva, o el de
+ *   GET /api/homework/targets que el docente manda de vuelta.
+ * @returns {Promise<{id, teacherId, subjectId, date, startTime, endTime,
+ *   maxStudents, active}|null>}
+ * Origen: classes.
+ * Lo usan: routes/classes/index.js (loadOwnClass) y routes/homework/index.js
+ *   (resolveTarget).
  */
-export async function findClassesForUser({ userId, role, from, to, status }) {
-  const ownerColumn = role === 'teacher' ? 'c.teacher_id' : 'c.student_id';
+export async function findClass(classId) {
   const result = await getPool().query(
-    `SELECT ${CLASS_COLUMNS}
-     ${CLASS_JOINS}
-     WHERE ${ownerColumn} = $1
-       AND c.class_date BETWEEN $2::date AND $3::date
-       AND ($4::text IS NULL OR c.status = $4::class_status)
-     ORDER BY c.class_date, c.start_time`,
-    [userId, from, to, status ?? null]
+    `SELECT id, teacher_id AS "teacherId", subject_id AS "subjectId",
+            to_char(class_date, 'YYYY-MM-DD') AS date,
+            to_char(start_time, 'HH24:MI') AS "startTime",
+            to_char(end_time, 'HH24:MI') AS "endTime",
+            max_students AS "maxStudents", active
+     FROM classes WHERE id = $1`,
+    [classId]
   );
-  return result.rows;
+  return result.rows[0] ?? null;
 }
 
 /**
- * Los turnos ya tomados de un rango, de cualquier docente. NO va a una ruta:
- * la usa la expansión de disponibilidad para restar lo reservado. Una grupal
- * con tres alumnos es UN turno con enrolled 3 — el mismo docente, la misma
- * hora, la misma materia y duración. Devuelve lo mínimo, no datos de nadie:
- * el nombre de la materia hace falta para ofrecer sumarse a una grupal.
+ * Las clases en pie de un rango, de cualquier docente. NO va a una ruta:
+ * la usa la expansión de disponibilidad para restar lo reservado y ofrecer
+ * sumarse a las grupales. Una grupal con tres alumnos es UNA clase con
+ * enrolled 3. Devuelve lo mínimo, no datos de nadie: el nombre de la materia
+ * hace falta para ofrecer sumarse a una grupal.
+ *
+ * `maxStudents` y `modality` son los de la clase (copiados de la ventana en
+ * la primera reserva, ver insertBooking en db/bookings.js): sumarse se mide
+ * contra eso y no contra la ventana actual, que el docente pudo haber editado.
+ *
+ * @param {{from: string, to: string}} rango - query de GET /api/availability.
+ * @returns {Promise<Array<{classId, teacherId, date, start, end, subjectId, subjectName,
+ *   enrolled, maxStudents, modality}>>}
+ * Origen: classes activas + subjects, con sus reservas no canceladas contadas.
+ * Lo usa: routes/availability/index.js (se le pasa a bookableRows).
  */
-export async function findTakenSlots({ from, to }) {
+export async function findActiveClasses({ from, to }) {
+  // FILTRO: las clases canceladas para todos (active = false) no ocupan el
+  // horario del docente.
   const result = await getPool().query(
-    `SELECT c.teacher_id AS "teacherId",
+    `SELECT c.id AS "classId",
+            c.teacher_id AS "teacherId",
             to_char(c.class_date, 'YYYY-MM-DD') AS date,
             to_char(c.start_time, 'HH24:MI') AS start,
             to_char(c.end_time, 'HH24:MI') AS "end",
             c.subject_id AS "subjectId",
             s.name AS "subjectName",
-            count(*)::int AS enrolled
+            (SELECT count(*)::int FROM class_bookings b
+             WHERE b.class_id = c.id AND b.status <> 'cancelada') AS enrolled,
+            c.max_students AS "maxStudents",
+            c.modality
      FROM classes c
      JOIN subjects s ON s.id = c.subject_id
-     WHERE c.status <> 'cancelada' AND c.class_date BETWEEN $1::date AND $2::date
-     GROUP BY c.teacher_id, c.class_date, c.start_time, c.end_time, c.subject_id, s.name`,
+     WHERE c.active AND c.class_date BETWEEN $1::date AND $2::date`,
     [from, to]
   );
   return result.rows;
-}
-
-/**
- * ¿Este usuario ya tiene una clase que se pisa con ese horario? Se consulta
- * antes de reservar solo para poder dar un mensaje útil: cuando el alumno se
- * choca consigo mismo, la restricción que salta primero es la del docente y
- * el mensaje quedaría al revés ("lo reservó otra persona").
- *
- * No reemplaza a las restricciones de la tabla: entre este SELECT y el INSERT
- * puede entrar otra transacción. Son ellas las que deciden.
- */
-export async function hasOverlappingClass({ userId, role, date, startTime, endTime, excludeId = null }) {
-  const column = role === 'teacher' ? 'teacher_id' : 'student_id';
-  // excludeId: al reprogramar, la clase vieja se va a cancelar en la misma
-  // transacción, así que no cuenta como choque.
-  const result = await getPool().query(
-    `SELECT 1 FROM classes
-     WHERE ${column} = $1 AND class_date = $2::date AND status <> 'cancelada'
-       AND start_time < $4::time AND end_time > $3::time
-       AND ($5::uuid IS NULL OR id <> $5::uuid)
-     LIMIT 1`,
-    [userId, date, startTime, endTime, excludeId]
-  );
-  return result.rowCount > 0;
-}
-
-export async function findClassById(id) {
-  const result = await getPool().query(
-    `SELECT ${CLASS_COLUMNS} ${CLASS_JOINS} WHERE c.id = $1`,
-    [id]
-  );
-  return result.rows[0] ?? null;
-}
-
-const TAKEN_BY_SOMEONE_ELSE = 'Ese horario ya fue reservado por otra persona.';
-
-/**
- * Reserva una clase en una ventana. El alumno eligió materia, inicio y
- * duración; si ya hay una clase del docente que arranca a esa hora, es
- * sumarse a ella, y eso solo se puede en una grupal, con cupo, y eligiendo la
- * MISMA materia y duración (es la misma clase, no otra a la misma hora).
- *
- * La restricción de exclusión de la tabla deja pasar dos filas del docente
- * con el mismo inicio aunque terminen distinto, y el cupo tampoco lo puede
- * cuidar (no cuenta filas): todo eso va en una transacción con un lock por
- * docente y fecha, así dos alumnos sumándose al último lugar a la vez no
- * pueden pasar los dos.
- *
- * Modalidad, link y dirección se copian de la ventana, y el precio es el que
- * calculó la ruta con la tarifa de ese momento: si el docente cambia algo
- * después, lo que el alumno ya reservó no se mueve.
- *
- * Devuelve { id } o { conflict } con el mensaje para el alumno.
- */
-export async function bookClass(booking) {
-  const client = await getPool().connect();
-  try {
-    await client.query('BEGIN');
-    const created = await insertClass(client, booking);
-    await client.query(created.conflict ? 'ROLLBACK' : 'COMMIT');
-    return created;
-  } catch (err) {
-    await client.query('ROLLBACK');
-    return overlapConflict(err);
-  } finally {
-    client.release();
-  }
-}
-
-/**
- * Traduce una violación de las restricciones de exclusión al mensaje para el
- * alumno; cualquier otro error sigue de largo.
- */
-function overlapConflict(err) {
-  // 23P01 = exclusion_violation: alguien ya tiene ese horario.
-  if (err.code === '23P01') {
-    const mine = err.constraint === 'classes_student_no_overlap';
-    return { conflict: mine ? 'Ya tenés una clase reservada en ese horario.' : TAKEN_BY_SOMEONE_ELSE };
-  }
-  throw err;
-}
-
-/**
- * El corazón de reservar, adentro de una transacción que abre quien llama:
- * así reprogramar puede cancelar la clase vieja y reservar la nueva de una
- * sola vez. Devuelve { id } o { conflict }; con conflict, quien llama hace
- * ROLLBACK.
- */
-async function insertClass(
-  client,
-  {
-    window,
-    studentId,
-    date,
-    startTime,
-    endTime,
-    subjectId,
-    priceCents,
-    rescheduledFrom = null,
-    studentPackId = null,
-    packTokens = 0,
-    rewardType = null,
-    rewardNeuronas = 0,
-  }
-) {
-  if (studentPackId) {
-    const packConflict = await reservePackSlot(client, studentPackId, date, packTokens);
-    if (packConflict) return { conflict: packConflict };
-  }
-
-  // La ruta ya miró el saldo, pero el alumno puede estar gastando lo mismo en
-  // otra pestaña. Al reprogramar la clase vieja ya se canceló, así que su canje
-  // ya volvió al saldo.
-  if (rewardType && !(await hasBalanceFor(client, studentId, rewardNeuronas))) {
-    return { conflict: 'No te alcanzan las neuronas.' };
-  }
-
-  await client.query(`SELECT pg_advisory_xact_lock(hashtext('classes:' || $1 || $2))`, [
-    window.teacherId,
-    date,
-  ]);
-
-  // La ruta ya lo chequeó, pero el docente puede haber cargado las
-  // vacaciones entre ese chequeo y esta reserva.
-  const vacation = await client.query(
-    `SELECT 1 FROM teacher_vacations
-     WHERE teacher_id = $1 AND $2::date BETWEEN start_date AND end_date
-     LIMIT 1`,
-    [window.teacherId, date]
-  );
-  if (vacation.rowCount > 0) return { conflict: 'El docente está de licencia ese día.' };
-
-  const existing = await client.query(
-    `SELECT to_char(end_time, 'HH24:MI') AS "end", subject_id AS "subjectId",
-            count(*)::int AS enrolled
-     FROM classes
-     WHERE teacher_id = $1 AND class_date = $2::date AND start_time = $3::time
-       AND status <> 'cancelada'
-     GROUP BY end_time, subject_id`,
-    [window.teacherId, date, startTime]
-  );
-  const group = existing.rows[0];
-
-  if (group) {
-    if (window.maxStudents <= 1) return { conflict: TAKEN_BY_SOMEONE_ELSE };
-    if (String(group.subjectId) !== String(subjectId) || group.end !== endTime) {
-      return {
-        conflict:
-          'A esa hora ya hay una clase grupal de otra materia o duración. Sumate a esa o elegí otro horario.',
-      };
-    }
-    if (group.enrolled >= window.maxStudents) return { conflict: 'La clase grupal ya se llenó.' };
-  }
-
-  const result = await client.query(
-    `INSERT INTO classes (
-       teacher_id, student_id, subject_id, class_date, start_time, end_time,
-       availability_id, modality, max_students, meeting_url, address, locality, price_cents,
-       rescheduled_from, student_pack_id, pack_tokens, reward_type, reward_neuronas
-     )
-     VALUES ($1, $2, $3, $4::date, $5::time, $6::time, $7, $8::class_modality, $9, $10, $11, $12, $13, $14,
-             $15, $16, $17, $18)
-     RETURNING id`,
-    [
-      window.teacherId,
-      studentId,
-      subjectId,
-      date,
-      startTime,
-      endTime,
-      window.id,
-      window.modality,
-      window.maxStudents,
-      window.meetingUrl,
-      // La dirección se copia armada: si el docente la edita después, lo
-      // reservado no se mueve.
-      window.address ? formatAddress(window.address) : null,
-      window.address?.locality ?? null,
-      priceCents,
-      rescheduledFrom,
-      studentPackId,
-      packTokens,
-      rewardType,
-      rewardNeuronas,
-    ]
-  );
-  return { id: result.rows[0].id };
-}
-
-/**
- * La ruta ya eligió el paquete y chequeó que le queden clases, pero entre ese
- * chequeo y el INSERT el alumno puede estar reservando otra clase con el
- * mismo paquete en otra pestaña (otro día, así que el lock por docente y
- * fecha no los frena). Acá se vuelve a contar con el paquete bloqueado.
- * null si hay lugar, o el mensaje.
- */
-async function reservePackSlot(client, studentPackId, date, packTokens) {
-  await client.query(`SELECT pg_advisory_xact_lock(hashtext('pack:' || $1))`, [studentPackId]);
-  const result = await client.query(
-    `SELECT sp.class_count >= $3 + (
-              SELECT COALESCE(sum(c.pack_tokens), 0) FROM classes c
-              WHERE c.student_pack_id = sp.id
-                AND c.status IN ('pendiente', 'aceptada', 'confirmada', 'realizada')
-            ) AS "hasRoom",
-            sp.expires_on >= $2::date AS "inTime"
-     FROM student_packs sp
-     WHERE sp.id = $1`,
-    [studentPackId, date, packTokens]
-  );
-  const row = result.rows[0];
-  if (!row || !row.inTime) return 'Tu paquete ya no sirve para esa fecha.';
-  if (!row.hasRoom) return 'Ya no te quedan clases disponibles en el paquete.';
-  return null;
-}
-
-/**
- * Las pendientes que llegaron a su hora sin que el docente respondiera pasan
- * a canceladas, como si el docente las hubiera cancelado justo al empezar.
- *
- * Sin cron: se llama antes de leer o tocar clases. Nadie mira una clase sin
- * pasar por ahí, así que da lo mismo que se actualice "tarde".
- */
-export async function expireStartedPending({ iso, time }) {
-  await getPool().query(
-    `UPDATE classes
-     SET status = 'cancelada', cancel_reason = 'vencida', cancelled_by = 'teacher',
-         cancelled_at = now()
-     WHERE status = 'pendiente'
-       AND (class_date < $1::date OR (class_date = $1::date AND start_time <= $2::time))`,
-    [iso, time]
-  );
-}
-
-/**
- * Cambia el estado de una clase, pero solo si sigue en el estado en que la
- * vio la ruta (`from`): si en el medio el otro la canceló, no se pisa. true
- * si se actualizó.
- *
- * `paid` marca el pago, que va aparte del estado. `cancelledBy` y
- * `cancelReason` solo tienen sentido al pasar a cancelada.
- */
-const TRANSITION_SQL = `
-  UPDATE classes
-  SET status = $3::class_status,
-      paid_at = CASE WHEN $4 THEN now() ELSE paid_at END,
-      cancelled_at = CASE WHEN $3::class_status = 'cancelada' THEN now() ELSE cancelled_at END,
-      cancelled_by = COALESCE($5::user_role, cancelled_by),
-      cancel_reason = COALESCE($6, cancel_reason)
-  WHERE id = $1 AND status = $2::class_status AND (NOT $4 OR paid_at IS NULL)
-  RETURNING teacher_id AS "teacherId",
-            to_char(class_date, 'YYYY-MM-DD') AS date,
-            to_char(start_time, 'HH24:MI') AS "startTime"`;
-
-export async function transitionClass(id, { from, to, paid = false, cancelledBy = null, cancelReason = null }) {
-  const params = [id, from, to, paid, cancelledBy, cancelReason];
-  // Solo tomar lista y pagar pueden cambiar quién gana neuronas. Se hace en la
-  // misma transacción: si no, una falla dejaría una asistencia sin sus neuronas.
-  const affectsNeuronas = paid || to === 'realizada' || to === 'no_presentada';
-  if (!affectsNeuronas) {
-    const result = await getPool().query(TRANSITION_SQL, params);
-    return result.rowCount > 0;
-  }
-
-  const client = await getPool().connect();
-  try {
-    await client.query('BEGIN');
-    const result = await client.query(TRANSITION_SQL, params);
-    if (result.rowCount === 0) {
-      await client.query('ROLLBACK');
-      return false;
-    }
-    await syncTurnCredits(client, result.rows[0]);
-    await client.query('COMMIT');
-    return true;
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
-}
-
-/**
- * Las reservas en pie de un turno (docente, fecha, inicio): en una grupal,
- * una por alumno. Para las acciones sobre la clase entera.
- */
-export async function findTurnClasses({ teacherId, date, startTime }) {
-  const result = await getPool().query(
-    `SELECT ${CLASS_COLUMNS} ${CLASS_JOINS}
-     WHERE c.teacher_id = $1 AND c.class_date = $2::date AND c.start_time = $3::time
-       AND c.status <> 'cancelada'
-     ORDER BY a.nombre, a.apellido`,
-    [teacherId, date, startTime]
-  );
-  return result.rows;
-}
-
-/**
- * Varias transiciones como transitionClass, todo o nada: si alguna reserva
- * ya no está en el estado en que la vio la ruta (otro la tocó en el medio),
- * no se cambia ninguna. `changes` = [{ id, from, to, paid, cancelledBy,
- * cancelReason }]. true si se aplicaron todas.
- */
-export async function transitionClasses(changes) {
-  const client = await getPool().connect();
-  try {
-    await client.query('BEGIN');
-    for (const { id, from, to, paid = false, cancelledBy = null, cancelReason = null } of changes) {
-      const params = [id, from, to, paid, cancelledBy, cancelReason];
-      const result = await client.query(TRANSITION_SQL, params);
-      if (result.rowCount === 0) {
-        await client.query('ROLLBACK');
-        return false;
-      }
-    }
-    await client.query('COMMIT');
-    return true;
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
-}
-
-/**
- * Reprogramar: la clase vieja queda cancelada ("reprogramada") y se reserva
- * la nueva, todo en una transacción. Primero se cancela la vieja, así su
- * horario ya está libre si la nueva se pisa con ella (moverla media hora).
- *
- * Devuelve { id } de la nueva o { conflict }.
- */
-export async function rescheduleClass(oldId, booking) {
-  const client = await getPool().connect();
-  try {
-    await client.query('BEGIN');
-    const cancelled = await client.query(
-      `UPDATE classes
-       SET status = 'cancelada', cancel_reason = 'reprogramada', cancelled_by = 'student',
-           cancelled_at = now()
-       WHERE id = $1 AND status = 'confirmada'`,
-      [oldId]
-    );
-    if (cancelled.rowCount === 0) {
-      await client.query('ROLLBACK');
-      return { conflict: 'La clase cambió mientras la reprogramabas. Volvé a intentar.' };
-    }
-
-    const created = await insertClass(client, { ...booking, rescheduledFrom: oldId });
-    await client.query(created.conflict ? 'ROLLBACK' : 'COMMIT');
-    return created;
-  } catch (err) {
-    await client.query('ROLLBACK');
-    return overlapConflict(err);
-  } finally {
-    client.release();
-  }
 }

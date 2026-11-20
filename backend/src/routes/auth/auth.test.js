@@ -158,6 +158,21 @@ describe('auth routes', () => {
       expect(res.statusCode).toBe(400);
     });
 
+    it('rejects teacher subjectIds that are not UUIDs before reaching the database', async () => {
+      for (const subjectIds of [['abc'], [1]]) {
+        const { token, cookieHeader } = await getCsrf(app);
+        const res = await app.inject({
+          method: 'POST',
+          url: '/api/auth/register',
+          headers: { 'x-csrf-token': token, cookie: cookieHeader },
+          payload: { ...BASE_PAYLOAD, role: 'teacher', subjectIds },
+        });
+        expect(res.statusCode).toBe(400);
+        expect(res.json().fields).toEqual({ subjectIds: 'invalid' });
+      }
+      expect(countExistingSubjectIds).not.toHaveBeenCalled();
+    });
+
     it('creates a student and sets a session cookie on success', async () => {
       findUserByEmail.mockResolvedValueOnce(null);
       createUser.mockResolvedValueOnce({

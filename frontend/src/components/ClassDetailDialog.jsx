@@ -1,18 +1,23 @@
 import { Component } from 'react'
-import ClassActions from './ClassActions.jsx'
+import BookingActions from './BookingActions.jsx'
 import ClassMaterial from './ClassMaterial.jsx'
 import Modal from './Modal.jsx'
 import AttendanceDialog from './AttendanceDialog.jsx'
 import StudentsDialog from './StudentsDialog.jsx'
-import TurnActions from './TurnActions.jsx'
+import ClassActions from './ClassActions.jsx'
 import { ClockIcon, ListCheckIcon, PinIcon, UsersIcon, VideoIcon } from './icons.jsx'
 import { formatRangeLabel } from '../utils/availability.js'
 import { formatDayLongWithYear, formatDuration, fromISODate } from '../utils/calendar.js'
 import { canHaveMaterial } from '../utils/classMaterials.js'
-import { allowedActions, hasStarted, nowParts, paymentStatus } from '../utils/classStates.js'
+import { allowedActions, hasStarted, nowParts, paymentStatus } from '../utils/bookingStates.js'
 import { formatMoney } from '../utils/rates.js'
-import { turnRows } from '../utils/reservations.js'
-import { capacityLabel, modalityLabel, needsAddress, needsMeetingUrl } from '../utils/windows.js'
+import {
+  activeRows,
+  classCapacityLabel,
+  classPriceLabel,
+  classRows,
+} from '../utils/reservations.js'
+import { modalityLabel, needsAddress, needsMeetingUrl } from '../utils/windows.js'
 import { rewardLabel } from '../utils/neuronas.js'
 import './ClassDetailDialog.css'
 
@@ -23,9 +28,25 @@ import './ClassDetailDialog.css'
  * la clase. También repite los botones de la clase entera, para no tener que
  * volver a la lista.
  *
- * Lo usan Mis reservas y la agenda del Calendario. `classes` son las
+ * Lo usan Mis reservas y la agenda del Calendario. `bookings` son las
  * reservas que tiene cargadas la pantalla: de ahí salen los otros alumnos del
- * turno, que en una grupal el docente ve como filas separadas.
+ * clase, que en una grupal el docente ve como filas separadas.
+ *
+ * Props:
+ *   - cls: la reserva que representa a la clase (una fila de GET /api/bookings).
+ *   - bookings: ReservationsPage pasa todas sus reservas (classRows saca las del
+ *     clase); DayAgenda pasa directamente `rows` de la clase.
+ *   - viewRole: 'teacher' | 'student'.
+ *   - now: inyectable para tests (ReservationsPage lo reenvía; DayAgenda no).
+ *   - onChange(reservaActualizada): el padre reemplaza esa fila.
+ *   - onMaterialChange(cls, hasMaterial): solo lo pasa ReservationsPage.
+ *   - onClose().
+ *
+ * Sin fetch propio: las acciones las hacen BookingActions / ClassActions /
+ * StudentsDialog / AttendanceDialog, y el material ClassMaterial.
+ *
+ * Estado: takingAttendance (AttendanceDialog abierto) y managingStudents
+ * (StudentsDialog abierto).
  */
 class ClassDetailDialog extends Component {
   state = { takingAttendance: false, managingStudents: false }
@@ -47,13 +68,14 @@ class ClassDetailDialog extends Component {
   }
 
   /**
-   * Las reservas de la clase. El docente ve todas las del turno (una por
-   * alumno, las canceladas al final); el alumno, solo la suya.
+   * FILTRO: las reservas de la clase. El docente ve todas las de la clase (una
+   * por alumno, las canceladas al final); el alumno, solo la suya (regla del
+   * backend: GET /api/bookings no le manda las de otros alumnos).
    */
   getRows() {
-    const { cls, classes, viewRole } = this.props
+    const { cls, bookings, viewRole } = this.props
     if (viewRole !== 'teacher') return [cls]
-    const rows = turnRows(cls, classes)
+    const rows = classRows(cls, bookings)
     return rows.length > 0 ? rows : [cls]
   }
 
@@ -82,8 +104,10 @@ class ClassDetailDialog extends Component {
             <PinIcon />
             <span>
               {cls.address}
-              {/* La dirección armada ya trae la localidad; las clases
-                  reservadas antes de las direcciones guardadas, no. */}
+              {/* La dirección armada (formatAddress) ya trae la localidad,
+                  pero en las clases reservadas antes de la migración 019 no
+                  está garantizado: por eso se agrega si falta. Esta rama es
+                  necesaria, no es código muerto. */}
               {cls.locality && !cls.address.includes(cls.locality) ? (
                 <span className="class-detail-muted"> · {cls.locality}</span>
               ) : null}
@@ -110,12 +134,10 @@ class ClassDetailDialog extends Component {
     )
   }
 
-  renderKind(active) {
+  renderKind(rows) {
     const { cls, viewRole } = this.props
     const persona = viewRole === 'teacher' ? '' : `Con ${cls.teacherName} · `
-    if (cls.maxStudents <= 1) return `${persona}${capacityLabel(cls.maxStudents)}`
-    const anotados = viewRole === 'teacher' ? active.length : cls.enrolled
-    return `${persona}Grupal · ${anotados} de ${cls.maxStudents}`
+    return `${persona}${classCapacityLabel(cls, rows, viewRole)}`
   }
 
   /** El alumno: el estado de su reserva y sus botones (pagar, reprogramar, cancelar). */
@@ -124,7 +146,7 @@ class ClassDetailDialog extends Component {
     return (
       <section className="class-detail-section">
         <h3 className="class-detail-section-title">Estado</h3>
-        <ClassActions cls={cls} viewRole="student" now={this.props.now} onChange={onChange} />
+        <BookingActions booking={cls} viewRole="student" now={this.props.now} onChange={onChange} />
       </section>
     )
   }
@@ -140,13 +162,16 @@ class ClassDetailDialog extends Component {
     const { cls, onChange } = this.props
     const grupal = cls.maxStudents > 1
     const empezo = hasStarted(cls, this.now())
-    const active = rows.filter((row) => row.status !== 'cancelada')
+    const active = activeRows(rows)
+    // FILTRO: los alumnos (grupal: botón "Ver alumnos"; individual: nombre y
+    // pago) solo antes de que empiece y si queda alguien en pie; después
+    // queda tomar lista. Regla de pantalla.
 
     return (
       <>
         <section className="class-detail-section">
           <h3 className="class-detail-section-title">Clase</h3>
-          <TurnActions rows={rows} now={this.props.now} onChange={onChange} />
+          <ClassActions rows={rows} now={this.props.now} onChange={onChange} />
         </section>
         {!empezo && active.length > 0 && grupal ? this.renderStudentsButton(rows, active) : null}
         {!empezo && active.length > 0 && !grupal ? this.renderSingleStudent(active[0]) : null}
@@ -194,7 +219,11 @@ class ClassDetailDialog extends Component {
     )
   }
 
-  /** "Tomar asistencia", solo si ya empezó y hay a quién tomarle lista. */
+  /**
+   * FILTRO: "Tomar asistencia", solo si ya empezó y hay a quién tomarle lista
+   * (allowedActions 'attend', espejo de checkAction en
+   * backend/src/lib/bookingStates.js, que es el que decide).
+   */
   renderAttendance(rows) {
     const now = this.now()
     const lista = rows.filter((row) => allowedActions(row, 'teacher', now).includes('attend'))
@@ -236,10 +265,44 @@ class ClassDetailDialog extends Component {
     )
   }
 
+  /**
+   * El precio de una reserva: lo que paga, y si usa paquete o neuronas. Es
+   * lo que ve el alumno, y el docente en una individual.
+   */
+  renderPrice() {
+    const { cls } = this.props
+    return (
+      <p className="class-detail-price">
+        {formatMoney(cls.priceCents)}
+        {cls.packTokens > 0 ? (
+          <span className="class-detail-muted">
+            {' · '}
+            {cls.packTokens === 1 ? '1 clase' : `${cls.packTokens} clases`} del paquete
+          </span>
+        ) : null}
+        {cls.rewardType ? (
+          <span className="class-detail-muted">
+            {' · '}
+            {rewardLabel(cls.rewardType)} con neuronas
+          </span>
+        ) : null}
+      </p>
+    )
+  }
+
+  /**
+   * El docente en una grupal: cada alumno paga lo suyo (con paquete, con
+   * neuronas o entero), así que va el monto o el rango, sin el paquete ni el
+   * canje de uno solo. El de cada uno está en "Ver alumnos".
+   */
+  renderGroupPrice(rows) {
+    return <p className="class-detail-price">{classPriceLabel(rows)} por alumno</p>
+  }
+
   render() {
     const { cls, viewRole, onClose } = this.props
     const rows = this.getRows()
-    const active = rows.filter((row) => row.status !== 'cancelada')
+    const active = activeRows(rows)
     const docente = viewRole === 'teacher'
 
     return (
@@ -261,29 +324,16 @@ class ClassDetailDialog extends Component {
             {this.renderPlace()}
             <li>
               <UsersIcon />
-              <span>{this.renderKind(active)}</span>
+              <span>{this.renderKind(rows)}</span>
             </li>
           </ul>
-          <p className="class-detail-price">
-            {formatMoney(cls.priceCents)}
-            {docente && cls.maxStudents > 1 ? ' por alumno' : ''}
-            {cls.packTokens > 0 ? (
-              <span className="class-detail-muted">
-                {' · '}
-                {cls.packTokens === 1 ? '1 clase' : `${cls.packTokens} clases`} del paquete
-              </span>
-            ) : null}
-            {cls.rewardType ? (
-              <span className="class-detail-muted">
-                {' · '}
-                {rewardLabel(cls.rewardType)} con neuronas
-              </span>
-            ) : null}
-          </p>
+          {docente && cls.maxStudents > 1 ? this.renderGroupPrice(rows) : this.renderPrice()}
 
           {docente ? this.renderTeacherStatus(rows) : this.renderStudentStatus()}
           {docente ? this.renderAttendance(active) : null}
 
+          {/* FILTRO: el material solo si la clase pudo tenerlo (canHaveMaterial,
+              espejo de backend/src/lib/classMaterials.js). */}
           {canHaveMaterial(cls) ? (
             <ClassMaterial
               key={cls.id}
@@ -301,7 +351,7 @@ class ClassDetailDialog extends Component {
 
 ClassDetailDialog.defaultProps = {
   viewRole: 'student',
-  classes: [],
+  bookings: [],
   // Inyectable para los tests; en la app es la hora real.
   now: null,
   onChange: () => {},

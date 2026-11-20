@@ -1,23 +1,25 @@
-import { render as rtlRender, screen, waitFor } from '@testing-library/react'
+import { render as rtlRender, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import CalendarPage from './CalendarPage.jsx'
 import { addDays, addMonths, formatMonthTitle, toISODate } from '../../utils/calendar.js'
-import { apiClass } from '../../testing/fixtures.js'
+import { apiBooking } from '../../testing/fixtures.js'
 
 // El mock del cliente evita depender de los datos de mentira reales: acá
 // definimos exactamente qué clases hay y en qué día.
-const { addFavoriteTeacher, fetchClasses, fetchFavoriteTeachers } = vi.hoisted(() => ({
+const { addFavoriteTeacher, cancelBooking, fetchBookings, fetchFavoriteTeachers } = vi.hoisted(() => ({
   addFavoriteTeacher: vi.fn(() => Promise.resolve(null)),
-  fetchClasses: vi.fn(),
+  cancelBooking: vi.fn(),
+  fetchBookings: vi.fn(),
   // Salvo en sus tests, el alumno no tiene favoritos.
   fetchFavoriteTeachers: vi.fn(() => Promise.resolve([])),
 }))
 
 vi.mock('../../api/client.js', () => ({
   addFavoriteTeacher,
+  cancelBooking,
   classFileUrl: () => '',
-  fetchClasses,
+  fetchBookings,
   // El detalle de una clase que ya terminó pide su material.
   fetchClassMaterial: vi.fn(() => Promise.resolve({ summary: '', updatedAt: null, files: [] })),
   fetchFavoriteTeachers,
@@ -32,7 +34,7 @@ const today = new Date()
 
 // El calendario es "mis clases": muestra todo lo que no está cancelado.
 function classOn(iso, overrides = {}) {
-  return apiClass({
+  return apiBooking({
     id: `c-${iso}`,
     date: iso,
     startTime: '09:00',
@@ -45,8 +47,8 @@ function classOn(iso, overrides = {}) {
 
 describe('CalendarPage', () => {
   beforeEach(() => {
-    fetchClasses.mockReset()
-    fetchClasses.mockResolvedValue([])
+    fetchBookings.mockReset()
+    fetchBookings.mockResolvedValue([])
   })
 
   it('muestra el mes actual', async () => {
@@ -56,8 +58,8 @@ describe('CalendarPage', () => {
 
   it('pide las clases del rango que abarca la grilla', async () => {
     render(<CalendarPage />)
-    await waitFor(() => expect(fetchClasses).toHaveBeenCalled())
-    const { from, to } = fetchClasses.mock.calls[0][0]
+    await waitFor(() => expect(fetchBookings).toHaveBeenCalled())
+    const { from, to } = fetchBookings.mock.calls[0][0]
     expect(from).toMatch(/^\d{4}-\d{2}-\d{2}$/)
     expect(to).toMatch(/^\d{4}-\d{2}-\d{2}$/)
     expect(from < to).toBe(true)
@@ -65,7 +67,7 @@ describe('CalendarPage', () => {
 
   it('lista las clases del día seleccionado (hoy, por defecto)', async () => {
     const iso = toISODate(today)
-    fetchClasses.mockResolvedValue([
+    fetchBookings.mockResolvedValue([
       classOn(iso, { startTime: '16:30', endTime: '17:30', subjectName: 'Programación' }),
     ])
 
@@ -81,7 +83,7 @@ describe('CalendarPage', () => {
 
   it('muestra al docente cuando se mira como alumno', async () => {
     const iso = toISODate(today)
-    fetchClasses.mockResolvedValue([
+    fetchBookings.mockResolvedValue([
       classOn(iso, { teacherName: 'Laura Gómez', studentName: 'Sofía Ramírez' }),
     ])
 
@@ -93,7 +95,7 @@ describe('CalendarPage', () => {
 
   it('el alumno puede marcar como favorito al docente de una clase', async () => {
     const iso = toISODate(today)
-    fetchClasses.mockResolvedValue([
+    fetchBookings.mockResolvedValue([
       classOn(iso, { teacherId: 't1', teacherName: 'Laura Gómez' }),
     ])
 
@@ -110,7 +112,7 @@ describe('CalendarPage', () => {
 
   it('el corazón arranca lleno si el docente ya es favorito', async () => {
     const iso = toISODate(today)
-    fetchClasses.mockResolvedValue([classOn(iso, { teacherId: 't1', teacherName: 'Laura Gómez' })])
+    fetchBookings.mockResolvedValue([classOn(iso, { teacherId: 't1', teacherName: 'Laura Gómez' })])
     fetchFavoriteTeachers.mockResolvedValueOnce([
       { id: 't1', nombre: 'Laura', apellido: 'Gómez', subjects: [] },
     ])
@@ -124,7 +126,7 @@ describe('CalendarPage', () => {
 
   it('el docente no ve corazones', async () => {
     const iso = toISODate(today)
-    fetchClasses.mockResolvedValue([classOn(iso, { studentName: 'Sofía Ramírez' })])
+    fetchBookings.mockResolvedValue([classOn(iso, { studentName: 'Sofía Ramírez' })])
 
     render(<CalendarPage viewRole="teacher" />)
 
@@ -134,7 +136,7 @@ describe('CalendarPage', () => {
 
   it('el docente ve al alumno en el detalle de la clase, no en la tarjeta', async () => {
     const iso = toISODate(addDays(today, 1))
-    fetchClasses.mockResolvedValue([
+    fetchBookings.mockResolvedValue([
       classOn(iso, { teacherName: 'Laura Gómez', studentName: 'Sofía Ramírez' }),
     ])
 
@@ -150,13 +152,13 @@ describe('CalendarPage', () => {
 
   it('pide todas las clases, no un solo estado', async () => {
     render(<CalendarPage />)
-    await waitFor(() => expect(fetchClasses).toHaveBeenCalled())
-    expect(fetchClasses.mock.calls[0][0].status).toBeUndefined()
+    await waitFor(() => expect(fetchBookings).toHaveBeenCalled())
+    expect(fetchBookings.mock.calls[0][0].status).toBeUndefined()
   })
 
   it('no muestra las canceladas', async () => {
     const iso = toISODate(today)
-    fetchClasses.mockResolvedValue([
+    fetchBookings.mockResolvedValue([
       classOn(iso, { status: 'cancelada', subjectName: 'Fantasma' }),
     ])
 
@@ -168,7 +170,7 @@ describe('CalendarPage', () => {
 
   it('muestra el estado de cada clase, pendientes incluidas', async () => {
     const iso = toISODate(today)
-    fetchClasses.mockResolvedValue([classOn(iso, { status: 'pendiente', subjectName: 'Química' })])
+    fetchBookings.mockResolvedValue([classOn(iso, { status: 'pendiente', subjectName: 'Química' })])
 
     render(<CalendarPage />)
 
@@ -177,7 +179,7 @@ describe('CalendarPage', () => {
   })
 
   it('al docente le avisa cuántas solicitudes esperan respuesta', async () => {
-    fetchClasses.mockImplementation(({ status }) =>
+    fetchBookings.mockImplementation(({ status }) =>
       Promise.resolve(
         status === 'pendiente'
           ? [classOn('2099-01-01', { id: 'p1', status: 'pendiente' }), classOn('2099-01-02', { id: 'p2', status: 'pendiente' })]
@@ -187,13 +189,35 @@ describe('CalendarPage', () => {
 
     render(<CalendarPage viewRole="teacher" />)
 
-    expect(await screen.findByText(/Tenés 2 solicitudes de clase esperando respuesta/)).toBeInTheDocument()
+    expect(await screen.findByText(/Tenés 2 clases con solicitudes esperando respuesta/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Ver solicitudes' })).toHaveAttribute('href', '/reservas')
+  })
+
+  it('cuenta clases y no reservas: una grupal con tres pendientes es una solicitud', async () => {
+    // Bug: decía "3 solicitudes" mientras Mis reservas contaba 1 clase pendiente.
+    const grupal = { startTime: '10:00', maxStudents: 3, status: 'pendiente' }
+    fetchBookings.mockImplementation(({ status }) =>
+      Promise.resolve(
+        status === 'pendiente'
+          ? [
+              classOn('2099-01-01', { ...grupal, id: 'g1', studentId: 'a1' }),
+              classOn('2099-01-01', { ...grupal, id: 'g2', studentId: 'a2' }),
+              classOn('2099-01-01', { ...grupal, id: 'g3', studentId: 'a3' }),
+            ]
+          : [],
+      ),
+    )
+
+    render(<CalendarPage viewRole="teacher" />)
+
+    expect(
+      await screen.findByText(/Tenés 1 clase con solicitudes esperando respuesta/),
+    ).toBeInTheDocument()
   })
 
   it('defensivo: una clase sin alumno no rompe la vista de docente', async () => {
     const iso = toISODate(today)
-    fetchClasses.mockResolvedValue([classOn(iso, { studentName: null })])
+    fetchBookings.mockResolvedValue([classOn(iso, { studentName: null })])
 
     render(<CalendarPage viewRole="teacher" />)
 
@@ -203,7 +227,7 @@ describe('CalendarPage', () => {
   it('una grupal se ve una sola vez con todos sus alumnos', async () => {
     const iso = toISODate(today)
     const grupal = { teacherId: 't1', maxStudents: 4, subjectName: 'Física' }
-    fetchClasses.mockResolvedValue([
+    fetchBookings.mockResolvedValue([
       classOn(iso, { ...grupal, id: 'a', studentName: 'Sofía Ramírez' }),
       classOn(iso, { ...grupal, id: 'b', studentName: 'Tomás Díaz' }),
     ])
@@ -218,7 +242,7 @@ describe('CalendarPage', () => {
 
   it('una clase virtual trae el link para entrar', async () => {
     const iso = toISODate(today)
-    fetchClasses.mockResolvedValue([
+    fetchBookings.mockResolvedValue([
       classOn(iso, { modality: 'virtual', meetingUrl: 'https://meet.example.com/abc' }),
     ])
 
@@ -232,7 +256,7 @@ describe('CalendarPage', () => {
 
   it('una clase presencial reservada muestra la dirección exacta y la zona', async () => {
     const iso = toISODate(today)
-    fetchClasses.mockResolvedValue([
+    fetchBookings.mockResolvedValue([
       classOn(iso, {
         modality: 'in_person',
         meetingUrl: null,
@@ -249,7 +273,7 @@ describe('CalendarPage', () => {
 
   it('el alumno ve toda la información de la clase que reservó', async () => {
     const iso = toISODate(today)
-    fetchClasses.mockResolvedValue([
+    fetchBookings.mockResolvedValue([
       classOn(iso, {
         startTime: '10:00',
         endTime: '11:30',
@@ -284,7 +308,7 @@ describe('CalendarPage', () => {
 
   it('una individual dice individual, y una sin cargo lo dice', async () => {
     const iso = toISODate(today)
-    fetchClasses.mockResolvedValue([
+    fetchBookings.mockResolvedValue([
       classOn(iso, { modality: 'virtual', meetingUrl: 'https://x.com', maxStudents: 1, enrolled: 1, priceCents: 0 }),
     ])
 
@@ -296,7 +320,7 @@ describe('CalendarPage', () => {
 
   it('ordena las clases del día por hora', async () => {
     const iso = toISODate(today)
-    fetchClasses.mockResolvedValue([
+    fetchBookings.mockResolvedValue([
       classOn(iso, { id: 'tarde', startTime: '18:00', endTime: '19:00', subjectName: 'Química' }),
       classOn(iso, { id: 'temprano', startTime: '08:30', endTime: '09:30', subjectName: 'Física' }),
       classOn(iso, { id: 'medio', startTime: '14:00', endTime: '15:00', subjectName: 'Inglés' }),
@@ -313,7 +337,7 @@ describe('CalendarPage', () => {
 
   it('cuenta las clases del día en la celda', async () => {
     const iso = toISODate(today)
-    fetchClasses.mockResolvedValue([classOn(iso), classOn(iso, { id: 'otra', startTime: '14:00' })])
+    fetchBookings.mockResolvedValue([classOn(iso), classOn(iso, { id: 'otra', startTime: '14:00' })])
 
     render(<CalendarPage />)
 
@@ -334,8 +358,63 @@ describe('CalendarPage', () => {
   })
 
   it('muestra un cartel de error si falla la carga', async () => {
-    fetchClasses.mockRejectedValue(new Error('Se cayó todo.'))
+    fetchBookings.mockRejectedValue(new Error('Se cayó todo.'))
     render(<CalendarPage />)
     expect(await screen.findByRole('alert')).toHaveTextContent('Se cayó todo.')
+  })
+
+  it('si la sesión llega después y es de docente, pide el aviso de solicitudes', async () => {
+    fetchBookings.mockImplementation(({ status }) =>
+      Promise.resolve(status === 'pendiente' ? [classOn('2099-01-01', { status: 'pendiente' })] : []),
+    )
+
+    const { rerender } = render(<CalendarPage viewRole="student" />)
+    await screen.findByText('0 clases')
+    expect(screen.queryByText(/esperando respuesta/)).not.toBeInTheDocument()
+
+    rerender(
+      <MemoryRouter>
+        <CalendarPage viewRole="teacher" />
+      </MemoryRouter>,
+    )
+    expect(await screen.findByText(/Tenés 1 clase con solicitudes/)).toBeInTheDocument()
+
+    // Y si vuelve a ser alumno, el aviso se va.
+    rerender(
+      <MemoryRouter>
+        <CalendarPage viewRole="student" />
+      </MemoryRouter>,
+    )
+    await waitFor(() => expect(screen.queryByText(/esperando respuesta/)).not.toBeInTheDocument())
+  })
+
+  it('rechazar al primer alumno de una grupal no cierra el detalle', async () => {
+    const iso = toISODate(addDays(today, 2))
+    const grupal = { teacherId: 't1', maxStudents: 4, subjectName: 'Física', status: 'pendiente' }
+    // Ana va primera por nombre: es la que representaba a la clase.
+    const ana = classOn(iso, { ...grupal, id: 'a', studentName: 'Ana Pérez' })
+    const tomas = classOn(iso, { ...grupal, id: 'b', studentName: 'Tomás Díaz' })
+    fetchBookings.mockResolvedValue([tomas, ana])
+    cancelBooking.mockResolvedValue({ ...ana, status: 'cancelada', cancelReason: 'rechazada' })
+
+    render(<CalendarPage viewRole="teacher" />)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Física' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Ver alumnos' }))
+    const alumnos = screen.getByRole('dialog', { name: 'Alumnos' })
+    const deAna = within(alumnos).getByText('Ana Pérez').closest('li')
+    await userEvent.click(within(deAna).getByRole('button', { name: 'Rechazar' }))
+    await userEvent.click(within(deAna).getByRole('button', { name: 'Sí, rechazar' }))
+
+    expect(cancelBooking).toHaveBeenCalledWith('a')
+    // La clase sigue con Tomás: el detalle y los alumnos siguen abiertos.
+    await waitFor(() =>
+      expect(within(screen.getByRole('dialog', { name: 'Alumnos' })).getByText('Cancelada'))
+        .toBeInTheDocument(),
+    )
+    expect(screen.getByRole('dialog', { name: 'Física' })).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('dialog', { name: 'Alumnos' })).getByText('1 anotado · 0 pagaron'),
+    ).toBeInTheDocument()
   })
 })

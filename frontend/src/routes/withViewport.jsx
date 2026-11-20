@@ -15,6 +15,16 @@ import { matchesQuery, MOBILE_QUERY, watchQuery } from '../utils/media.js'
  * Es un HOC de clase, no un hook: los hooks viven solo en withRouter.jsx. En
  * jsdom no hay matchMedia, así que en los tests `mobile` es siempre false
  * (escritorio) salvo que se pase a mano.
+ *
+ * Origen: window.matchMedia(MOBILE_QUERY) vía matchesQuery/watchQuery de
+ * utils/media.js.
+ *
+ * @param {Component} Wrapped - el componente a envolver.
+ * @returns {Component} el envuelto, con `mobile: boolean` (una prop `mobile` explícita gana).
+ * Lo usan: components/NavBar.jsx, pages/Calendar/MonthPane.jsx,
+ * pages/Booking/BookingBoard.jsx, pages/Favorites/FavoritesPage.jsx,
+ * pages/Profile/ProfilePage.jsx, pages/Homework/HomeworkPage.jsx,
+ * pages/Availability/WeekCalendar.jsx, pages/Neuronas/NeuronasPage.jsx.
  */
 export default function withViewport(Wrapped) {
   class WithViewport extends Component {

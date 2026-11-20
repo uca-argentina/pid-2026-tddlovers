@@ -2,6 +2,12 @@ import { Component } from 'react'
 import FormField from './FormField.jsx'
 import { EyeIcon, EyeOffIcon } from './icons.jsx'
 
+/**
+ * Campo de contraseña con el botón del ojo para mostrarla u ocultarla. Es un
+ * FormField con ese botón en `rightSlot`. Lo usan LoginPage y StepAccount.
+ * Props: label, value, onChange, onBlur, touched, error, hint, autoComplete.
+ * Estado: visible (si se ve el texto).
+ */
 class PasswordInput extends Component {
   state = {
     visible: false,

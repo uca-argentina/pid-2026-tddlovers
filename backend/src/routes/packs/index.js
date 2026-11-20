@@ -2,11 +2,25 @@ import { buyPack, findOfferById, listOffers, listStudentPacks } from '../../db/p
 import { StudentPack, expiryFor } from '../../lib/classPacks.js';
 import { TeacherApproval } from '../../lib/teacherApproval.js';
 import { todayIso } from '../../lib/clock.js';
+import { isUuid } from '../../lib/validators.js';
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Montado en /api/packs (app.js). Las rutas del docente (/api/teachers/me/packs)
+// están en routes/teachers.
+//   GET  /api/packs[?teacherId]  con sesión (cualquier rol)
+//   GET  /api/packs/mine         solo student
+//   POST /api/packs/:id/buy      solo student (CSRF)
+// Usa: db/packs.js, lib/classPacks.js (StudentPack, expiryFor) y lib/teacherApproval.js.
+// Los errores salen como { message } (+ `fields` en validaciones); no hay código `error`.
+
 const NOT_FOUND = 'Ese paquete no existe.';
 
-/** El paquete comprado como viaja por la API: la fila más las cuentas. */
+/**
+ * El paquete comprado como viaja por la API: la fila más las cuentas.
+ *
+ * @param {object} row - fila de listStudentPacks / buyPack.
+ * @param {string} today - todayIso().
+ * @returns {object} la fila + StudentPack#summary (remaining, available, si venció…).
+ */
 function withSummary(row, today) {
   return { ...row, ...new StudentPack(row).summary(today) };
 }
@@ -24,10 +38,12 @@ export default async function packsRoutes(app) {
   /**
    * Los paquetes que se pueden comprar (de docentes aprobados), o solo los de
    * `?teacherId=`. Cualquiera con sesión los puede ver.
+   *
+   * Respuesta: 200 [filas de listOffers]. Errores: 400 teacherId no UUID.
    */
   app.get('/', { onRequest: app.requireAuth }, async (request, reply) => {
     const { teacherId } = request.query ?? {};
-    if (teacherId !== undefined && !UUID_RE.test(teacherId)) {
+    if (teacherId !== undefined && !isUuid(teacherId)) {
       return reply.code(400).send({ message: 'Docente inválido' });
     }
     return reply.send(await listOffers({ teacherId }));
@@ -38,6 +54,8 @@ export default async function packsRoutes(app) {
    * (`remaining`: cada asistencia descuenta una), cuántas puede reservar
    * todavía (`available`) y si venció. Sale de la sesión: nadie ve los
    * paquetes de otro.
+   *
+   * Respuesta: 200 [withSummary(fila)]. Errores: 403 no alumno.
    */
   app.get(
     '/mine',
@@ -52,13 +70,16 @@ export default async function packsRoutes(app) {
   /**
    * Comprar un paquete. Nada se cobra de verdad (igual que pagar una clase):
    * queda registrado, con la fecha de vencimiento contada desde hoy.
+   *
+   * Respuesta: 201 withSummary(paquete comprado). Errores: 403 no alumno o
+   *   docente no aprobado (bookingProblem), 404 no existe, 409 ya no se ofrece.
    */
   app.post(
     '/:id/buy',
     { onRequest: [app.requireAuth, app.csrfProtection], preHandler: onlyStudents },
     async (request, reply) => {
       const { id } = request.params;
-      if (!UUID_RE.test(id)) return reply.code(404).send({ message: NOT_FOUND });
+      if (!isUuid(id)) return reply.code(404).send({ message: NOT_FOUND });
 
       const offer = await findOfferById(id);
       if (!offer) return reply.code(404).send({ message: NOT_FOUND });

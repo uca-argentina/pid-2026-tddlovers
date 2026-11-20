@@ -20,6 +20,16 @@ import './FavoritesPage.css'
  *
  * En el teléfono no es una pestaña: se llega desde el Perfil, así que arriba
  * va el "‹ Perfil" de iOS para volver.
+ *
+ * Ruta /favoritos (alumno; otro rol ve la lista vacía). No usa withFavorites:
+ * pide la lista completa (con nombre y materias), no solo los ids.
+ *
+ * Props: viewRole (de App), mobile (de withViewport).
+ *
+ * Datos: fetchFavoriteTeachers → GET /api/favorites, al montar y al cambiar
+ * viewRole. Sacar uno lo hace FavoriteButton (DELETE /api/favorites/:id).
+ *
+ * Estado: teachers (de GET /api/favorites), loading, error.
  */
 class FavoritesPage extends Component {
   state = {
@@ -42,6 +52,13 @@ class FavoritesPage extends Component {
     this.fetchToken += 1
   }
 
+  /**
+   * Trae los favoritos del alumno (GET /api/favorites) → `teachers`.
+   *
+   * FILTRO: solo para alumnos (regla de pantalla) y solo los docentes
+   * aprobados: los que dejaron de estarlo no vienen (regla del backend,
+   * listFavoriteTeachers en backend/src/db/favorites.js).
+   */
   load() {
     const token = ++this.fetchToken
     if (this.props.viewRole !== 'student') {

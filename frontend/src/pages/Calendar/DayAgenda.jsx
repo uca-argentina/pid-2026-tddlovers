@@ -1,19 +1,15 @@
 import { Component, createRef } from 'react'
-import ClassActions from '../../components/ClassActions.jsx'
+import BookingActions from '../../components/BookingActions.jsx'
 import ClassDetailDialog from '../../components/ClassDetailDialog.jsx'
-import TurnActions from '../../components/TurnActions.jsx'
+import ClassActions from '../../components/ClassActions.jsx'
 import FavoriteButton from '../../components/FavoriteButton.jsx'
 import { ClockIcon, PinIcon, SpinnerIcon, UsersIcon, VideoIcon } from '../../components/icons.jsx'
 import { formatRangeLabel } from '../../utils/availability.js'
 import { formatDayLong, formatDuration, fromISODate, toISODate } from '../../utils/calendar.js'
 import { isFavorite } from '../../utils/favorites.js'
 import { formatMoney } from '../../utils/rates.js'
-import {
-  capacityLabel,
-  modalityLabel,
-  needsAddress,
-  needsMeetingUrl,
-} from '../../utils/windows.js'
+import { classCapacityLabel, classPriceLabel } from '../../utils/reservations.js'
+import { modalityLabel, needsAddress, needsMeetingUrl } from '../../utils/windows.js'
 import './DayAgenda.css'
 
 /**
@@ -31,18 +27,37 @@ import './DayAgenda.css'
  * solo si es individual o grupal y cuántos van: a los alumnos los ve en el
  * detalle. Sin fetch propio: los datos bajan por props.
  *
- * Acá llega todo lo que no está cancelado (CalendarPage lo filtra), así que
- * cada clase muestra su estado y los botones rápidos (aceptar, pagar,
- * cancelar...). Para el docente esos botones actúan sobre la clase entera
- * (TurnActions); decidir alumno por alumno va en el detalle.
+ * Acá llega cada clase que sigue en pie (CalendarPage lo arma con
+ * groupClasses): la reserva que lo representa, con `classKey` y todas las del
+ * clase en `rows`. Cada clase muestra su estado y los botones rápidos
+ * (aceptar, pagar, cancelar...). Para el docente esos botones actúan sobre la clase entera
+ * (ClassActions); decidir alumno por alumno va en el detalle.
  *
  * Tocar una clase abre su detalle (ClassDetailDialog, el mismo de Mis
  * reservas): ahí se toma lista y se carga el material, no en la tarjeta.
+ *
+ * Rol: docente y alumno. Lo renderiza CalendarPage en su columna lateral.
+ *
+ * Props (de CalendarPage):
+ *   - classesByDate: { "YYYY-MM-DD": [clase, …] } de getClassesByDate (clases
+ *     de GET /api/bookings agrupadas con groupClasses; cada una con classKey y rows).
+ *   - selectedIso: día elegido en el calendario (se scrollea hasta él).
+ *   - loading: si CalendarPage está pidiendo el rango.
+ *   - viewRole: 'teacher' | 'student'.
+ *   - favoriteIds, onFavoriteChange, onFavoriteError: de withFavorites vía
+ *     CalendarPage.
+ *   - onClassChange(updated): CalendarPage reemplaza esa reserva en su state;
+ *     se pasa a BookingActions/ClassActions/ClassDetailDialog.
+ *
+ * Estado: detailKey, el classKey de la clase abierta en ClassDetailDialog.
  */
 class DayAgenda extends Component {
-  // La reserva abierta en detalle (su id); se busca en cada render para
-  // mostrar siempre la versión que mandó CalendarPage después de un cambio.
-  state = { detailId: null }
+  // La clase abierto en detalle (su classKey), y no el id de una reserva: si
+  // el docente rechaza desde "Ver alumnos" justo a la reserva que lo
+  // representaba, la clase sigue con los demás y el detalle no se tiene que
+  // cerrar. Se busca en cada render para mostrar la versión que mandó
+  // CalendarPage después de un cambio.
+  state = { detailKey: null }
 
   handleItemClick = (item) => (event) => {
     // Los clicks de adentro de un portal (el diálogo de cancelar) también
@@ -55,22 +70,18 @@ class DayAgenda extends Component {
   handleOpenItem = (item) => () => this.openItem(item)
 
   openItem(item) {
-    const rows = item.rows && item.rows.length > 0 ? item.rows : [item]
-    this.setState({ detailId: rows[0].id })
+    this.setState({ detailKey: item.classKey })
   }
 
-  handleCloseDetail = () => this.setState({ detailId: null })
+  handleCloseDetail = () => this.setState({ detailKey: null })
 
-  /** La reserva abierta y las de su turno, de lo que hay cargado ahora. */
+  /** La clase abierto, de lo que hay cargado ahora (null si ya no está). */
   findDetail() {
-    const { detailId } = this.state
-    if (!detailId) return null
+    const { detailKey } = this.state
+    if (!detailKey) return null
     for (const lista of Object.values(this.props.classesByDate)) {
-      for (const item of lista) {
-        const rows = item.rows && item.rows.length > 0 ? item.rows : [item]
-        const cls = rows.find((row) => String(row.id) === String(detailId))
-        if (cls) return { cls, rows }
-      }
+      const item = lista.find((clase) => clase.classKey === detailKey)
+      if (item) return item
     }
     return null
   }
@@ -80,29 +91,13 @@ class DayAgenda extends Component {
     if (!detail) return null
     return (
       <ClassDetailDialog
-        cls={detail.cls}
-        classes={detail.rows}
+        cls={detail}
+        bookings={detail.rows}
         viewRole={this.props.viewRole}
         onClose={this.handleCloseDetail}
         onChange={this.props.onClassChange}
       />
     )
-  }
-
-  /**
-   * La pastilla de arriba a la derecha, como en las tarjetas de Reservar. En
-   * una grupal dice cuántos van: el alumno no ve quiénes, el docente sí (en
-   * la línea de abajo).
-   */
-  getCapacity(item) {
-    if (item.maxStudents <= 1) return capacityLabel(item.maxStudents)
-    const anotados =
-      this.props.viewRole === 'teacher'
-        ? (item.students || []).filter(Boolean).length
-        : item.enrolled
-    return anotados
-      ? `Grupal · ${anotados} de ${item.maxStudents}`
-      : capacityLabel(item.maxStudents)
   }
 
   /**
@@ -113,7 +108,8 @@ class DayAgenda extends Component {
   renderPlace(item) {
     const link = needsMeetingUrl(item.modality) && item.meetingUrl
     const direccion = needsAddress(item.modality) && item.address
-    // El alumno ve la dirección exacta recién cuando pagó: el backend no la
+    // FILTRO: el alumno ve la dirección exacta recién cuando pagó. Regla del
+    // backend (canSeeExactAddress en backend/src/lib/bookingStates.js): no la
     // manda antes. Hasta entonces, la localidad y el aviso.
     const sinPagar = needsAddress(item.modality) && !item.address && item.locality
     const modalidad = <span className="day-agenda-modality">{modalityLabel(item.modality)}</span>
@@ -186,18 +182,20 @@ class DayAgenda extends Component {
 
   /**
    * El estado y los botones. El docente actúa sobre la clase entera (en una
-   * grupal, todas las reservas del turno); el alumno, sobre la suya.
+   * grupal, todas las reservas de la clase); el alumno, sobre la suya.
    */
   renderActions(item) {
     const { viewRole, onClassChange } = this.props
-    const rows = item.rows && item.rows.length > 0 ? item.rows : [item]
-    if (viewRole === 'teacher') return <TurnActions rows={rows} onChange={onClassChange} />
+    if (viewRole === 'teacher') return <ClassActions rows={item.rows} onChange={onClassChange} />
     return (
-      <ClassActions cls={item} viewRole={viewRole} exclude={['attend']} onChange={onClassChange} />
+      <BookingActions booking={item} viewRole={viewRole} exclude={['attend']} onChange={onClassChange} />
     )
   }
 
-  /** El corazón del docente, solo para el alumno (favoriteIds null = no hay). */
+  /**
+   * FILTRO: el corazón del docente, solo para el alumno (regla de pantalla;
+   * favoriteIds null = no hay).
+   */
   renderFavorite(item) {
     const { viewRole, favoriteIds, onFavoriteChange, onFavoriteError } = this.props
     if (viewRole !== 'student' || !favoriteIds) return null
@@ -223,7 +221,7 @@ class DayAgenda extends Component {
     const alumno = this.props.viewRole !== 'teacher'
 
     return (
-      <li key={item.id} className="day-agenda-item" onClick={this.handleItemClick(item)}>
+      <li key={item.classKey} className="day-agenda-item" onClick={this.handleItemClick(item)}>
         <div className="day-agenda-head">
           {/* Un botón de verdad para abrir el detalle con teclado: el <li>
               con onClick es para el dedo. */}
@@ -232,7 +230,7 @@ class DayAgenda extends Component {
           </button>
           <span className={`day-agenda-kind ${grupal ? 'is-group' : ''}`}>
             <UsersIcon />
-            {this.getCapacity(item)}
+            {classCapacityLabel(item, item.rows, this.props.viewRole)}
           </span>
         </div>
         {alumno ? (
@@ -261,8 +259,11 @@ class DayAgenda extends Component {
           {this.renderPlace(item)}
         </ul>
 
-        {/* En centavos, calculado al reservar (tarifa × duración). */}
-        <p className="day-agenda-price">{formatMoney(item.priceCents)}</p>
+        {/* En centavos, calculado al reservar (tarifa × duración). En una
+            grupal el docente tiene un precio por alumno: el monto o el rango. */}
+        <p className="day-agenda-price">
+          {grupal && !alumno ? `${classPriceLabel(item.rows)} c/u` : formatMoney(item.priceCents)}
+        </p>
         {this.renderActions(item)}
       </li>
     )
@@ -327,8 +328,9 @@ class DayAgenda extends Component {
   }
 
   /**
-   * Los días que van en la lista, en orden: los que tienen clases, más el
-   * elegido aunque esté vacío.
+   * FILTRO: los días que van en la lista, en orden: los que tienen clases,
+   * más el elegido aunque esté vacío (regla de pantalla; elegir un día no
+   * filtra, solo scrollea).
    */
   getDays() {
     const { classesByDate, selectedIso } = this.props
@@ -394,7 +396,8 @@ class DayAgenda extends Component {
 }
 
 DayAgenda.defaultProps = {
-  // { 'YYYY-MM-DD': [clase, ...] }, cada día ya ordenado por hora.
+  // { 'YYYY-MM-DD': [clase, ...] }, cada día ya ordenado por hora. Cada clase
+  // es la reserva que representa a la clase, más `classKey` y `rows`.
   classesByDate: {},
   selectedIso: null,
   loading: false,

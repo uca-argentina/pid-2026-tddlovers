@@ -6,7 +6,16 @@
 // Van con el mismo guard que prefersDark() en theme.js: jsdom NO implementa
 // window.matchMedia —ni siquiera un stub—, así que sin esto todos los tests
 // que monten el scheduler se caen con "matchMedia is not a function".
+//
+// Lo usan: routes/withViewport.jsx (la prop `mobile`) y components/Modal.jsx.
 
+/**
+ * Si la media query se cumple ahora. false si no hay matchMedia (jsdom).
+ *
+ * @param {string} query - p. ej. MOBILE_QUERY.
+ * @returns {boolean}
+ * Lo usan: routes/withViewport.jsx, components/Modal.jsx.
+ */
 export function matchesQuery(query) {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
     return false
@@ -18,6 +27,11 @@ export function matchesQuery(query) {
  * Avisa cuando la consulta pasa a cumplirse o a no cumplirse. Devuelve una
  * función para desuscribirse, o null si el navegador no sabe contestar — así
  * quien lo use puede escribir `this.unwatch?.()` sin preguntar nada.
+ *
+ * @param {string} query - la media query.
+ * @param {(matches: boolean) => void} handler - se llama en cada cambio.
+ * @returns {(() => void)|null}
+ * Lo usa: routes/withViewport.jsx.
  */
 export function watchQuery(query, handler) {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
