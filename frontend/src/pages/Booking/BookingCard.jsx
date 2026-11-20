@@ -23,6 +23,13 @@ import { capacityLabel, modalityLabel, needsAddress } from '../../utils/windows.
  *
  * Los estilos están en BookingResults.css: fuera de la lista no significan
  * nada (misma excepción que DayCell con MonthGrid.css).
+ *
+ * Props (de BookingResults):
+ *   - card: una fila de GET /api/availability anotada por annotateClashes.
+ *   - pack: resumen del paquete del alumno con ese docente (packSummaryWith), o null.
+ *   - favorite / showFavorite: si el docente es favorito y si mostrar el corazón.
+ *   - onFavoriteChange, onFavoriteError: para FavoriteButton (de withFavorites).
+ *   - onReservar: onClick del botón "Reservar" (abre BookingDialog).
  */
 class BookingCard extends Component {
   getGroupsWithRoom() {

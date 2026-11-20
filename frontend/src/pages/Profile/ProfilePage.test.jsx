@@ -163,8 +163,8 @@ describe('ProfilePage', () => {
   })
 
   it('pasar de alumno a docente trae el catálogo que no se pidió', async () => {
-    // El interruptor de rol cambia la prop SIN desmontar la pantalla, así que
-    // la carga que nos ahorramos al montar hay que dispararla acá.
+    // Si el rol cambia SIN desmontar la pantalla, la carga que nos ahorramos
+    // al montar hay que dispararla acá.
     const { rerender } = render(
       <MemoryRouter>
         <ProfilePage user={user} viewRole="student" />
@@ -367,19 +367,6 @@ describe('ProfilePage', () => {
     fetchSubjects.mockRejectedValue(new Error('No hay materias.'))
     renderProfile({ viewRole: 'teacher' })
     expect(await screen.findByRole('alert')).toHaveTextContent('No hay materias.')
-  })
-
-  it('avisa cuando el rol que se mira no es el de la cuenta', async () => {
-    // El interruptor de rol es un andamio: sin este aviso parecería un error
-    // de datos.
-    const desalineado = renderProfile({ user: { ...user, role: 'student' }, viewRole: 'teacher' })
-    await esperarMaterias()
-    expect(screen.getByText(/pero tu cuenta es de alumno/)).toBeInTheDocument()
-    desalineado.unmount()
-
-    renderProfile({ user: { ...user, role: 'teacher' }, viewRole: 'teacher' })
-    await esperarMaterias()
-    expect(screen.queryByText(/pero tu cuenta/)).not.toBeInTheDocument()
   })
 
   it('tiene un botón para cerrar sesión que lleva al login', async () => {

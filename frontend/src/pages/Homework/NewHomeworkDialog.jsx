@@ -13,6 +13,20 @@ import { homeworkEarns } from '../../utils/neuronas.js'
  * alumnos y las grupales del docente: el backend no acepta otros.
  *
  * En una grupal, la tarea les llega a los anotados en este momento.
+ *
+ * Rol: docente. Lo abre HomeworkPage ("Nueva tarea").
+ *
+ * Props (de HomeworkPage): now (inyectable para tests), onCreated(tarea
+ * creada) y onClose().
+ *
+ * Datos (api/client.js):
+ *   - fetchHomeworkTargets → GET /api/homework/targets al montar: { students,
+ *     groups }, los destinos posibles.
+ *   - createHomework → POST /api/homework al guardar, con { title,
+ *     description, dueDate, dueTime } y studentId o classId.
+ *
+ * Estado: students/groups (de /targets), loading, kind ('student' | grupal),
+ * studentId/classId elegido, los campos del formulario, saving y error.
  */
 class NewHomeworkDialog extends Component {
   state = {
@@ -63,6 +77,7 @@ class NewHomeworkDialog extends Component {
     return Boolean(destino && title.trim() && dueDate && dueTime && !saving)
   }
 
+  /** Crea la tarea (POST /api/homework) y le pasa la respuesta a onCreated. */
   handleSubmit = (event) => {
     event.preventDefault()
     if (!this.canSave()) return

@@ -21,6 +21,10 @@ const SWIPE_THRESHOLD = 50
  * Con `expandable`, un botón "Mes" cambia los días por `children` (la grilla
  * del mes): mientras está desplegada, las flechas mueven de a un mes. Eso lo
  * decide quien la usa, que es el que sabe qué es "anterior".
+ *
+ * Props: days, selectedIso, onSelect(iso), onPrev/onNext, title/year,
+ * markedLabel/mutedLabel, tone, expandable/expanded, children, entre otras
+ * (ver los <WeekStrip> de MonthPane y WeekCalendar).
  */
 class WeekStrip extends Component {
   swipeStart = null

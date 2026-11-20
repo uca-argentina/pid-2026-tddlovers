@@ -47,6 +47,25 @@ function parseIntField(text) {
  * clases del paquete usa; lo que se pase de lo que cubren lo paga aparte.
  * Cada asistencia descuenta las clases del paquete que usó. Nada se cobra de
  * verdad: comprar solo lo registra, como pagar una clase.
+ *
+ * Ruta /paquetes. Props (de App): viewRole ('teacher' | 'student'; un admin
+ * ve la del alumno) y user (sesión, o null → cartel de login).
+ *
+ * Datos (api/client.js), al montar y al cambiar viewRole/user:
+ *   - Docente: fetchMyPackOffers → GET /api/teachers/me/packs.
+ *     Crear: createPackOffer → POST /api/teachers/me/packs.
+ *     Dejar de ofrecer: deletePackOffer → DELETE /api/teachers/me/packs/:id.
+ *   - Alumno: fetchMyPacks → GET /api/packs/mine y fetchPackOffers →
+ *     GET /api/packs (paquetes de docentes aprobados).
+ *     Comprar: buyPack → POST /api/packs/:id/buy.
+ *
+ * Estado:
+ *   - loading / error: de la carga inicial.
+ *   - Docente: offers (GET /api/teachers/me/packs), form (texto tal cual,
+ *     EMPTY_FORM), touched, saving/saveError, removing (id en baja).
+ *   - Alumno: myPacks (GET /api/packs/mine, con remaining/expired…), catalog
+ *     (GET /api/packs), buying (oferta en el modal de compra), buyBusy,
+ *     buyError, bought (el paquete recién comprado, para el cartel).
  */
 class PacksPage extends Component {
   state = {
@@ -88,6 +107,11 @@ class PacksPage extends Component {
     return this.props.viewRole === 'teacher'
   }
 
+  /**
+   * Carga según el rol: el docente sus ofertas (GET /api/teachers/me/packs)
+   * → `offers`; el alumno sus paquetes (GET /api/packs/mine) y el catálogo
+   * (GET /api/packs) → `myPacks` y `catalog`. Sin usuario no pide nada.
+   */
   load = () => {
     if (!this.props.user) {
       this.setState({ loading: false })
@@ -155,6 +179,11 @@ class PacksPage extends Component {
     this.setState((prev) => ({ touched: { ...prev.touched, [field]: true } }))
   }
 
+  /**
+   * Valida el formulario (getFormErrors) y crea la oferta con
+   * createPackOffer → POST /api/teachers/me/packs (precio en centavos con
+   * parseMoney). La oferta devuelta se agrega a `offers`.
+   */
   handleCreate = (event) => {
     event.preventDefault()
     if (this.state.saving) return
@@ -190,6 +219,7 @@ class PacksPage extends Component {
       })
   }
 
+  /** Desactiva una oferta (DELETE /api/teachers/me/packs/:id) y la saca de `offers`. */
   handleRemove = (offer) => () => {
     if (this.state.removing) return
     this.setState({ removing: offer.id, error: null })
@@ -319,6 +349,11 @@ class PacksPage extends Component {
     if (!this.state.buyBusy) this.setState({ buying: null })
   }
 
+  /**
+   * Compra la oferta abierta en el modal (`buying`) con buyPack →
+   * POST /api/packs/:id/buy; el paquete devuelto va primero en `myPacks` y
+   * queda en `bought` para el cartel. No se cobra nada.
+   */
   handleBuy = () => {
     const { buying, buyBusy } = this.state
     if (!buying || buyBusy) return

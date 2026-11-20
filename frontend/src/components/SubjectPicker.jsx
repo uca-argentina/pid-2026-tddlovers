@@ -2,6 +2,11 @@ import { Component } from 'react'
 import { CheckIcon, SearchIcon } from './icons.jsx'
 import './SubjectPicker.css'
 
+/**
+ * Chips de materias con un buscador arriba, para elegir varias. Lo usa
+ * StepSubjects en el registro. Props: subjects (GET /api/subjects),
+ * selectedIds y onToggle(id). Estado: query (texto del buscador, filtra local).
+ */
 class SubjectPicker extends Component {
   state = {
     query: '',

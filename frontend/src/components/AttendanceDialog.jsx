@@ -17,6 +17,11 @@ import './AttendanceDialog.css'
  * (corregir es la misma acción). `rows` son las reservas a las que se les
  * puede tomar lista (allowedActions 'attend'); cada cambio sale por
  * onChange(reserva).
+ *
+ * Rol: docente. Props (de ClassDetailDialog): rows, onChange y onClose.
+ * Datos: markAttendance → POST /api/classes/:id/attendance con
+ * { attended }, una reserva a la vez (también para "Todos presentes").
+ * Estado: busy (id en vuelo o 'all') y error.
  */
 class AttendanceDialog extends Component {
   state = {
@@ -25,6 +30,11 @@ class AttendanceDialog extends Component {
     error: null,
   }
 
+  /**
+   * Marca presente/ausente (`attended`) a cada reserva de `rows`, en serie,
+   * con markAttendance, y le pasa cada reserva devuelta a onChange. `busy`
+   * es lo que se muestra como en vuelo (un id o 'all').
+   */
   async mark(rows, attended, busy) {
     if (this.state.busy) return
     this.setState({ busy, error: null })

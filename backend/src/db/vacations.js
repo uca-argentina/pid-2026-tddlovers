@@ -1,7 +1,15 @@
 import { getPool } from './pool.js';
 
-// Las vacaciones del docente. Las reglas (qué rango vale, si un día cae
-// adentro) viven en lib/vacations.js; acá se lee y se escribe.
+// Las vacaciones del docente (en pantalla, "Licencia"). Las reglas (qué
+// rango vale, si un día cae adentro) viven en lib/vacations.js; acá se lee y
+// se escribe.
+//
+// Tablas: teacher_vacations (migración 016, con exclusion constraint para que
+// los rangos de un docente no se pisen); classes (cancela las del rango).
+// Locks: 'vacations:' || teacherId EXCLUSIVO en createVacation; las reservas
+// (db/classes.js lockTeacherVacations) lo toman compartido.
+// Lo usan: routes/teachers (/me/vacations), routes/availability
+// (listVacationsInRange), routes/classes y db/classes.js (isTeacherOnVacation).
 
 const VACATION_COLUMNS = `
   v.id,
@@ -23,6 +31,12 @@ const CANCELLABLE = (teacher, from, to, nowIso, nowTime) => `
 /**
  * Las vacaciones del docente que todavía no terminaron (las pasadas ya no
  * bloquean nada), en orden.
+ *
+ * @param {string} teacherId - request.user.id.
+ * @param {{today: string}} opciones - todayIso() de lib/clock.js.
+ * @returns {Promise<Array<{id, teacherId, startDate, endDate}>>} (VACATION_COLUMNS).
+ * Origen: teacher_vacations.
+ * Lo usa: routes/teachers/index.js (GET /me/vacations).
  */
 export async function listTeacherVacations(teacherId, { today }) {
   const result = await getPool().query(
@@ -38,6 +52,11 @@ export async function listTeacherVacations(teacherId, { today }) {
 /**
  * Las vacaciones de cualquier docente que tocan el rango. NO va a una ruta
  * tal cual: la usa el tablero del alumno para marcar las ventanas.
+ *
+ * @param {{from: string, to: string}} rango - query de GET /api/availability.
+ * @returns {Promise<Array<{id, teacherId, startDate, endDate}>>}
+ * Origen: teacher_vacations.
+ * Lo usa: routes/availability/index.js (se le pasa a expandAvailability).
  */
 export async function listVacationsInRange({ from, to }) {
   const result = await getPool().query(
@@ -49,9 +68,20 @@ export async function listVacationsInRange({ from, to }) {
   return result.rows;
 }
 
-/** ¿Está de vacaciones ese día? Para rechazar una reserva aunque la UI se saltee. */
-export async function isTeacherOnVacation(teacherId, date) {
-  const result = await getPool().query(
+/**
+ * ¿Está de vacaciones ese día? Para rechazar una reserva aunque la UI se
+ * saltee. `client` deja usarla adentro de la transacción de una reserva, que
+ * es donde el chequeo vale de verdad (ver bookClass en db/classes.js).
+ *
+ * @param {string} teacherId - el docente de la ventana (findWindowById).
+ * @param {string} date - 'YYYY-MM-DD' de la reserva (body.date).
+ * @param {pg.Pool|pg.PoolClient} [client] - por defecto el pool.
+ * @returns {Promise<boolean>}
+ * Origen: teacher_vacations.
+ * Lo usan: routes/classes/index.js (checkWindowSlot) y db/classes.js (insertClass).
+ */
+export async function isTeacherOnVacation(teacherId, date, client = getPool()) {
+  const result = await client.query(
     `SELECT 1 FROM teacher_vacations
      WHERE teacher_id = $1 AND $2::date BETWEEN start_date AND end_date
      LIMIT 1`,
@@ -63,6 +93,14 @@ export async function isTeacherOnVacation(teacherId, date) {
 /**
  * Cuántas reservas se cancelarían con esas vacaciones, para avisarle al
  * docente antes de guardar.
+ *
+ * @param {string} teacherId - request.user.id.
+ * @param {{startDate: string, endDate: string}} rango - query de
+ *   GET /api/teachers/me/vacations/impact, validado por VacationRange.validate.
+ * @param {{iso: string, time: string}} ahora - now() de lib/clock.js.
+ * @returns {Promise<number>}
+ * Origen: classes (CANCELLABLE).
+ * Lo usa: routes/teachers/index.js.
  */
 export async function countClassesToCancel(teacherId, { startDate, endDate }, { iso, time }) {
   const result = await getPool().query(
@@ -81,11 +119,23 @@ export async function countClassesToCancel(teacherId, { startDate, endDate }, { 
  * se le puede mostrar a nadie).
  *
  * Devuelve { vacation, cancelled } o { conflict } con el rango que se pisa.
+ *
+ * @param {string} teacherId - request.user.id.
+ * @param {{startDate: string, endDate: string}} rango - body de
+ *   POST /api/teachers/me/vacations, validado por VacationRange.validate.
+ * @param {{iso: string, time: string}} ahora - now() de lib/clock.js.
+ * @returns {Promise<{vacation: {id, teacherId, startDate, endDate}, cancelled: number}
+ *   | {conflict: {id, teacherId, startDate, endDate}}>}
+ * Origen: INSERT en teacher_vacations; UPDATE classes (cancel_reason 'vacaciones').
+ * Lo usa: routes/teachers/index.js.
+ * Locks/transacción: transacción propia; 'vacations:' || teacherId exclusivo.
  */
 export async function createVacation(teacherId, { startDate, endDate }, { iso, time }) {
   const client = await getPool().connect();
   try {
     await client.query('BEGIN');
+    // Exclusivo: las reservas toman este mismo lock compartido (db/classes.js
+    // lockTeacherVacations), así ninguna queda viva en un día de licencia.
     await client.query(`SELECT pg_advisory_xact_lock(hashtext('vacations:' || $1))`, [teacherId]);
 
     const overlap = await client.query(
@@ -135,8 +185,15 @@ export async function createVacation(teacherId, { startDate, endDate }, { iso, t
 }
 
 /**
- * true si se borró. Las reservas que se cancelaron al cargarlas NO vuelven:
- * los alumnos ya se enteraron y pudieron reservar otra cosa.
+ * Borra un rango de vacaciones. true si se borró. Las reservas que se
+ * cancelaron al cargarlas NO vuelven: los alumnos ya se enteraron y pudieron
+ * reservar otra cosa.
+ *
+ * @param {string} teacherId - request.user.id.
+ * @param {string} id - params.id de DELETE /api/teachers/me/vacations/:id.
+ * @returns {Promise<boolean>}
+ * Origen: DELETE en teacher_vacations.
+ * Lo usa: routes/teachers/index.js.
  */
 export async function deleteVacation(teacherId, id) {
   const result = await getPool().query(

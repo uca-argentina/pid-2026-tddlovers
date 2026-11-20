@@ -5,12 +5,19 @@
 // Es el único lugar de la app que toca el almacenamiento del navegador, y
 // todo va dentro de try/catch porque en modo privado leer o escribir puede
 // tirar excepción.
+//
+// Lo usa solo components/ThemeToggle.jsx.
 
 const STORAGE_KEY = 'pid-theme'
 
 export const THEME_LIGHT = 'light'
 export const THEME_DARK = 'dark'
 
+/**
+ * El tema guardado en localStorage ('pid-theme').
+ *
+ * @returns {'light'|'dark'|null} null si no hay, es otro valor o el storage tira error.
+ */
 export function readStoredTheme() {
   try {
     const value = localStorage.getItem(STORAGE_KEY)
@@ -20,6 +27,7 @@ export function readStoredTheme() {
   }
 }
 
+/** Recuerda el tema elegido en localStorage, si se puede. */
 export function storeTheme(theme) {
   try {
     localStorage.setItem(STORAGE_KEY, theme)
@@ -41,6 +49,7 @@ export function resolveInitialTheme() {
   return readStoredTheme() || (prefersDark() ? THEME_DARK : THEME_LIGHT)
 }
 
+/** Aplica el tema poniendo data-theme en <html>; las variables de index.css hacen el resto. */
 export function applyTheme(theme) {
   document.documentElement.dataset.theme = theme
 }

@@ -8,7 +8,18 @@ import { MAX_TEXT_LENGTH } from '../../utils/homework.js'
 import HomeworkChat from './HomeworkChat.jsx'
 import SubmissionContent from './SubmissionContent.jsx'
 
-/** La entrega de un alumno vista por el docente: leerla, conversar y corregirla. */
+/**
+ * La entrega de un alumno vista por el docente: leerla, conversar y corregirla.
+ *
+ * Props (de TeacherHomeworkDialog): submission (una de homework.submissions),
+ * homework, onChange(tarea actualizada) y onClose().
+ *
+ * Datos: saveHomeworkFeedback → POST /api/homework/submissions/:id/feedback,
+ * que devuelve la tarea entera (se la pasa a onChange). El chat va en
+ * HomeworkChat.
+ *
+ * Estado: feedback (arranca con submission.feedback), saving, error, notice.
+ */
 class TeacherSubmissionDialog extends Component {
   state = {
     feedback: this.props.submission.feedback,

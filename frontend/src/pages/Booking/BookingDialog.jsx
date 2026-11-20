@@ -10,7 +10,6 @@ import { formatEnrolled, toMinutes } from '../../utils/booking.js'
 import {
   CLASS_MINUTES_STEP,
   MIN_CLASS_MINUTES,
-  classPriceCents,
   formatHourlyRate,
   formatMoney,
 } from '../../utils/rates.js'
@@ -26,16 +25,12 @@ import {
   activePacksWith,
   classesLabel,
   formatPackDate,
-  maxTokensFor,
   packClassesLabel,
+  packsForReschedule,
+  quoteBooking,
   usablePackFor,
 } from '../../utils/packs.js'
-import {
-  REWARDS,
-  formatNeuronas,
-  rewardFits,
-  rewardPriceCents,
-} from '../../utils/neuronas.js'
+import { REWARDS, formatNeuronas, rewardFits, rewardsOffered } from '../../utils/neuronas.js'
 import './BookingDialog.css'
 
 // La duración con la que arranca el selector al elegir un horario: una hora
@@ -61,13 +56,44 @@ const DEFAULT_MINUTES = 60
  * paga aparte con la tarifa ("1 clase de 1 h + 30 min a pagar"). Materia,
  * horario y duración se eligen igual, y al reprogramar también.
  *
- * Si el docente acepta canjes, puede usar neuronas en vez del paquete: las dos
- * cosas juntas no van. Un canje que deja de entrar porque se acortó la clase
- * se deja de aplicar solo.
+ * Si el docente acepta canjes y la materia no es gratis, puede usar neuronas en
+ * vez del paquete: las dos cosas juntas no van. Un canje que deja de valer
+ * (se acortó la clase, se cambió a una materia sin cargo) se deja de aplicar
+ * solo.
+ *
+ * Paquete, canje y precio salen de UNA cuenta por render (quoteBooking en
+ * utils/packs.js), que se les pasa a las partes que la muestran.
  *
  * Acá NO se vuelve a calcular qué está libre: la tarjeta ya trae los inicios
  * posibles con su duración máxima (del backend, recortados por las clases
  * propias en annotateClashes). Una segunda cuenta sería una segunda verdad.
+ *
+ * Rol: alumno. Lo abre BookingBoard (renderDialog) al tocar "Reservar" en una
+ * tarjeta.
+ *
+ * Props (todas de BookingBoard):
+ *   - card: la tarjeta elegida, una fila de GET /api/availability ya pasada
+ *     por annotateClashes (utils/booking.js): windowId, date, teacherId,
+ *     teacherName, teacherAcceptsRewards, modality, maxStudents,
+ *     subjects [{id, name, hourlyRateCents}], starts [{start, maxMinutes,
+ *     blocked}] y groups [{start, end, subjectId, subjectName, enrolled,
+ *     blocked, joined}].
+ *   - rescheduleOf: la clase que se reprograma (GET /api/classes/:id), o null.
+ *   - packs: paquetes del alumno (GET /api/packs/mine).
+ *   - neuronasBalance: saldo de GET /api/neuronas.
+ *   - onClose(): cerrar sin reservar.
+ *   - onBooked({ date, subjectName, teacherName, rescheduled, usedPack,
+ *     usedReward }): se llama cuando el backend confirmó la reserva.
+ *
+ * Datos: al confirmar, bookLesson → POST /api/classes, o rescheduleLesson →
+ * POST /api/classes/:id/reschedule si hay rescheduleOf.
+ *
+ * Estado (todo lo elige el alumno en el modal):
+ *   - subjectId: materia elegida; groupStart: inicio de la grupal a la que se
+ *     suma (o null); start/minutes: inicio y duración de una clase nueva.
+ *   - packTokens: clases del paquete a usar (null = todas las que entran).
+ *   - rewardType: canje de neuronas elegido (clave de REWARDS) o null.
+ *   - saving/error: del pedido de confirmación.
  */
 class BookingDialog extends Component {
   constructor(props) {
@@ -92,36 +118,15 @@ class BookingDialog extends Component {
     }
   }
 
+  /** Al reprogramar, las clases del paquete que usaba la vieja vuelven a estar. */
+  getPacks() {
+    return packsForReschedule(this.props.packs, this.props.rescheduleOf)
+  }
+
+  /** El paquete del alumno que sirve con este docente ese día (usablePackFor), o null. */
   getUsablePack() {
-    const { packs, card } = this.props
-    return usablePackFor(packs, card.teacherId, card.date)
-  }
-
-  /** Cuántas clases del paquete entran como mucho en la clase elegida. */
-  getMaxTokens(selection = this.getSelection()) {
-    return maxTokensFor(this.getUsablePack(), selection?.minutes)
-  }
-
-  /** Cuántas usa: lo que eligió, recortado a lo que entra ahora. */
-  getTokens(selection = this.getSelection()) {
-    if (this.getReward(selection)) return 0
-    const max = this.getMaxTokens(selection)
-    const { packTokens } = this.state
-    return packTokens === null ? max : Math.min(packTokens, max)
-  }
-
-  /** Lo que se paga aparte: la duración menos lo que cubre el paquete. */
-  getExtraMinutes(selection) {
-    const pack = this.getUsablePack()
-    const cubiertos = pack ? this.getTokens(selection) * pack.classMinutes : 0
-    return Math.max(selection.minutes - cubiertos, 0)
-  }
-
-  /** El canje elegido, si todavía entra en la clase armada. */
-  getReward(selection = this.getSelection()) {
-    const { rewardType } = this.state
-    if (!rewardType || !selection || !rewardFits(rewardType, selection.minutes)) return null
-    return rewardType
+    const { card } = this.props
+    return usablePackFor(this.getPacks(), card.teacherId, card.date)
   }
 
   /** Cuántas neuronas tiene para gastar. Al reprogramar, el canje de la vieja le vuelve. */
@@ -171,18 +176,18 @@ class BookingDialog extends Component {
     }
   }
 
-  /** Lo que se paga: la clase entera, o solo lo que se pasa del paquete. */
-  getPriceCents(selection) {
+  /** Paquete, canje y precio de la clase armada (ver quoteBooking). */
+  getQuote(selection = this.getSelection()) {
     const subject = selection && this.getSubject(selection.subjectId)
-    if (!subject) return null
-    const reward = this.getReward(selection)
-    if (reward) {
-      return rewardPriceCents(reward, {
-        hourlyRateCents: subject.hourlyRateCents,
-        minutes: selection.minutes,
-      })
-    }
-    return classPriceCents(subject.hourlyRateCents, this.getExtraMinutes(selection))
+    return quoteBooking({
+      hourlyRateCents: subject ? subject.hourlyRateCents : null,
+      minutes: selection ? selection.minutes : null,
+      pack: this.getUsablePack(),
+      packTokens: this.state.packTokens,
+      rewardType: this.state.rewardType,
+      acceptsRewards: this.props.card.teacherAcceptsRewards,
+      balance: this.getNeuronas(),
+    })
   }
 
   handleSubject = (subjectId) => () => {
@@ -217,9 +222,8 @@ class BookingDialog extends Component {
   }
 
   handleTokens = (delta) => () => {
-    const actual = this.getTokens()
-    const max = this.getMaxTokens()
-    this.setState({ packTokens: Math.max(0, Math.min(actual + delta, max)), error: null })
+    const { tokens, maxTokens } = this.getQuote()
+    this.setState({ packTokens: Math.max(0, Math.min(tokens + delta, maxTokens)), error: null })
   }
 
   handleReward = (rewardType) => () => {
@@ -229,6 +233,13 @@ class BookingDialog extends Component {
     }))
   }
 
+  /**
+   * Arma el pedido con la selección (ventana, fecha, inicio, materia,
+   * duración, y si corresponde packId/packTokens o rewardType según
+   * getQuote) y lo manda: bookLesson → POST /api/classes, o rescheduleLesson
+   * → POST /api/classes/:id/reschedule. Si sale bien llama a onBooked con el
+   * resumen para el cartel; si falla deja el mensaje del backend en `error`.
+   */
   handleConfirm = () => {
     const { card, onBooked } = this.props
     const { saving } = this.state
@@ -248,19 +259,21 @@ class BookingDialog extends Component {
     }
     // Reprogramar manda lo mismo que reservar, salvo la materia: la pone el
     // backend, es la de la clase vieja (la tarjeta ya viene recortada a esa).
-    const tokens = this.getTokens(selection)
+    const { tokens, reward } = this.getQuote(selection)
     const usedPack = tokens > 0
     if (usedPack) {
       pedido.packId = this.getUsablePack().id
       pedido.packTokens = tokens
     }
-    const reward = this.getReward(selection)
     if (reward) pedido.rewardType = reward
     const guardar = rescheduleOf ? rescheduleLesson(rescheduleOf.id, pedido) : bookLesson(pedido)
 
     guardar
       .then(() =>
         onBooked({
+          // El día va acá y no se lee de afuera: quien abrió el modal no tiene
+          // por qué seguir teniendo la tarjeta cuando vuelve la respuesta.
+          date: card.date,
           subjectName: subject.name,
           teacherName: card.teacherName,
           rescheduled: Boolean(rescheduleOf),
@@ -432,10 +445,7 @@ class BookingDialog extends Component {
     )
   }
 
-  renderSummary() {
-    const selection = this.getSelection()
-    const subject = selection && this.getSubject(selection.subjectId)
-
+  renderSummary(selection, subject, quote) {
     if (!selection) {
       const falta = this.state.subjectId === null ? 'la materia y a qué hora' : 'a qué hora'
       return <p className="booking-dialog-hint">Elegí {falta} querés la clase.</p>
@@ -453,29 +463,29 @@ class BookingDialog extends Component {
             {selection.joining ? ' · te sumás a una clase grupal' : ''}
           </span>
         </p>
-        {this.getTokens(selection) > 0 && this.getExtraMinutes(selection) === 0 ? (
+        {quote.coveredBy === 'pack' ? (
           <p className="booking-dialog-price">Incluida en tu paquete</p>
-        ) : this.getReward(selection) && this.getPriceCents(selection) === 0 ? (
+        ) : quote.coveredBy === 'reward' ? (
           <p className="booking-dialog-price">
             Cubierta con neuronas
             <span className="booking-dialog-duration">
-              {` · usás ${formatNeuronas(REWARDS[this.getReward(selection)].cost)}`}
+              {` · usás ${formatNeuronas(REWARDS[quote.reward].cost)}`}
             </span>
           </p>
         ) : (
           <p className="booking-dialog-price">
-            {formatMoney(this.getPriceCents(selection))}
+            {formatMoney(quote.priceCents)}
             {this.props.card.maxStudents > 1 && subject.hourlyRateCents > 0 ? (
               <span className="booking-dialog-duration"> por alumno</span>
             ) : null}
-            {this.getTokens(selection) > 0 ? (
+            {quote.tokens > 0 ? (
               <span className="booking-dialog-duration">
-                {` + ${classesLabel(this.getTokens(selection))} del paquete`}
+                {` + ${classesLabel(quote.tokens)} del paquete`}
               </span>
             ) : null}
-            {this.getReward(selection) ? (
+            {quote.reward ? (
               <span className="booking-dialog-duration">
-                {` + ${formatNeuronas(REWARDS[this.getReward(selection)].cost)}`}
+                {` + ${formatNeuronas(REWARDS[quote.reward].cost)}`}
               </span>
             ) : null}
           </p>
@@ -489,24 +499,23 @@ class BookingDialog extends Component {
    * con este docente pero no sirve para este día (vence antes, o ya reservó
    * todas las que le quedan), se explica en vez de esconderlo.
    */
-  renderPack() {
-    const { packs, card } = this.props
+  renderPack(selection, quote) {
+    const { card } = this.props
     const usable = this.getUsablePack()
 
     if (!usable) {
-      const activos = activePacksWith(packs, card.teacherId)
+      const activos = activePacksWith(this.getPacks(), card.teacherId)
       if (activos.length === 0) return null
       const vencenAntes = activos.every((pack) => card.date > pack.expiresOn)
       return (
         <p className="booking-dialog-pack-note">
           {vencenAntes
             ? 'Tu paquete con este docente vence antes de este día: esta clase se paga aparte.'
-            : ''}
+            : 'Ya reservaste todas las clases de tu paquete con este docente: esta clase se paga aparte.'}
         </p>
       )
     }
 
-    const selection = this.getSelection()
     const disponible = `${packClassesLabel(usable.available, usable.classMinutes)} para reservar · vence el ${formatPackDate(usable.expiresOn)}`
 
     // Sin duración elegida todavía no se sabe cuántas entran.
@@ -521,9 +530,7 @@ class BookingDialog extends Component {
       )
     }
 
-    const tokens = this.getTokens(selection)
-    const max = this.getMaxTokens(selection)
-    const extra = this.getExtraMinutes(selection)
+    const { tokens, maxTokens: max, extraMinutes: extra } = quote
     const { saving } = this.state
 
     let detalle
@@ -573,14 +580,17 @@ class BookingDialog extends Component {
    * Los canjes posibles. Se muestran también los que no alcanzan, deshabilitados:
    * así el alumno ve a cuánto está. Si la clase es gratis no hay nada que canjear.
    */
-  renderRewards() {
+  renderRewards(selection, subject, quote) {
     const { card } = this.props
-    const selection = this.getSelection()
-    const subject = selection && this.getSubject(selection.subjectId)
-    if (!card.teacherAcceptsRewards || !subject || subject.hourlyRateCents === 0) return null
+    if (!subject) return null
+    const ofrecidos = rewardsOffered({
+      acceptsRewards: card.teacherAcceptsRewards,
+      hourlyRateCents: subject.hourlyRateCents,
+    })
+    if (!ofrecidos) return null
 
     const neuronas = this.getNeuronas()
-    const elegida = this.getReward(selection)
+    const elegida = quote.reward
     return (
       <div className="booking-dialog-pack booking-dialog-rewards">
         <span className="booking-dialog-pack-text">
@@ -619,10 +629,18 @@ class BookingDialog extends Component {
     const { card, onClose } = this.props
     const { saving, error } = this.state
     const selection = this.getSelection()
-    const listo = Boolean(selection && this.getSubject(selection.subjectId))
+    const subject = selection && this.getSubject(selection.subjectId)
+    const quote = this.getQuote(selection)
+    const listo = Boolean(subject)
 
     return (
-      <Modal title={this.props.rescheduleOf ? 'Reprogramar clase' : 'Reservar clase'} onClose={onClose}>
+      // Mientras se envía no se cierra: la reserva va a quedar hecha igual, y
+      // el tablero tiene que enterarse para recargar y avisar.
+      <Modal
+        title={this.props.rescheduleOf ? 'Reprogramar clase' : 'Reservar clase'}
+        onClose={onClose}
+        closable={!saving}
+      >
         <div className="booking-dialog">
           <dl className="booking-dialog-details">
             <div>
@@ -662,9 +680,9 @@ class BookingDialog extends Component {
           {this.renderStarts()}
           {this.renderDuration()}
 
-          {this.renderPack()}
-          {this.renderRewards()}
-          {this.renderSummary()}
+          {this.renderPack(selection, quote)}
+          {this.renderRewards(selection, subject, quote)}
+          {this.renderSummary(selection, subject, quote)}
 
           {error ? <Banner type="danger">{error}</Banner> : null}
 

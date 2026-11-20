@@ -2,6 +2,7 @@ import { Component } from 'react'
 import { ChevronRightIcon, ErrorIcon, HeartIcon } from '../../components/icons.jsx'
 import TimeRangeSlider from '../../components/TimeRangeSlider.jsx'
 import { DAY_KEYS, DAY_LABELS } from '../../utils/availability.js'
+import { EMPTY_BOOKING_FILTERS } from '../../utils/booking.js'
 import { WEEKDAY_LABELS } from '../../utils/calendar.js'
 import { MODALITIES } from '../../utils/windows.js'
 import './BookingFilters.css'
@@ -36,17 +37,38 @@ const KINDS = [
  * Con `inSheet` vive adentro de la hoja "Filtros" del teléfono: sin título
  * (lo pone la hoja), sin "Limpiar filtros" (va al pie de la hoja) y con todas
  * las secciones abiertas, porque ahí sí hay lugar y plegar es un toque más.
+ *
+ * Lo elegido llega junto en `filters` (la forma de EMPTY_BOOKING_FILTERS) y
+ * cada chip avisa con `onToggle(clave, valor)`, que devuelve el onClick.
+ *
+ * Rol: alumno. Sin fetch propio ni estado de filtros: todo vive en
+ * BookingBoard, que arma las props en getFiltersProps() y lo renderiza en la
+ * columna (escritorio) o en la hoja "Filtros" (teléfono, con `inSheet`).
+ *
+ * Props (de BookingBoard):
+ *   - subjects: materias del catálogo (GET /api/subjects) que aparecen en
+ *     alguna tarjeta del rango cargado (BookingBoard.getFilterSubjects).
+ *   - filters: el state.filters de BookingBoard (forma EMPTY_BOOKING_FILTERS).
+ *   - showFavorites: si mostrar "Solo favoritos" (alumno logueado).
+ *   - hasFilters: si hay algún filtro activo (para habilitar "Limpiar").
+ *   - onToggle(clave, valor) → onClick; onChangeRange(fromTime, toTime) del
+ *     slider; onClearTeacher() saca la búsqueda por docente; onClear() limpia
+ *     todo.
+ *   - inSheet: true dentro de la hoja del teléfono.
+ *
+ * Estado: `abiertas`, qué secciones plegables están abiertas (solo visual).
  */
 class BookingFilters extends Component {
   // Qué secciones están abiertas. Se decide una sola vez, al montar, a partir
   // de lo que venga elegido; después manda el usuario.
   state = {
     abiertas: {
-      dias: this.props.inSheet || this.props.dayKeys.length > 0,
-      materias: this.props.inSheet || this.props.subjectIds.length > 0,
-      modalidad: this.props.inSheet || this.props.modalities.length > 0,
-      tipo: this.props.inSheet || this.props.kinds.length > 0,
-      horario: this.props.inSheet || Boolean(this.props.fromTime || this.props.toTime),
+      dias: this.props.inSheet || this.props.filters.dayKeys.length > 0,
+      materias: this.props.inSheet || this.props.filters.subjectIds.length > 0,
+      modalidad: this.props.inSheet || this.props.filters.modalities.length > 0,
+      tipo: this.props.inSheet || this.props.filters.kinds.length > 0,
+      horario:
+        this.props.inSheet || Boolean(this.props.filters.fromTime || this.props.filters.toTime),
     },
   }
 
@@ -58,7 +80,7 @@ class BookingFilters extends Component {
    */
   componentDidUpdate(prevProps) {
     const seEligioMateria =
-      prevProps.subjectIds.length === 0 && this.props.subjectIds.length > 0
+      prevProps.filters.subjectIds.length === 0 && this.props.filters.subjectIds.length > 0
     if (seEligioMateria && !this.state.abiertas.materias) {
       this.setState((prev) => ({ abiertas: { ...prev.abiertas, materias: true } }))
     }
@@ -102,7 +124,8 @@ class BookingFilters extends Component {
   }
 
   renderDays() {
-    const { dayKeys, onToggleDay } = this.props
+    const { filters, onToggle } = this.props
+    const { dayKeys } = filters
 
     return this.renderSection(
       'dias',
@@ -121,7 +144,7 @@ class BookingFilters extends Component {
               className={`subject-chip ${activo ? 'selected' : ''}`}
               aria-pressed={activo}
               aria-label={DAY_LABELS[index]}
-              onClick={onToggleDay(dayKey)}
+              onClick={onToggle('dayKeys', dayKey)}
             >
               {WEEKDAY_LABELS[index]}
             </button>
@@ -132,7 +155,8 @@ class BookingFilters extends Component {
   }
 
   renderSubjects() {
-    const { subjects, subjectIds, onToggleSubject } = this.props
+    const { subjects, filters, onToggle } = this.props
+    const { subjectIds } = filters
     if (subjects.length === 0) return null
 
     return this.renderSection(
@@ -150,7 +174,7 @@ class BookingFilters extends Component {
               type="button"
               className={`subject-chip ${activo ? 'selected' : ''}`}
               aria-pressed={activo}
-              onClick={onToggleSubject(subject.id)}
+              onClick={onToggle('subjectIds', subject.id)}
             >
               {subject.name}
             </button>
@@ -161,7 +185,9 @@ class BookingFilters extends Component {
   }
 
   /** Chips de una lista fija: modalidad y tipo tienen la misma forma. */
-  renderChoices(key, title, items, selected, onToggle) {
+  renderChoices(key, title, items, filterKey) {
+    const selected = this.props.filters[filterKey]
+    const { onToggle } = this.props
     return this.renderSection(
       key,
       title,
@@ -175,7 +201,7 @@ class BookingFilters extends Component {
               type="button"
               className={`subject-chip ${activo ? 'selected' : ''}`}
               aria-pressed={activo}
-              onClick={onToggle(item.key)}
+              onClick={onToggle(filterKey, item.key)}
             >
               {item.label}
             </button>
@@ -186,7 +212,8 @@ class BookingFilters extends Component {
   }
 
   renderHours() {
-    const { fromTime, toTime, onChangeRange } = this.props
+    const { onChangeRange } = this.props
+    const { fromTime, toTime } = this.props.filters
     // Cuenta como UN filtro aunque estén las dos puntas: es un solo rango.
     const activos = fromTime || toTime ? 1 : 0
 
@@ -204,7 +231,8 @@ class BookingFilters extends Component {
    * alumno (el único que tiene favoritos).
    */
   renderFavorites() {
-    const { showFavorites, onlyFavorites, onToggleFavorites } = this.props
+    const { showFavorites, onToggle } = this.props
+    const { onlyFavorites } = this.props.filters
     if (!showFavorites) return null
     return (
       <div className="booking-filters-favorites">
@@ -212,7 +240,7 @@ class BookingFilters extends Component {
           type="button"
           className={`subject-chip ${onlyFavorites ? 'selected' : ''}`}
           aria-pressed={onlyFavorites}
-          onClick={onToggleFavorites}
+          onClick={onToggle('onlyFavorites')}
         >
           <HeartIcon filled={onlyFavorites} />
           Solo favoritos
@@ -222,7 +250,8 @@ class BookingFilters extends Component {
   }
 
   render() {
-    const { teacherQuery, onClearTeacher, onClear, hasFilters, inSheet } = this.props
+    const { onClearTeacher, onClear, hasFilters, inSheet } = this.props
+    const { teacherQuery } = this.props.filters
 
     return (
       <div className={`booking-filters ${inSheet ? 'is-sheet' : ''}`}>
@@ -232,14 +261,8 @@ class BookingFilters extends Component {
 
         {this.renderDays()}
         {this.renderSubjects()}
-        {this.renderChoices(
-          'modalidad',
-          'Modalidad',
-          MODALITIES,
-          this.props.modalities,
-          this.props.onToggleModality,
-        )}
-        {this.renderChoices('tipo', 'Tipo de clase', KINDS, this.props.kinds, this.props.onToggleKind)}
+        {this.renderChoices('modalidad', 'Modalidad', MODALITIES, 'modalities')}
+        {this.renderChoices('tipo', 'Tipo de clase', KINDS, 'kinds')}
         {this.renderHours()}
 
         {/* El docente buscado no es una sección: viene de la barra de la
@@ -270,17 +293,9 @@ class BookingFilters extends Component {
 
 BookingFilters.defaultProps = {
   subjects: [],
-  dayKeys: [],
-  subjectIds: [],
-  modalities: [],
-  kinds: [],
-  fromTime: '',
-  toTime: '',
-  teacherQuery: '',
+  filters: EMPTY_BOOKING_FILTERS,
   inSheet: false,
   showFavorites: false,
-  onlyFavorites: false,
-  onToggleFavorites: () => {},
   hasFilters: false,
 }
 

@@ -5,6 +5,10 @@
 // copia SOLO para decidir qué botones mostrar (igual que utils/classStates.js
 // con las reservas): si cambia una regla, cambiala en los dos lados. El
 // backend vuelve a chequear y explica en su `message` si no se puede.
+//
+// El estado llega como `approvalStatus` (del usuario de la sesión, o de cada
+// docente de GET /api/admin/teachers). Lo usan: pages/Admin/AdminPage.jsx,
+// pages/Profile/ProfilePage.jsx y pages/Availability/AvailabilityPage.jsx.
 
 const LABELS = {
   pending: 'Pendiente',
@@ -19,15 +23,30 @@ const TONES = {
   rejected: 'danger',
 }
 
+/**
+ * El texto en pantalla de un estado ('pending' -> 'Pendiente'); uno desconocido sale tal cual.
+ * Lo usan: pages/Admin/AdminPage.jsx.
+ */
 export function approvalLabel(status) {
   return LABELS[status] || status
 }
 
+/**
+ * El tono de la pastilla ('warning' | 'success' | 'danger', o 'muted' si no se conoce).
+ * Lo usan: pages/Admin/AdminPage.jsx.
+ */
 export function approvalTone(status) {
   return TONES[status] || 'muted'
 }
 
-/** Qué puede decidir el admin sobre un docente en ese estado. */
+/**
+ * Qué puede decidir el admin sobre un docente en ese estado.
+ *
+ * @param {string} status - `approvalStatus` de un docente de GET /api/admin/teachers.
+ * @returns {{approve: boolean, reject: boolean}} qué botones mostrar.
+ * Lo usan: pages/Admin/AdminPage.jsx.
+ * Espejo: backend/src/lib/teacherApproval.js.
+ */
 export function allowedDecisions(status) {
   return {
     approve: status === 'pending' || status === 'rejected',
@@ -39,6 +58,10 @@ export function allowedDecisions(status) {
  * El aviso para el propio docente mientras no está aprobado, o null. Un
  * pendiente o rechazado puede seguir editando su perfil y su disponibilidad,
  * pero no aparece en las búsquedas ni recibe reservas.
+ *
+ * @param {object|null} user - el usuario de la sesión (App.state.user, de /api/auth/me).
+ * @returns {string|null} el aviso, o null si no es docente o ya está aprobado.
+ * Lo usan: pages/Profile/ProfilePage.jsx, pages/Availability/AvailabilityPage.jsx.
  */
 export function approvalNotice(user) {
   if (user?.role !== 'teacher') return null

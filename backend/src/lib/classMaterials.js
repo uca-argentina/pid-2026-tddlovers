@@ -4,10 +4,24 @@
 //
 // El material es del TURNO (docente, fecha, inicio): en una grupal lo carga
 // una vez el docente y lo ven todos los anotados.
+//
+// Tablas: class_materials y class_material_files (migración 018); los bytes de
+// los archivos viven en el bucket S3 (storage/files.js), no en Postgres.
+// Lo usan: routes/classes/index.js (rutas /:id/material*), db/classMaterials.js
+// (re-chequeo de topes bajo lock) y storage/files.js (contentDisposition).
+// Espejo: frontend/src/utils/classMaterials.js (canEditMaterial,
+// canViewMaterial, uploadProblem), solo para decidir qué mostrar.
 
-export const MAX_SUMMARY_LENGTH = 5000;
+import { hasEnded } from './classStates.js';
+
+// Topes de CLAUDE.md ("Class material"): resumen ≤5000 caracteres, cada archivo
+// ≤10 MB, y por turno ≤20 archivos y ≤25 MB en total. MAX_FILE_BYTES y
+// MAX_FILES_PER_TURN también los usa la ruta como límites de @fastify/multipart.
+const MAX_SUMMARY_LENGTH = 5000;
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;
-// Topes por turno: la base de producción (Neon free) tiene 0,5 GB para todo.
+// Topes por turno: los archivos van al bucket S3 (no a Postgres), pero el
+// espacio del bucket es limitado y la subida se arma en memoria antes de
+// subirla, así que un turno no puede ocupar más que esto.
 export const MAX_TURN_BYTES = 25 * 1024 * 1024;
 export const MAX_FILES_PER_TURN = 20;
 const MAX_NAME_LENGTH = 255;
@@ -21,22 +35,18 @@ const GIVEN_STATUSES = ['aceptada', 'confirmada', 'realizada', 'no_presentada'];
 // con la sesión del que lo abre.
 const INLINE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
 
-function toEpochMinutes(iso, time) {
-  const [y, m, d] = iso.split('-').map(Number);
-  const [hh, mm] = time.split(':').map(Number);
-  return Date.UTC(y, m - 1, d, hh, mm) / 60000;
-}
-
-/** `now` es el de lib/clock.js. Un fin "24:00" cae bien: es la medianoche siguiente. */
-export function hasEnded(cls, now) {
-  return toEpochMinutes(cls.date, cls.endTime) <= toEpochMinutes(now.iso, now.time);
-}
-
-export const NOT_ENDED_MESSAGE = 'Vas a poder ver el material cuando termine la clase.';
+const NOT_ENDED_MESSAGE = 'Vas a poder ver el material cuando termine la clase.';
 
 /**
- * null si `role` puede cargar o borrar material de esa clase; si no,
- * { status, message } como checkAction.
+ * ¿Puede `role` cargar o borrar material de esa clase? Solo el docente, y solo
+ * cuando la clase ya terminó y pudo haberse dado (no pendiente ni cancelada).
+ *
+ * @param {object} cls - la clase de findClassById (db/classes.js): status, date, endTime.
+ * @param {{role: 'teacher'|'student', now: {iso, time}}} ctx - `role` es el papel en
+ *   esa clase (loadOwnClass de la ruta) y `now` sale de now() de lib/clock.js.
+ * @returns {null|{status: number, message: string}} como checkAction.
+ * Lo usa: routes/classes/index.js (PUT material, subir y borrar archivos, vía loadMaterialAccess).
+ * Espejo: frontend/src/utils/classMaterials.js (canEditMaterial).
  */
 export function checkEditMaterial(cls, { role, now }) {
   if (role !== 'teacher') return { status: 403, message: 'Solo el docente puede cargar material.' };
@@ -49,7 +59,13 @@ export function checkEditMaterial(cls, { role, now }) {
   return null;
 }
 
-/** Lo mismo para ver: el docente cuando podría cargarlo, el alumno si su reserva no se canceló. */
+/**
+ * Lo mismo para ver: el docente cuando podría cargarlo, el alumno si su reserva
+ * no se canceló (también si quedó no_presentada) y la clase ya terminó.
+ * Mismos parámetros y retorno que checkEditMaterial.
+ * Lo usa: routes/classes/index.js (GET material y descarga de archivos).
+ * Espejo: frontend/src/utils/classMaterials.js (canViewMaterial).
+ */
 export function checkViewMaterial(cls, { role, now }) {
   if (role === 'teacher') return checkEditMaterial(cls, { role, now });
   if (!GIVEN_STATUSES.includes(cls.status)) {
@@ -59,7 +75,12 @@ export function checkViewMaterial(cls, { role, now }) {
   return null;
 }
 
-/** El resumen normalizado, o { error } con el mensaje. */
+/**
+ * El resumen normalizado (sin espacios en los bordes; vacío vale), o { error }.
+ * @param {*} summary - request.body.summary de PUT /api/classes/:id/material.
+ * @returns {{summary: string}|{error: string}}
+ * Lo usa: routes/classes/index.js.
+ */
 export function validateSummary(summary) {
   if (typeof summary !== 'string') return { error: 'Falta el resumen.' };
   const text = summary.trim();
@@ -72,6 +93,11 @@ export function validateSummary(summary) {
 /**
  * El nombre que se guarda: sin carpetas (un navegador viejo manda la ruta
  * entera) ni caracteres de control, y no más largo que lo que entra.
+ *
+ * @param {*} name - `part.filename` de cada archivo del multipart.
+ * @returns {string} el nombre limpio ('archivo' si no queda nada), que va a
+ *   class_material_files y al Content-Disposition de la descarga.
+ * Lo usa: routes/classes/index.js (subida de archivos).
  */
 export function sanitizeFilename(name) {
   const base = String(name ?? '').split(/[\\/]/).pop();
@@ -86,8 +112,14 @@ export function sanitizeFilename(name) {
 
 /**
  * Si los archivos nuevos entran en el turno, sumados a los que ya tiene.
- * `existing` = { count, bytes } de lo ya guardado; `files` = [{ sizeBytes }].
- * Devuelve null o el mensaje de por qué no.
+ *
+ * @param {{count: number, bytes: number}} existing - lo ya guardado del turno:
+ *   en la ruta sale del material actual (findMaterial), y en db/classMaterials.js
+ *   de un count/sum sobre class_material_files bajo el lock del turno.
+ * @param {Array<{sizeBytes: number}>} files - los archivos del multipart leídos hasta ahora.
+ * @returns {string|null} null si entran, o el mensaje de por qué no.
+ * Lo usan: routes/classes/index.js (mientras lee la subida) y db/classMaterials.js (addFiles).
+ * Espejo: frontend/src/utils/classMaterials.js (uploadProblem).
  */
 export function checkUploadRoom(existing, files) {
   if (files.length === 0) return 'Elegí al menos un archivo.';
@@ -105,14 +137,21 @@ export function checkUploadRoom(existing, files) {
   return null;
 }
 
+/** ¿Se puede mostrar adentro del navegador (png/jpeg/gif/webp)? Solo se usa en este archivo. */
 export function inlineSafe(mimeType) {
   return INLINE_TYPES.has(mimeType);
 }
 
 /**
- * El Content-Disposition de una descarga. filename= lleva una versión ASCII
- * para navegadores viejos y filename*= el nombre real en UTF-8 (RFC 5987):
- * los nombres en castellano tienen tildes.
+ * El Content-Disposition de una descarga: `inline` solo para imágenes comunes,
+ * `attachment` para todo lo demás (así un .html o .svg subido nunca se renderiza).
+ * filename= lleva una versión ASCII para navegadores viejos y filename*= el
+ * nombre real en UTF-8 (RFC 5987): los nombres en castellano tienen tildes.
+ *
+ * @param {string} filename - el nombre guardado en class_material_files.
+ * @param {string} mimeType - el tipo guardado en class_material_files.
+ * @returns {string} el valor del header.
+ * Lo usa: storage/files.js (signedDownloadUrl, va como response-content-disposition del link).
  */
 export function contentDisposition(filename, mimeType) {
   const kind = inlineSafe(mimeType) ? 'inline' : 'attachment';

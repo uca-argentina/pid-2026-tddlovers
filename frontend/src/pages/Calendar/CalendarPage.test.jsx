@@ -1,4 +1,4 @@
-import { render as rtlRender, screen, waitFor } from '@testing-library/react'
+import { render as rtlRender, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import CalendarPage from './CalendarPage.jsx'
@@ -7,8 +7,9 @@ import { apiClass } from '../../testing/fixtures.js'
 
 // El mock del cliente evita depender de los datos de mentira reales: acá
 // definimos exactamente qué clases hay y en qué día.
-const { addFavoriteTeacher, fetchClasses, fetchFavoriteTeachers } = vi.hoisted(() => ({
+const { addFavoriteTeacher, cancelLesson, fetchClasses, fetchFavoriteTeachers } = vi.hoisted(() => ({
   addFavoriteTeacher: vi.fn(() => Promise.resolve(null)),
+  cancelLesson: vi.fn(),
   fetchClasses: vi.fn(),
   // Salvo en sus tests, el alumno no tiene favoritos.
   fetchFavoriteTeachers: vi.fn(() => Promise.resolve([])),
@@ -16,6 +17,7 @@ const { addFavoriteTeacher, fetchClasses, fetchFavoriteTeachers } = vi.hoisted((
 
 vi.mock('../../api/client.js', () => ({
   addFavoriteTeacher,
+  cancelLesson,
   classFileUrl: () => '',
   fetchClasses,
   // El detalle de una clase que ya terminó pide su material.
@@ -337,5 +339,60 @@ describe('CalendarPage', () => {
     fetchClasses.mockRejectedValue(new Error('Se cayó todo.'))
     render(<CalendarPage />)
     expect(await screen.findByRole('alert')).toHaveTextContent('Se cayó todo.')
+  })
+
+  it('si la sesión llega después y es de docente, pide el aviso de solicitudes', async () => {
+    fetchClasses.mockImplementation(({ status }) =>
+      Promise.resolve(status === 'pendiente' ? [classOn('2099-01-01', { status: 'pendiente' })] : []),
+    )
+
+    const { rerender } = render(<CalendarPage viewRole="student" />)
+    await screen.findByText('0 clases')
+    expect(screen.queryByText(/esperando respuesta/)).not.toBeInTheDocument()
+
+    rerender(
+      <MemoryRouter>
+        <CalendarPage viewRole="teacher" />
+      </MemoryRouter>,
+    )
+    expect(await screen.findByText(/Tenés 1 solicitud de clase/)).toBeInTheDocument()
+
+    // Y si vuelve a ser alumno, el aviso se va.
+    rerender(
+      <MemoryRouter>
+        <CalendarPage viewRole="student" />
+      </MemoryRouter>,
+    )
+    await waitFor(() => expect(screen.queryByText(/esperando respuesta/)).not.toBeInTheDocument())
+  })
+
+  it('rechazar al primer alumno de una grupal no cierra el detalle', async () => {
+    const iso = toISODate(addDays(today, 2))
+    const grupal = { teacherId: 't1', maxStudents: 4, subjectName: 'Física', status: 'pendiente' }
+    // Ana va primera por nombre: es la que representaba al turno.
+    const ana = classOn(iso, { ...grupal, id: 'a', studentName: 'Ana Pérez' })
+    const tomas = classOn(iso, { ...grupal, id: 'b', studentName: 'Tomás Díaz' })
+    fetchClasses.mockResolvedValue([tomas, ana])
+    cancelLesson.mockResolvedValue({ ...ana, status: 'cancelada', cancelReason: 'rechazada' })
+
+    render(<CalendarPage viewRole="teacher" />)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Física' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Ver alumnos' }))
+    const alumnos = screen.getByRole('dialog', { name: 'Alumnos' })
+    const deAna = within(alumnos).getByText('Ana Pérez').closest('li')
+    await userEvent.click(within(deAna).getByRole('button', { name: 'Rechazar' }))
+    await userEvent.click(within(deAna).getByRole('button', { name: 'Sí, rechazar' }))
+
+    expect(cancelLesson).toHaveBeenCalledWith('a')
+    // La clase sigue con Tomás: el detalle y los alumnos siguen abiertos.
+    await waitFor(() =>
+      expect(within(screen.getByRole('dialog', { name: 'Alumnos' })).getByText('Cancelada'))
+        .toBeInTheDocument(),
+    )
+    expect(screen.getByRole('dialog', { name: 'Física' })).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('dialog', { name: 'Alumnos' })).getByText('1 anotado · 0 pagaron'),
+    ).toBeInTheDocument()
   })
 })

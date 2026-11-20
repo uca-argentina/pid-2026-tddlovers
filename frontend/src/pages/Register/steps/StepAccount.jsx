@@ -13,6 +13,9 @@ import {
  * Paso 1 del registro: email, contraseña (repetida), nombre, apellido y
  * teléfono opcional. El estado de los valores vive en el padre
  * (RegisterPage) — este componente solo sabe validar y renderizar.
+ *
+ * Props (de RegisterPage): values, touched, onChange(campo, valor),
+ * onBlur(campo), onSubmit() y onInvalidSubmit().
  */
 class StepAccount extends Component {
   getEmailError() {

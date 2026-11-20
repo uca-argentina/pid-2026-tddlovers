@@ -3,19 +3,19 @@ import Banner from '../../components/Banner.jsx'
 import ClassCard from '../../components/ClassCard.jsx'
 import ClassDetailDialog from '../../components/ClassDetailDialog.jsx'
 import { ChevronRightIcon, SpinnerIcon } from '../../components/icons.jsx'
-import { fetchClasses, fetchFavoriteTeachers } from '../../api/client.js'
+import { fetchClasses } from '../../api/client.js'
+import withFavorites from '../../routes/withFavorites.jsx'
 import { addDays, toISODate } from '../../utils/calendar.js'
 import { hasStarted, nowParts } from '../../utils/classStates.js'
-import { favoriteIdsOf, withFavorite } from '../../utils/favorites.js'
 import {
   CATEGORIES,
   groupTurns,
   lastClass,
   nextClass,
-  turnKey,
   turnRows,
   turnSiblings,
   turnsIn,
+  withTurnMaterial,
 } from '../../utils/reservations.js'
 import CategoryDialog from './CategoryDialog.jsx'
 import './ReservationsPage.css'
@@ -37,16 +37,29 @@ const DAYS_AHEAD = 90
  * los alumnos se los ve, y se decide sobre cada uno, en el detalle.
  *
  * El alumno puede marcar desde acá a sus docentes como favoritos: es donde
- * están los docentes con los que ya tomó clase.
+ * están los docentes con los que ya tomó clase. La lista la baja
+ * withFavorites.
+ *
+ * Ruta /reservas (docente y alumno).
+ *
+ * Props:
+ *   - viewRole: de App.
+ *   - now: "ahora" inyectable para tests (en la app es null → nowParts()).
+ *   - favoriteIds, onFavoriteChange, onFavoriteError: de withFavorites.
+ *
+ * Datos: fetchClasses → GET /api/classes?from&to (de hoy − 180 a hoy + 90
+ * días), solo al montar. Los cambios posteriores llegan como la clase
+ * actualizada que devuelve cada acción (handleChange), sin volver a pedir.
+ *
+ * Estado: classes (filas de GET /api/classes, una por reserva), loading,
+ * error, openCategory (key de CATEGORIES con la hoja abierta) y detailId (id
+ * de la reserva abierta en ClassDetailDialog).
  */
 class ReservationsPage extends Component {
   state = {
     classes: [],
     loading: true,
     error: null,
-    // Ids (string) de los docentes favoritos; null = no se muestran corazones.
-    favoriteIds: null,
-    favoriteError: null,
     // La categoría abierta (su key) y la reserva en detalle (su id).
     openCategory: null,
     detailId: null,
@@ -54,57 +67,19 @@ class ReservationsPage extends Component {
 
   fetchToken = 0
 
-  favoritesToken = 0
-
   componentDidMount() {
     this.load()
-    this.loadFavorites()
-  }
-
-  componentDidUpdate(prevProps) {
-    if (prevProps.viewRole !== this.props.viewRole) this.loadFavorites()
   }
 
   componentWillUnmount() {
     this.fetchToken += 1
-    this.favoritesToken += 1
   }
 
   now() {
     return this.props.now || nowParts()
   }
 
-  /**
-   * Solo el alumno tiene favoritos. Si el pedido falla no se muestran los
-   * corazones: uno vacío para un docente que ya es favorito mentiría.
-   */
-  loadFavorites() {
-    const token = ++this.favoritesToken
-    if (this.props.viewRole !== 'student') {
-      this.setState({ favoriteIds: null })
-      return
-    }
-    fetchFavoriteTeachers()
-      .then((teachers) => {
-        if (token !== this.favoritesToken) return
-        this.setState({ favoriteIds: favoriteIdsOf(teachers) })
-      })
-      .catch(() => {
-        if (token === this.favoritesToken) this.setState({ favoriteIds: null })
-      })
-  }
-
-  handleFavoriteChange = (teacherId, favorite) => {
-    this.setState((prev) => ({
-      favoriteIds: withFavorite(prev.favoriteIds, teacherId, favorite),
-      favoriteError: null,
-    }))
-  }
-
-  handleFavoriteError = (message) => {
-    this.setState({ favoriteError: message })
-  }
-
+  /** Trae las reservas del usuario (GET /api/classes, ver DAYS_BACK/DAYS_AHEAD) → `classes`. */
   load = () => {
     const token = ++this.fetchToken
     const hoy = new Date()
@@ -115,7 +90,7 @@ class ReservationsPage extends Component {
     })
       .then((classes) => {
         if (token !== this.fetchToken) return
-        this.setState({ classes: Array.isArray(classes) ? classes : [], loading: false })
+        this.setState({ classes, loading: false })
       })
       .catch((error) => {
         if (token !== this.fetchToken) return
@@ -126,6 +101,10 @@ class ReservationsPage extends Component {
       })
   }
 
+  /**
+   * Una acción devolvió una reserva actualizada (de POST /api/classes/:id/…):
+   * se reemplaza esa fila por id, sin volver a pedir la lista.
+   */
   handleChange = (updated) => {
     if (!updated?.id) return
     this.setState((prev) => ({
@@ -133,12 +112,9 @@ class ReservationsPage extends Component {
     }))
   }
 
-  /** El material es del turno: el clip aparece en todas las reservas de ese turno. */
+  /** El material es del turno: el clip aparece en todas sus reservas en pie. */
   handleMaterialChange = (cls, hasMaterial) => {
-    const key = turnKey(cls)
-    this.setState((prev) => ({
-      classes: prev.classes.map((item) => (turnKey(item) === key ? { ...item, hasMaterial } : item)),
-    }))
+    this.setState((prev) => ({ classes: withTurnMaterial(prev.classes, cls, hasMaterial) }))
   }
 
   handleOpenCategory = (key) => () => this.setState({ openCategory: key })
@@ -160,13 +136,13 @@ class ReservationsPage extends Component {
         cls={cls}
         rows={turnRows(cls, this.state.classes)}
         viewRole={this.props.viewRole}
-        favoriteIds={this.state.favoriteIds}
+        favoriteIds={this.props.favoriteIds}
         showActions={!summary}
         badge={badge}
         onOpen={this.handleOpenClass}
         onChange={this.handleChange}
-        onFavoriteChange={this.handleFavoriteChange}
-        onFavoriteError={this.handleFavoriteError}
+        onFavoriteChange={this.props.onFavoriteChange}
+        onFavoriteError={this.props.onFavoriteError}
       />
     )
   }
@@ -318,8 +294,8 @@ class ReservationsPage extends Component {
             ? 'Aceptá las solicitudes, tomá lista y dejá el material de las clases que diste.'
             : 'Seguí el estado de tus clases y mirá el material que dejó el docente.'}
         </p>
-        {this.state.favoriteError ? (
-          <Banner type="danger">{this.state.favoriteError}</Banner>
+        {this.props.favoriteError ? (
+          <Banner type="danger">{this.props.favoriteError}</Banner>
         ) : null}
         {this.renderBody()}
       </div>
@@ -333,4 +309,4 @@ ReservationsPage.defaultProps = {
   now: null,
 }
 
-export default ReservationsPage
+export default withFavorites(ReservationsPage)

@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import DayAgenda from './DayAgenda.jsx'
 import { apiClass } from '../../testing/fixtures.js'
+import { orderTurnRows, turnKey } from '../../utils/reservations.js'
 
 vi.mock('../../api/client.js', () => ({
   acceptLesson: vi.fn(),
@@ -13,6 +14,13 @@ vi.mock('../../api/client.js', () => ({
 // En el futuro, para que todavía se pueda aceptar.
 const fila = (over = {}) =>
   apiClass({ id: 'a', subjectName: 'Física', teacherName: 'Carla Benítez', maxStudents: 4, ...over })
+
+// Un turno como lo arma CalendarPage: la reserva que lo representa, con su
+// clave y todas las del turno.
+function turno(...reservas) {
+  const rows = orderTurnRows(reservas)
+  return { ...rows[0], turnKey: turnKey(rows[0]), rows }
+}
 
 // Las clases de un solo día, el que está elegido.
 function renderAgenda(items, viewRole = 'teacher') {
@@ -36,9 +44,7 @@ describe('DayAgenda', () => {
       status: 'confirmada',
       paidAt: '2099-09-01T12:00:00.000Z',
     })
-    const grupal = { ...sofia, students: ['Sofía Ramírez', 'Tomás Díaz'], rows: [sofia, tomas] }
-
-    renderAgenda([grupal])
+    renderAgenda([turno(sofia, tomas)])
 
     expect(screen.getByText('Pendiente · 1')).toBeInTheDocument()
     expect(screen.getByText('Confirmada · 1')).toBeInTheDocument()
@@ -50,7 +56,7 @@ describe('DayAgenda', () => {
   it('una individual muestra su estado sin nombre repetido', () => {
     const clase = fila({ maxStudents: 1, status: 'aceptada' })
 
-    renderAgenda([{ ...clase, students: ['Sofía Ramírez'], rows: [clase] }], 'student')
+    renderAgenda([turno(clase)], 'student')
 
     expect(screen.getByText('Aceptada')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Pagar' })).toBeInTheDocument()
@@ -62,7 +68,7 @@ describe('DayAgenda', () => {
     render(
       <MemoryRouter>
         <DayAgenda
-          classesByDate={{ '2099-09-17': [jueves], '2099-09-14': [lunes] }}
+          classesByDate={{ '2099-09-17': [turno(jueves)], '2099-09-14': [turno(lunes)] }}
           selectedIso="2099-09-17"
           viewRole="student"
         />
@@ -82,7 +88,7 @@ describe('DayAgenda', () => {
     render(
       <MemoryRouter>
         <DayAgenda
-          classesByDate={{ '2099-09-14': [lunes], '2099-09-17': [jueves] }}
+          classesByDate={{ '2099-09-14': [turno(lunes)], '2099-09-17': [turno(jueves)] }}
           selectedIso="2099-09-15"
           viewRole="student"
         />

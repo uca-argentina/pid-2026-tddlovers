@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { classPriceCents, isValidClassMinutes, validateRates } from './teacherRates.js';
+import {
+  bookingPriceCents,
+  classPriceCents,
+  isValidClassMinutes,
+  validateRates,
+} from './teacherRates.js';
 
 const MATE = '47ac9e88-4099-4ab4-b1fe-3898d7b279c4';
 const FISICA = 'fe220bd6-9180-448d-8430-4dcccc866303';
@@ -84,5 +89,36 @@ describe('validateRates', () => {
 
   it('rejects something that is not a list', () => {
     expect(validar({ mate: 5000 }).fields).toEqual({ rates: 'invalid' });
+  });
+});
+
+describe('bookingPriceCents', () => {
+  // $ 5.000 la hora.
+  const base = { hourlyRateCents: 500000 };
+
+  it('without a pack or a reward, the whole class at the rate', () => {
+    expect(bookingPriceCents({ ...base, minutes: 90 })).toBe(750000);
+    expect(bookingPriceCents({ ...base, minutes: 50 })).toBe(416667);
+  });
+
+  it('with a pack, only what the tokens do not cover', () => {
+    // 1 h 30 con una clase de 1 h del paquete: se pagan 30 min.
+    expect(bookingPriceCents({ ...base, minutes: 90, packClassMinutes: 60, packTokens: 1 })).toBe(
+      250000
+    );
+    // Cubierta entera.
+    expect(bookingPriceCents({ ...base, minutes: 90, packClassMinutes: 45, packTokens: 2 })).toBe(0);
+  });
+
+  it('free rewards cover their minutes, the rest at the rate', () => {
+    expect(bookingPriceCents({ ...base, minutes: 90, rewardType: 'free_30' })).toBe(500000);
+    expect(bookingPriceCents({ ...base, minutes: 60, rewardType: 'free_60' })).toBe(0);
+  });
+
+  it('discounts apply to the first 60 minutes only', () => {
+    // 1 h 30 = $ 7.500; 10 % de la primera hora = $ 500.
+    expect(bookingPriceCents({ ...base, minutes: 90, rewardType: 'discount_10' })).toBe(700000);
+    // 30 min = $ 2.500; 20 % = $ 500.
+    expect(bookingPriceCents({ ...base, minutes: 30, rewardType: 'discount_20' })).toBe(200000);
   });
 });

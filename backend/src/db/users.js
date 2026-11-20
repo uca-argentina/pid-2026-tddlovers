@@ -1,11 +1,31 @@
 import { getPool } from './pool.js';
 
+// Usuarios: alta, perfil (con materias y tarifas del docente) y buscador.
+// Tablas: users (migración 001; nombre/apellido/telefono de 002,
+// approval_status de 012, accepts_neurona_rewards de 021), teacher_subjects
+// y subjects (002), teacher_rates (009). Sin advisory locks; createUser y
+// updateUserProfile abren su propia transacción.
+// Lo usan: routes/auth, routes/users, routes/teachers y lib/publicUser.js.
+
+// Las columnas que necesita lib/publicUser.js (toPublicUser), en snake_case.
 const PROFILE_COLUMNS =
   'id, email, role, nombre, apellido, telefono, approval_status, accepts_neurona_rewards, created_at';
 
-// Para los docentes, subjectIds vincula el usuario nuevo con el catálogo de
-// materias en la misma transacción que el insert: así una falla a medio camino
-// nunca deja un docente sin materias ni una referencia colgada.
+/**
+ * Crea un usuario (alumno o docente). Un docente nace con approval_status
+ * 'pending'. Para los docentes, subjectIds vincula el usuario nuevo con el
+ * catálogo de materias en la misma transacción que el insert: así una falla a
+ * medio camino nunca deja un docente sin materias ni una referencia colgada.
+ *
+ * @param {object} datos - del body de POST /api/auth/register, ya validado:
+ *   email (en minúsculas), passwordHash (argon2id de lib/password.js),
+ *   role ('teacher' | 'student'), nombre, apellido, telefono (o null) y
+ *   subjectIds (solo docentes; ids que existen).
+ * @returns {Promise<object>} la fila con PROFILE_COLUMNS (snake_case).
+ * Origen: INSERT en users y teacher_subjects.
+ * Lo usa: routes/auth/index.js (POST /register).
+ * Locks/transacción: transacción propia (BEGIN/COMMIT).
+ */
 export async function createUser({
   email,
   passwordHash,
@@ -49,9 +69,17 @@ export async function createUser({
   }
 }
 
-// Las materias de un docente, como array de ids. Para un alumno da [] — no
-// tiene filas en teacher_subjects. Se devuelve en TODAS las respuestas que
-// llevan un usuario, así el front siempre recibe la misma forma.
+/**
+ * Las materias de un docente, como array de ids. Para un alumno da [] — no
+ * tiene filas en teacher_subjects. Se devuelve en TODAS las respuestas que
+ * llevan un usuario, así el front siempre recibe la misma forma.
+ *
+ * @param {string} teacherId - users.id.
+ * @returns {Promise<string[]>} subject ids.
+ * Origen: teacher_subjects.
+ * Lo usan: lib/publicUser.js (campo `subjectIds`) y routes/users/index.js
+ *   (validar tarifas contra las materias actuales en PATCH /me).
+ */
 export async function findSubjectIdsByTeacher(teacherId) {
   const result = await getPool().query(
     `SELECT subject_id FROM teacher_subjects WHERE teacher_id = $1`,
@@ -70,6 +98,11 @@ export async function findSubjectIdsByTeacher(teacherId) {
  *
  * Solo docentes aprobados: un pendiente o rechazado no se ofrece (ver
  * TeacherApproval.canReceiveBookings).
+ *
+ * @returns {Promise<Array<{id, nombre, apellido, subjects: Array<{id, name}>}>>}
+ *   docentes sin ninguna materia tarifada no aparecen (JOIN LATERAL ... IS NOT NULL).
+ * Origen: users JOIN subjects filtradas por teacher_rates.
+ * Lo usa: routes/teachers/index.js (GET /api/teachers).
  */
 export async function listTeachers() {
   const result = await getPool().query(
@@ -100,6 +133,15 @@ export async function listTeachers() {
  * `approvalStatus` es el estado en que queda el docente después de editar
  * (lo decide TeacherApproval.afterProfileEdit en la ruta); undefined = no se
  * toca.
+ *
+ * @param {string} userId - request.user.id.
+ * @param {object} cambios - del body de PATCH /api/users/me ya validado:
+ *   telefono (string o null), subjectIds (string[]), rates
+ *   ([{subjectId, modality, hourlyRateCents}] de validateRates), approvalStatus.
+ * @returns {Promise<object|null>} la fila con PROFILE_COLUMNS, o null si el usuario no existe.
+ * Origen: UPDATE users; reemplaza teacher_subjects y teacher_rates.
+ * Lo usa: routes/users/index.js (PATCH /me).
+ * Locks/transacción: transacción propia (BEGIN/COMMIT).
  */
 export async function updateUserProfile(userId, { telefono, subjectIds, rates, approvalStatus }) {
   const client = await getPool().connect();
@@ -168,7 +210,15 @@ export async function updateUserProfile(userId, { telefono, subjectIds, rates, a
   }
 }
 
-/** Si el docente acepta canjes de neuronas. Lo ya reservado no cambia. */
+/**
+ * Guarda si el docente acepta canjes de neuronas. Lo ya reservado no cambia.
+ *
+ * @param {string} teacherId - request.user.id del docente.
+ * @param {boolean} accepts - body.accepts de PUT /api/teachers/me/accepts-rewards.
+ * @returns {Promise<void>}
+ * Origen: UPDATE users.accepts_neurona_rewards (migración 021).
+ * Lo usa: routes/teachers/index.js.
+ */
 export async function setAcceptsRewards(teacherId, accepts) {
   await getPool().query(`UPDATE users SET accepts_neurona_rewards = $2 WHERE id = $1`, [
     teacherId,
@@ -176,6 +226,14 @@ export async function setAcceptsRewards(teacherId, accepts) {
   ]);
 }
 
+/**
+ * Busca un usuario por email, incluyendo el hash de la contraseña.
+ *
+ * @param {string} email - ya pasado a minúsculas por la ruta.
+ * @returns {Promise<object|null>} fila snake_case (PROFILE_COLUMNS + password_hash).
+ * Origen: users.
+ * Lo usa: routes/auth/index.js (POST /register para ver si ya existe, POST /login).
+ */
 export async function findUserByEmail(email) {
   const result = await getPool().query(
     `SELECT id, email, password_hash, role, nombre, apellido, telefono, approval_status,
@@ -187,6 +245,14 @@ export async function findUserByEmail(email) {
   return result.rows[0] ?? null;
 }
 
+/**
+ * Busca un usuario por id (sin el hash).
+ *
+ * @param {string} id - request.user.id (sale de la sesión).
+ * @returns {Promise<object|null>} fila con PROFILE_COLUMNS.
+ * Origen: users.
+ * Lo usa: routes/auth/index.js (GET /me).
+ */
 export async function findUserById(id) {
   const result = await getPool().query(
     `SELECT ${PROFILE_COLUMNS}

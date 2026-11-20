@@ -107,6 +107,21 @@ const carla = (overrides = {}) =>
 
 const RESERVAR_CARLA = 'Reservar con Carla Benítez, 09:00 – 11:00'
 
+// Un paquete del alumno tal como lo manda /api/packs/mine: clases de 1 h.
+const paquete = (overrides = {}) => ({
+  id: 'p1',
+  teacherId: 4,
+  teacherName: 'Carla Benítez',
+  classCount: 2,
+  classMinutes: 60,
+  priceCents: 1000000,
+  expiresOn: '2099-12-31',
+  expired: false,
+  remaining: 2,
+  available: 2,
+  ...overrides,
+})
+
 // BookingBoard recibe `router` por props, así que para el test lo envolvemos
 // igual que hace AvailabilityPage.
 const BoardConRouter = withRouter(BookingBoard)
@@ -784,6 +799,98 @@ describe('BookingBoard', () => {
     expect(bookLesson).not.toHaveBeenCalled()
   })
 
+  it('mientras se envía la reserva el modal no se cierra, y al volver avisa y recarga', async () => {
+    let resolver
+    bookLesson.mockReturnValue(
+      new Promise((resolve) => {
+        resolver = resolve
+      }),
+    )
+    renderBoard()
+    await esperarCarga()
+    await userEvent.click(await screen.findByRole('button', { name: /^Reservar / }))
+    await userEvent.click(screen.getByRole('button', { name: '14:00' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmar reserva' }))
+
+    await userEvent.keyboard('{Escape}')
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cerrar' })).toBeDisabled()
+
+    resolver(apiClass({ id: 'nueva' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Reservaste Matemática')
+    await waitFor(() => expect(fetchAvailability).toHaveBeenCalledTimes(2))
+  })
+
+  it('con un paquete ya reservado entero explica que la clase se paga aparte', async () => {
+    fetchMyPacks.mockResolvedValue([paquete({ teacherId: 2, available: 0 })])
+    renderBoard()
+    await esperarCarga()
+    await waitFor(() => expect(fetchMyPacks).toHaveBeenCalled())
+    await userEvent.click(await screen.findByRole('button', { name: /^Reservar / }))
+
+    expect(
+      within(screen.getByRole('dialog')).getByText(
+        'Ya reservaste todas las clases de tu paquete con este docente: esta clase se paga aparte.',
+      ),
+    ).toBeInTheDocument()
+    fetchMyPacks.mockReset().mockResolvedValue([])
+  })
+
+  it('un canje elegido deja de aplicarse al pasar a una materia sin cargo', async () => {
+    fetchNeuronas.mockResolvedValue({ balance: 1000 })
+    fetchAvailability.mockResolvedValue([
+      carla({
+        teacherAcceptsRewards: true,
+        subjects: [
+          { id: 2, name: 'Física', hourlyRateCents: 0 },
+          { id: 1, name: 'Matemática', hourlyRateCents: 700000 },
+        ],
+      }),
+    ])
+    renderBoard()
+    await esperarCarga()
+    await waitFor(() => expect(fetchNeuronas).toHaveBeenCalled())
+    await userEvent.click(await screen.findByRole('button', { name: RESERVAR_CARLA }))
+    const modal = screen.getByRole('dialog')
+
+    await userEvent.click(within(modal).getByRole('button', { name: '09:00' }))
+    await userEvent.click(within(modal).getByRole('button', { name: /^Matemática/ }))
+    await userEvent.click(within(modal).getByRole('button', { name: /30 min gratis/ }))
+    await userEvent.click(within(modal).getByRole('button', { name: /^Física/ }))
+
+    expect(within(modal).queryByText('Usar neuronas')).not.toBeInTheDocument()
+    expect(modal.querySelector('.booking-dialog-price')).toHaveTextContent(/^Sin cargo$/)
+    await userEvent.click(within(modal).getByRole('button', { name: 'Confirmar reserva' }))
+    await waitFor(() => expect(bookLesson).toHaveBeenCalled())
+    expect(bookLesson.mock.calls[0][0].rewardType).toBeUndefined()
+    fetchNeuronas.mockReset().mockResolvedValue({ balance: 0 })
+  })
+
+  it('si el usuario llega después de cargar el mes, vuelve a pedirlo con sus clases', async () => {
+    fetchMyLessons.mockResolvedValue([
+      apiClass({ id: 'mia', date: HOY, teacherId: 4, startTime: '14:30', endTime: '15:00' }),
+    ])
+    const tree = (user) => (
+      <MemoryRouter initialEntries={['/disponibilidad']}>
+        <Routes>
+          <Route path="/disponibilidad" element={<BoardConRouter user={user} />} />
+        </Routes>
+      </MemoryRouter>
+    )
+    const { rerender } = render(tree(null))
+    await esperarCarga()
+    expect(fetchMyLessons).not.toHaveBeenCalled()
+
+    rerender(tree(alumno))
+
+    await waitFor(() => expect(fetchMyLessons).toHaveBeenCalledTimes(1))
+    await esperarCarga()
+    await userEvent.click(await screen.findByRole('button', { name: /^Reservar / }))
+    expect(
+      within(screen.getByRole('dialog')).getByRole('button', { name: '14:30, ya tenés otra clase' }),
+    ).toBeDisabled()
+  })
+
   it('sin usuario no pide las clases propias ni marca superposiciones', async () => {
     renderBoard('/disponibilidad', { user: null })
     await esperarCarga()
@@ -847,6 +954,37 @@ describe('BookingBoard', () => {
       )
       expect(bookLesson).not.toHaveBeenCalled()
       expect(await screen.findByText(/Pediste el nuevo horario de Física/)).toBeInTheDocument()
+    })
+
+    it('pide la disponibilidad sin contar la clase vieja como ocupada', async () => {
+      renderBoard('/disponibilidad?reprogramar=c9')
+      await esperarCarga()
+
+      expect(fetchAvailability).toHaveBeenCalledWith(
+        expect.objectContaining({ excludeClassId: 'c9' }),
+      )
+    })
+
+    it('las clases del paquete que usaba la vieja vuelven a estar para la nueva', async () => {
+      // Paquete de 2: una ya realizada y la otra es la que se reprograma.
+      fetchClass.mockResolvedValue({ ...vieja, studentPackId: 'p1', packTokens: 1, priceCents: 0 })
+      fetchMyPacks.mockResolvedValue([paquete({ remaining: 1, available: 0 })])
+      renderBoard('/disponibilidad?reprogramar=c9')
+      await esperarCarga()
+      await screen.findByText(/Reprogramando tu clase de/)
+      await waitFor(() => expect(fetchMyPacks).toHaveBeenCalled())
+      await userEvent.click(await screen.findByRole('button', { name: RESERVAR_CARLA }))
+      const modal = screen.getByRole('dialog')
+
+      await userEvent.click(within(modal).getByRole('button', { name: '10:00' }))
+      expect(within(modal).getByText('Incluida en tu paquete')).toBeInTheDocument()
+      await userEvent.click(within(modal).getByRole('button', { name: 'Pedir nuevo horario' }))
+
+      expect(rescheduleLesson).toHaveBeenCalledWith(
+        'c9',
+        expect.objectContaining({ packId: 'p1', packTokens: 1 }),
+      )
+      fetchMyPacks.mockReset().mockResolvedValue([])
     })
 
     it('se puede dejar de reprogramar y volver a ver todo', async () => {

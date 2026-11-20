@@ -14,6 +14,7 @@ import {
   teacherTurnCredit,
   turnCredits,
   weekBounds,
+  weekTurnCredits,
   withinCap,
 } from './neuronas.js';
 
@@ -157,6 +158,28 @@ describe('turnCredits', () => {
     expect(turnCredits([martes], semana).bookings[0].minutes).toBe(30);
     // Tomar lista del martes antes no le cambia nada al lunes.
     expect(turnCredits([lunes], semana).bookings[0].minutes).toBe(450);
+  });
+});
+
+describe('weekTurnCredits', () => {
+  it('devuelve los turnos en orden y aplica el tope de 150 por fecha a los últimos', () => {
+    const filas = ['20:00', '08:00', '12:00', '16:00'].map((startTime, i) =>
+      clase({
+        id: `c${i}`,
+        studentId: `s${i}`,
+        startTime,
+        endTime: `${String(Number(startTime.slice(0, 2)) + 4).padStart(2, '0')}:00`,
+      })
+    );
+    const turnos = weekTurnCredits(filas);
+    expect(turnos.map((turno) => turno.startTime)).toEqual(['08:00', '12:00', '16:00', '20:00']);
+    expect(turnos.map((turno) => turno.teacher)).toEqual([40, 40, 40, 30]);
+  });
+
+  it('el tope por fecha no se arrastra a otro día', () => {
+    const lunes = clase({ id: 'a', startTime: '08:00', endTime: '23:00' });
+    const martes = clase({ id: 'b', studentId: 's2', date: '2099-09-15' });
+    expect(weekTurnCredits([lunes, martes]).map((turno) => turno.teacher)).toEqual([80, 10]);
   });
 });
 

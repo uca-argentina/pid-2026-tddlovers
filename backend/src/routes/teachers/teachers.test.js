@@ -140,6 +140,19 @@ describe('teacher availability windows', () => {
     expect(res.statusCode).toBe(400);
   });
 
+  it('GET rejects a date that does not exist or a huge range before reaching Postgres', async () => {
+    const headers = await authedHeaders(app);
+    for (const query of ['from=2026-02-30&to=2026-03-05', 'from=2026-01-01&to=9999-12-31']) {
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/teachers/me/availability?${query}`,
+        headers,
+      });
+      expect(res.statusCode).toBe(400);
+    }
+    expect(findTeacherWindows).not.toHaveBeenCalled();
+  });
+
   it('students have no availability', async () => {
     const headers = await authedHeaders(app, 'student');
 

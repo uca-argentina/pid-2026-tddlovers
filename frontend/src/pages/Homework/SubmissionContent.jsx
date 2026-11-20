@@ -1,7 +1,10 @@
 import { Component } from 'react'
 import { formatMoment, isSafeLink } from '../../utils/homework.js'
 
-/** Lo que entregó el alumno, igual para los dos lados, con la marca de fuera de término. */
+/**
+ * Lo que entregó el alumno, igual para los dos lados, con la marca de fuera de término.
+ * Props: submission (de StudentHomeworkDialog o TeacherSubmissionDialog).
+ */
 class SubmissionContent extends Component {
   render() {
     const { submission } = this.props

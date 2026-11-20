@@ -33,6 +33,11 @@ import {
  *
  * Los estilos están en DayWindowsDialog.css: fuera del modal no significan
  * nada (misma excepción que BookingCard con BookingResults.css).
+ *
+ * Props (de DayWindowsDialog.renderCards): window (ventana de GET
+ * /api/teachers/me/availability), subjects (ratesForModality de las tarifas),
+ * focused/cardRef, readOnly (día pasado), confirming/deleting y los handlers
+ * onEdit, onAskDelete, onCancelDelete, onDelete.
  */
 class WindowCard extends Component {
   renderFacts() {

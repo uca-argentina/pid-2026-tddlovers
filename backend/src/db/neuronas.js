@@ -6,10 +6,9 @@ import {
   HOMEWORK_ON_TIME_NEURONAS,
   HOMEWORK_WEEKLY_CAP_PER_TEACHER,
   MAX_FEATURED_TEACHERS,
-  TEACHER_CLASS_DAILY_CAP,
   homeworkEarns,
-  turnCredits,
   weekBounds,
+  weekTurnCredits,
   withinCap,
 } from '../lib/neuronas.js';
 
@@ -17,7 +16,20 @@ import {
 // acá se lee y se escribe. Las funciones que reciben `client` corren adentro de
 // la transacción de quien las llama, para que el crédito y lo que lo origina
 // queden guardados juntos o no se guarde ninguno.
+//
+// Tablas: neurona_credits (migración 021; una fila por source_key:
+// 'class:<id>', 'turn:<fecha>:<inicio>', 'bonus:<id>', 'submission:<id>'),
+// teacher_featured (021); lee classes (reward_type/reward_neuronas de 021,
+// pack de 014/015), student_packs (014), subjects, homeworks y
+// homework_submissions (020). El saldo nunca se guarda: se calcula.
+// Locks (pg_advisory_xact_lock):
+//   'neuronas:' || userId  por usuario; orden siempre docente → alumno
+//   'neuronas-featured'    global, en buyFeatured (después del del docente)
+// Lo usan: db/classes.js (syncTurnCredits, hasBalanceFor), db/homework.js
+// (creditCorrection, removeHomeworkOnTimeCredit), routes/neuronas y
+// routes/classes (findBalance, settleHomeworkCredits).
 
+/** Toma el lock 'neuronas:' || userId dentro de la transacción de `client`. */
 async function lockUser(client, userId) {
   await client.query(`SELECT pg_advisory_xact_lock(hashtext('neuronas:' || $1))`, [userId]);
 }
@@ -54,6 +66,20 @@ async function addCreditOnce(client, { userId, reason, key, amount, detail, earn
  * Recalcula las neuronas de un turno desde el estado actual de sus reservas. Se
  * llama al tomar lista o registrar un pago. Es idempotente: corregir presente a
  * ausente o pagar una clase ya dada queda bien con solo volver a correrla.
+ *
+ * Los topes (8 h por pareja en la semana, 150 por fecha para el docente) miran
+ * lo anterior, así que este cambio puede mover a los turnos que vienen después
+ * en la semana: pagar el lunes después del miércoles le saca minutos al
+ * miércoles. Por eso se recalculan también todos esos, con setCredit, y el total
+ * queda igual sea cual sea el orden en que se marcaron.
+ *
+ * @param {pg.PoolClient} client - la transacción de transitionClasses (db/classes.js).
+ * @param {{teacherId, date, startTime}} turno - lo que devuelve TRANSITION_SQL.
+ * @returns {Promise<void>}
+ * Origen: classes de la semana del docente (+ subjects, student_packs); escribe
+ *   neurona_credits con las cuentas de weekTurnCredits (lib/neuronas.js).
+ * Lo usa: db/classes.js (transitionClasses, al tomar lista o pagar).
+ * Locks/transacción: 'neuronas:' || teacherId.
  */
 export async function syncTurnCredits(client, { teacherId, date, startTime }) {
   await lockUser(client, teacherId);
@@ -81,49 +107,60 @@ export async function syncTurnCredits(client, { teacherId, date, startTime }) {
     [teacherId, monday, sunday, date, startTime]
   );
 
-  const turnRows = result.rows.filter((row) => row.date === date && row.startTime === startTime);
-  if (turnRows.length === 0) return;
-  const detail = turnRows[0].subjectName;
-  const credits = turnCredits(turnRows, result.rows);
+  // Los turnos anteriores no cambian: los topes solo miran hacia atrás. Los
+  // posteriores que no tienen realizadas no están en la consulta, pero tampoco
+  // tienen neuronas: al dejar de ser realizada cada turno ya puso las suyas en 0.
+  const changed = `${date}T${startTime}`;
+  const turns = weekTurnCredits(result.rows).filter(
+    (turn) => `${turn.date}T${turn.startTime}` >= changed
+  );
 
-  for (const booking of credits.bookings) {
-    await setCredit(client, {
-      userId: booking.studentId,
-      reason: 'class_attended',
-      key: `class:${booking.classId}`,
-      amount: booking.student,
-      detail,
-      earnedOn: date,
-    });
+  for (const turn of turns) {
+    const detail = turn.rows[0].subjectName;
+    for (const booking of turn.bookings) {
+      await setCredit(client, {
+        userId: booking.studentId,
+        reason: 'class_attended',
+        key: `class:${booking.classId}`,
+        amount: booking.student,
+        detail,
+        earnedOn: turn.date,
+      });
+      await setCredit(client, {
+        userId: teacherId,
+        reason: 'reward_bonus',
+        key: `bonus:${booking.classId}`,
+        amount: booking.bonus,
+        detail,
+        earnedOn: turn.date,
+      });
+    }
     await setCredit(client, {
       userId: teacherId,
-      reason: 'reward_bonus',
-      key: `bonus:${booking.classId}`,
-      amount: booking.bonus,
+      reason: 'class_taught',
+      key: `turn:${turn.date}:${turn.startTime}`,
+      amount: turn.teacher,
       detail,
-      earnedOn: date,
+      earnedOn: turn.date,
     });
   }
-
-  const key = `turn:${date}:${startTime}`;
-  const others = await client.query(
-    `SELECT COALESCE(sum(amount), 0)::int AS total
-     FROM neurona_credits
-     WHERE user_id = $1 AND reason = 'class_taught' AND earned_on = $2::date AND source_key <> $3`,
-    [teacherId, date, key]
-  );
-  await setCredit(client, {
-    userId: teacherId,
-    reason: 'class_taught',
-    key,
-    amount: withinCap(credits.teacher, TEACHER_CLASS_DAILY_CAP, others.rows[0].total),
-    detail,
-    earnedOn: date,
-  });
 }
 
-/** Las neuronas del alumno por una tarea a tiempo, con el tope semanal por docente. */
+/**
+ * Las neuronas del alumno por una tarea a tiempo, con el tope semanal por docente.
+ * El tope se cuenta bajo el lock del alumno: se llega acá desde la corrección
+ * (que ya tiene el del docente) y desde settleHomeworkCredits (que tiene el del
+ * alumno), y con locks distintos dos requests a la vez podían acreditar una
+ * cuarta. El orden es siempre docente → alumno y ningún camino toma el de un
+ * docente teniendo el de un alumno, así que no se puede trabar. El lock es
+ * reentrante dentro de la transacción: tomarlo de nuevo desde settle no espera.
+ *
+ * @param {string} today - 'YYYY-MM-DD' (hora argentina), fecha del crédito.
+ * Origen: cuenta neurona_credits 'homework_on_time' de la semana con ese docente.
+ * Locks/transacción: 'neuronas:' || studentId.
+ */
 async function creditHomeworkOnTime(client, { studentId, teacherId, submissionId, title }, today) {
+  await lockUser(client, studentId);
   const { monday, sunday } = weekBounds(today);
   const count = await client.query(
     `SELECT count(*)::int AS total
@@ -145,7 +182,20 @@ async function creditHomeworkOnTime(client, { studentId, teacherId, submissionId
   });
 }
 
-/** Las neuronas de la primera corrección, `credits` como las da correctionCredits. */
+/**
+ * Las neuronas de la primera corrección, `credits` como las da correctionCredits.
+ * Al docente, con el tope diario; al alumno (si `credits.student` > 0), la de
+ * tarea a tiempo vía creditHomeworkOnTime.
+ *
+ * @param {pg.PoolClient} client - la transacción de saveFeedback (db/homework.js).
+ * @param {object} submission - fila de findSubmission (id, teacherId, studentId, title).
+ * @param {{teacher: number, student: number}} credits - de correctionCredits (lib/neuronas.js).
+ * @param {string} today - now().iso.
+ * @returns {Promise<void>}
+ * Origen: neurona_credits ('homework_feedback' y 'homework_on_time').
+ * Lo usa: db/homework.js (saveFeedback).
+ * Locks/transacción: 'neuronas:' del docente y después el del alumno.
+ */
 export async function creditCorrection(client, submission, credits, today) {
   await lockUser(client, submission.teacherId);
   const earned = await client.query(
@@ -180,6 +230,13 @@ export async function creditCorrection(client, submission, credits, today) {
  * Si el docente nunca corrigió, el alumno cobra a los 7 días del vencimiento:
  * no tiene por qué perderlas por la demora de otro. Sin cron, como
  * expireStartedPending: se liquida cuando el alumno mira o usa su saldo.
+ *
+ * @param {string} studentId - request.user.id del alumno.
+ * @param {{iso: string, time: string}} ahora - now() de lib/clock.js.
+ * @returns {Promise<void>}
+ * Origen: homework_submissions + homeworks sin crédito todavía; escribe neurona_credits.
+ * Lo usan: routes/neuronas/index.js (GET /) y routes/classes/index.js (priceBooking, al canjear).
+ * Locks/transacción: transacción propia; 'neuronas:' || studentId.
  */
 export async function settleHomeworkCredits(studentId, { iso, time }) {
   const client = await getPool().connect();
@@ -219,12 +276,29 @@ export async function settleHomeworkCredits(studentId, { iso, time }) {
   }
 }
 
-/** Editar después del vencimiento la deja fuera de término: ya no vale lo liquidado. */
-export async function removeHomeworkOnTimeCredit(submissionId) {
-  await getPool().query(
+/**
+ * Editar después del vencimiento la deja fuera de término: ya no vale lo liquidado.
+ *
+ * Corre en la misma transacción que guarda la entrega (si el borrado fallara
+ * aparte, la entrega quedaría tardía con la neurona de "a tiempo"), y bajo el
+ * lock de neuronas del alumno, el mismo que toma settleHomeworkCredits: así
+ * una liquidación simultánea no puede volver a acreditarla después de borrada.
+ *
+ * @param {pg.PoolClient} client - transacción abierta por saveSubmission.
+ * @param {string} submissionId - id de la entrega recién guardada como tardía.
+ * @param {string} studentId - dueño de la entrega (RETURNING del UPDATE); con
+ *   él el DELETE usa el UNIQUE (user_id, source_key) en vez de recorrer la tabla.
+ * @returns {Promise<void>}
+ * Origen: DELETE en neurona_credits (source_key 'submission:<id>').
+ * Lo usa: db/homework.js (saveSubmission).
+ * Locks: 'neuronas:' || studentId.
+ */
+export async function removeHomeworkOnTimeCredit(client, submissionId, studentId) {
+  await lockUser(client, studentId);
+  await client.query(
     `DELETE FROM neurona_credits
-     WHERE reason = 'homework_on_time' AND source_key = $1`,
-    [`submission:${submissionId}`]
+     WHERE user_id = $1 AND source_key = $2 AND reason = 'homework_on_time'`,
+    [studentId, `submission:${submissionId}`]
   );
 }
 
@@ -232,6 +306,12 @@ export async function removeHomeworkOnTimeCredit(submissionId) {
  * Saldo y acreditado total. El saldo se calcula siempre: cancelar una clase
  * devuelve su canje porque deja de sumarse. Puede dar negativo si se corrigió
  * una asistencia después de gastar lo que dio; solo impide nuevos canjes.
+ *
+ * @param {string} userId - request.user.id (o el alumno/docente dentro de una transacción).
+ * @param {pg.Pool|pg.PoolClient} [db] - por defecto el pool.
+ * @returns {Promise<{earned: number, balance: number}>} earned = Σ créditos (define el nivel).
+ * Origen: neurona_credits − classes.reward_neuronas no canceladas − teacher_featured.cost_neuronas.
+ * Lo usan: hasBalanceFor y buyFeatured (acá), routes/neuronas/index.js y routes/classes/index.js.
  */
 export async function findBalance(userId, db = getPool()) {
   const result = await db.query(
@@ -252,6 +332,13 @@ export async function findBalance(userId, db = getPool()) {
 /**
  * Adentro de la transacción de la reserva: entre el chequeo de la ruta y el
  * INSERT el alumno puede estar gastando lo mismo en otra pestaña.
+ *
+ * @param {pg.PoolClient} client - transacción de insertClass (db/classes.js).
+ * @param {string} studentId - booking.studentId.
+ * @param {number} cost - booking.rewardNeuronas.
+ * @returns {Promise<boolean>}
+ * Lo usa: db/classes.js (insertClass).
+ * Locks/transacción: 'neuronas:' || studentId.
  */
 export async function hasBalanceFor(client, studentId, cost) {
   await lockUser(client, studentId);
@@ -259,7 +346,14 @@ export async function hasBalanceFor(client, studentId, cost) {
   return balance >= cost;
 }
 
-/** Cuánto de cada cosa lleva acreditada el usuario, para las insignias. */
+/**
+ * Cuánto de cada cosa lleva acreditada el usuario, para las insignias.
+ *
+ * @param {string} userId - request.user.id (alumno).
+ * @returns {Promise<{classesAttended: number, homeworksOnTime: number}>}
+ * Origen: neurona_credits.
+ * Lo usa: routes/neuronas/index.js (badgesFor).
+ */
 export async function findCreditCounts(userId) {
   const result = await getPool().query(
     `SELECT count(*) FILTER (WHERE reason = 'class_attended')::int AS "classesAttended",
@@ -271,7 +365,16 @@ export async function findCreditCounts(userId) {
   return result.rows[0];
 }
 
-/** El historial: lo acreditado (en positivo) y lo gastado (en negativo), lo último primero. */
+/**
+ * El historial: lo acreditado (en positivo) y lo gastado (en negativo), lo último primero.
+ *
+ * @param {string} userId - request.user.id.
+ * @param {number} [limit] - cuántos movimientos (50).
+ * @returns {Promise<Array<{id, reason, amount, detail, createdAt}>>} reason es la de
+ *   neurona_credits, 'class_reward' (canje) o 'featured' (Destacado).
+ * Origen: neurona_credits ∪ classes con canje no canceladas ∪ teacher_featured.
+ * Lo usa: routes/neuronas/index.js (GET /).
+ */
 export async function listMovements(userId, limit = 50) {
   const result = await getPool().query(
     `SELECT id, reason, amount, detail, "createdAt" FROM (
@@ -295,7 +398,15 @@ export async function listMovements(userId, limit = 50) {
   return result.rows;
 }
 
-/** Hasta cuándo está destacado el docente, y cuántos lugares quedan. */
+/**
+ * Hasta cuándo está destacado el docente, y cuántos lugares quedan.
+ *
+ * @param {string} teacherId - request.user.id.
+ * @param {string} today - now().iso.
+ * @returns {Promise<{activeUntil: string|null, slotsLeft: number}>}
+ * Origen: teacher_featured.
+ * Lo usa: routes/neuronas/index.js (GET / como docente).
+ */
 export async function findFeaturedStatus(teacherId, today) {
   const result = await getPool().query(
     `SELECT
@@ -312,6 +423,13 @@ export async function findFeaturedStatus(teacherId, today) {
  * Compra 7 días de Destacado desde hoy. Dos locks porque se cuidan dos cosas: el
  * saldo del docente y el cupo, que es de todos. Si cualquiera pudiera destacarse,
  * "Destacado" dejaría de distinguir a nadie. Devuelve { endDate } o { conflict }.
+ *
+ * @param {string} teacherId - request.user.id (docente aprobado).
+ * @param {string} today - now().iso.
+ * @returns {Promise<{endDate: string}|{conflict: string}>}
+ * Origen: teacher_featured (activos y INSERT); saldo con findBalance.
+ * Lo usa: routes/neuronas/index.js (POST /featured).
+ * Locks/transacción: transacción propia; 'neuronas:' || teacherId y después 'neuronas-featured'.
  */
 export async function buyFeatured(teacherId, today) {
   const client = await getPool().connect();

@@ -43,7 +43,7 @@ const HOUR_HEIGHT = 52
  * Cada semana es distinta: se muestran las ventanas sueltas de esas fechas y
  * las semanales que ya habían arrancado. La cuenta la hace windowsOn.
  *
- * Los días de vacaciones se ven en gris con un cartel: los horarios siguen
+ * Los días de licencia se ven rayados, con los horarios en gris y la etiqueta "Licencia": los horarios siguen
  * (vuelven solos cuando terminan), pero nadie los puede reservar.
  *
  * Como no hay ventanas que se pisen en un mismo día (lo valida el backend),
@@ -52,6 +52,17 @@ const HOUR_HEIGHT = 52
  * En el teléfono (`mobile`) la grilla de siete columnas no entra: va la misma
  * tira de semana del calendario y, abajo, los horarios del día elegido como
  * tarjetas. Al pasar de semana se queda el mismo día de la semana.
+ *
+ * Rol: docente. Sin fetch propio.
+ *
+ * Props (de TeacherAvailability):
+ *   - weekStart: lunes (Date) de la semana visible; today: hoy "YYYY-MM-DD".
+ *   - windows: ventanas crudas de GET /api/teachers/me/availability?from&to.
+ *   - vacations: licencias de GET /api/teachers/me/vacations.
+ *   - loading, showingThisWeek.
+ *   - onPrev / onNext / onToday: cambiar de semana (el padre recarga).
+ *   - onOpenDay(iso), onOpenWindow(iso, windowId): abren DayWindowsDialog.
+ *   - mobile: de withViewport.
  */
 class WeekCalendar extends Component {
   state = {
@@ -60,6 +71,11 @@ class WeekCalendar extends Component {
     selectedIndex: null,
   }
 
+  /**
+   * Los 7 días de la semana con lo que hay que dibujar en cada uno:
+   * { date, iso, index, isToday, isPast, onVacation, windows } (windowsOn
+   * decide qué ventanas caen ese día).
+   */
   getDays() {
     const { weekStart, windows, today, vacations } = this.props
     return weekDates(weekStart).map((date, index) => {

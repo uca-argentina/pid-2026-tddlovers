@@ -23,6 +23,16 @@ import { useLocation, useNavigate, useParams, useSearchParams } from 'react-rout
  *     render() { return <h1>{this.props.router.searchParams.get('q')}</h1> }
  *   }
  *   export default withRouter(Pantalla)
+ *
+ * Inyecta `router` = { navigate, location, params, searchParams,
+ * setSearchParams }, todo sacado de los hooks de react-router-dom
+ * (useNavigate, useLocation, useParams, useSearchParams), o sea de la URL
+ * actual dentro del <BrowserRouter> de App.jsx.
+ *
+ * @param {Component} Wrapped - el class component a envolver.
+ * @returns {Function} el componente envuelto (con sus props intactas + `router`).
+ * Lo usan: pages/Availability/AvailabilityPage.jsx (que le pasa `router` a
+ * BookingBoard) y components/SearchBar.jsx.
  */
 export default function withRouter(Wrapped) {
   function WithRouter(props) {

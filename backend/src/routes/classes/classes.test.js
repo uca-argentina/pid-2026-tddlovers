@@ -218,6 +218,33 @@ describe('POST /api/classes', () => {
     });
   });
 
+  it('expires started pending bookings before checking, so a stale one does not block the slot', async () => {
+    const headers = await authedHeaders(app);
+
+    await app.inject({ method: 'POST', url: '/api/classes', headers, payload: reserva() });
+
+    expect(expireStartedPending).toHaveBeenCalledTimes(1);
+    expect(expireStartedPending.mock.invocationCallOrder[0]).toBeLessThan(
+      hasOverlappingClass.mock.invocationCallOrder[0]
+    );
+  });
+
+  it('a date that does not exist is a 400, not a 500 from Postgres', async () => {
+    const headers = await authedHeaders(app);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/classes',
+      headers,
+      payload: reserva({ date: '2099-02-30' }),
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().fields).toEqual({ date: 'invalid' });
+    expect(findWindowById).not.toHaveBeenCalled();
+    expect(bookClass).not.toHaveBeenCalled();
+  });
+
   it('a free duration is priced to the cent', async () => {
     const headers = await authedHeaders(app);
 
@@ -1087,6 +1114,25 @@ describe('class material', () => {
 
     expect(res.statusCode).toBe(400);
     expect(res.json().message).toMatch(/20 archivos/);
+    expect(putFile).not.toHaveBeenCalled();
+  });
+
+  it('stops reading as soon as the upload no longer fits in the turn', async () => {
+    findClassById.mockResolvedValue(delDocente());
+    // Le faltan 5 bytes para los 25 MB: el primer archivo ya no entra.
+    const casi = [{ id: 'f0', sizeBytes: 25 * 1024 * 1024 - 5 }];
+    findMaterial.mockResolvedValue({ ...MATERIAL, files: casi });
+    const body = multipartBody([
+      { name: 'a.pdf', type: 'application/pdf', content: '0123456789' },
+      { name: 'b.pdf', type: 'application/pdf', content: '0123456789' },
+    ]);
+
+    const res = await call('POST', 'material/files', body);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().message).toMatch(/25 MB/);
+    // El corte es adentro del bucle (sin leer el resto): la conexión se cierra.
+    expect(res.headers.connection).toBe('close');
     expect(putFile).not.toHaveBeenCalled();
   });
 

@@ -8,8 +8,12 @@ import './MonthGrid.css'
  * celdas que arma buildMonthGrid(). No decide nada — recibe las semanas ya
  * calculadas y avisa para arriba cuando se toca un día.
  *
- * `gridRef` va al contenedor de las semanas para que CalendarPage pueda
+ * `gridRef` va al contenedor de las semanas para que MonthPane pueda
  * medir el alto de una celda y calcular cuántas clases entran.
+ *
+ * Props (de MonthPane.renderGrid): weeks (getWeeks), classesByDate (el
+ * eventsByDate de MonthPane), freeByDate, selectedIso, maxVisibleEvents,
+ * gridRef y onSelectDay(iso) → handler de cada celda.
  */
 class MonthGrid extends Component {
   render() {

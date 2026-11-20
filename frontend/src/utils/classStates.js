@@ -6,6 +6,14 @@ import { formatDayLong, fromISODate, toISODate } from './calendar.js'
 // para decidir qué botones mostrar: el que decide de verdad es el backend, que
 // vuelve a chequear todo (y dice por qué no, si algo cambió en el medio). Si
 // se toca una regla allá, hay que tocarla acá.
+//
+// Todas reciben una clase (reserva) tal como la devuelve GET /api/classes
+// (status, date, startTime, endTime, paidAt, priceCents, packTokens,
+// rewardType, cancelReason, cancelledBy) y, cuando importa, el rol de la
+// sesión. Lo usan los componentes de clase (components/ClassActions.jsx,
+// TurnActions.jsx, StudentsDialog.jsx, AttendanceDialog.jsx,
+// ClassDetailDialog.jsx, ClassMaterial.jsx), pages/Reservations/ y los utils
+// reservations.js, classMaterials.js y homework.js (nowParts/hasEnded).
 
 const CANCEL_NOTICE_HOURS = 24
 
@@ -28,11 +36,22 @@ export const STATUS_TONES = {
   cancelada: 'muted',
 }
 
+/**
+ * El texto en pantalla de un `status` ('no_presentada' -> 'No presentada').
+ * Lo usan: components/ClassActions.jsx, TurnActions.jsx, StudentsDialog.jsx.
+ */
 export function statusLabel(status) {
   return STATUS_LABELS[status] || status
 }
 
-/** "Ahora" en el formato de la app. El navegador de los usuarios está en hora argentina. */
+/**
+ * "Ahora" en el formato de la app. El navegador de los usuarios está en hora argentina.
+ *
+ * @param {Date} [date] - se inyecta en los tests.
+ * @returns {{iso: string, time: string}} 'YYYY-MM-DD' y 'HH:MM' locales.
+ * Es el `now` por defecto de casi todas las funciones de este archivo, de
+ * classMaterials.js, homework.js y reservations.js.
+ */
 export function nowParts(date = new Date()) {
   const hh = String(date.getHours()).padStart(2, '0')
   const mm = String(date.getMinutes()).padStart(2, '0')
@@ -49,11 +68,19 @@ function minutesUntilStart(cls, now) {
   return toEpochMinutes(cls.date, cls.startTime) - toEpochMinutes(now.iso, now.time)
 }
 
+/**
+ * Si la clase ya empezó (date + startTime <= ahora).
+ * Lo usan: components/ClassDetailDialog.jsx, pages/Reservations/ReservationsPage.jsx.
+ */
 export function hasStarted(cls, now = nowParts()) {
   return minutesUntilStart(cls, now) <= 0
 }
 
-/** Ya terminó: el fin llegó. Un fin "24:00" es la medianoche siguiente. */
+/**
+ * Ya terminó: el fin llegó. Un fin "24:00" es la medianoche siguiente.
+ * Lo usan: utils/classMaterials.js, utils/reservations.js, components/ClassMaterial.jsx.
+ * Espejo: hasEnded de backend/src/lib/classStates.js.
+ */
 export function hasEnded(cls, now = nowParts()) {
   return toEpochMinutes(cls.date, cls.endTime) <= toEpochMinutes(now.iso, now.time)
 }
@@ -80,7 +107,18 @@ const RULES = {
     role === 'student' && cls.status === 'confirmada' && withNotice(cls, now),
 }
 
-/** Lo que `role` puede hacer ahora con la clase: accept, cancel, pay, attend, reschedule. */
+/**
+ * Lo que `role` puede hacer ahora con la clase: accept, cancel, pay, attend, reschedule.
+ *
+ * @param {object} cls - una clase de GET /api/classes.
+ * @param {'teacher'|'student'} role - el rol de la sesión.
+ * @param {object} [now] - nowParts().
+ * @returns {string[]} las acciones permitidas; cada una corresponde a
+ *   POST /api/classes/:id/{accept,cancel,pay,attendance,reschedule}.
+ * Lo usan: components/ClassActions.jsx, TurnActions.jsx, StudentsDialog.jsx,
+ * AttendanceDialog.jsx, ClassDetailDialog.jsx.
+ * Espejo: RULES/checkAction de backend/src/lib/classStates.js (la autoridad).
+ */
 export function allowedActions(cls, role, now = nowParts()) {
   return Object.keys(RULES).filter((action) => RULES[action](cls, role, now))
 }
@@ -88,6 +126,7 @@ export function allowedActions(cls, role, now = nowParts()) {
 /**
  * Una clase que se debe: la aceptada todavía no se pagó (por eso no está
  * confirmada), y una ya dada puede haber quedado sin pagar (se paga después).
+ * Lo usa: components/ClassActions.jsx.
  */
 export function owesPayment(cls) {
   return !cls.paidAt && ['aceptada', 'realizada', 'no_presentada'].includes(cls.status)
@@ -97,23 +136,26 @@ export function owesPayment(cls) {
  * Si el alumno ya pagó, para el docente: "Pagó", "Sin pagar", o por qué no
  * hay nada que pagar (lo cubre el paquete, o la tarifa es 0). Devuelve
  * { label, tone } con los tonos de las pastillas.
+ * Lo usan: components/ClassDetailDialog.jsx, StudentsDialog.jsx, AttendanceDialog.jsx.
  */
 export function paymentStatus(cls) {
-  // Antes que paidAt: aceptar una clase cubierta por el canje ya la marca paga, y
-  // "Pagó" diría algo que el alumno no hizo.
+  // Antes que paidAt: aceptar una clase cubierta entera por el canje o por el
+  // paquete ya la marca paga, y "Pagó" diría algo que el alumno no hizo.
   if (cls.rewardType && cls.priceCents === 0) return { label: 'Con neuronas', tone: 'info' }
+  if (cls.packTokens > 0 && cls.priceCents === 0) return { label: 'Con paquete', tone: 'info' }
   if (cls.paidAt) return { label: 'Pagó', tone: 'success' }
-  if (cls.priceCents === 0) {
-    return cls.packTokens > 0
-      ? { label: 'Con paquete', tone: 'info' }
-      : { label: 'Gratis', tone: 'info' }
-  }
+  if (cls.priceCents === 0) return { label: 'Gratis', tone: 'info' }
   return { label: 'Sin pagar', tone: 'warning' }
 }
 
 /**
  * Por qué está cancelada, dicho desde quien mira: "Cancelada por vos" no es
  * lo mismo que "Cancelada por el docente".
+ *
+ * @param {object} cls - una clase de GET /api/classes (cancelReason, cancelledBy).
+ * @param {'teacher'|'student'} role - el rol de quien mira.
+ * @returns {string|null} null si no está cancelada o no hay nada que explicar.
+ * Lo usan: components/ClassActions.jsx, TurnActions.jsx.
  */
 export function cancelDescription(cls, role) {
   if (cls.status !== 'cancelada') return null
@@ -137,6 +179,7 @@ export function cancelDescription(cls, role) {
  * Hasta cuándo puede el alumno cancelar o reprogramar una clase ya aceptada,
  * dicho en criollo, o por qué ya no puede. null si no aplica (pendiente, que
  * se retira siempre, o algo ya cerrado).
+ * Lo usa: components/ClassActions.jsx.
  */
 export function cancelDeadlineHint(cls, now = nowParts()) {
   if (!['aceptada', 'confirmada'].includes(cls.status) || hasStarted(cls, now)) return null

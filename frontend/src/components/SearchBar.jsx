@@ -17,6 +17,16 @@ const LISTBOX_ID = 'search-suggest'
  * Reusa la forma del buscador de materias de SubjectPicker (ícono a la
  * izquierda, input con padding para no taparlo), pero redondeado como
  * pastilla para que se lea como parte de la barra.
+ *
+ * Rol: alumno. Lo renderizan NavBar (escritorio) y BookingBoard (teléfono),
+ * sin props; `router` llega de withRouter.
+ *
+ * Datos: al primer foco, fetchSubjects → GET /api/subjects y fetchTeachers →
+ * GET /api/teachers (el catálogo para sugerir; suggest() de utils/search.js
+ * filtra localmente).
+ *
+ * Estado: query (lo tipeado), open, activeIndex (sugerencia resaltada),
+ * catalog ({ subjects, teachers }) y panel (posición medida de la lista).
  */
 class SearchBar extends Component {
   state = {
@@ -81,6 +91,10 @@ class SearchBar extends Component {
     this.setState({ panel: { top: rect.bottom + 6, left: rect.left, width } })
   }
 
+  /**
+   * Pide una sola vez materias (GET /api/subjects) y docentes
+   * (GET /api/teachers) y los guarda en `catalog`.
+   */
   loadCatalog() {
     if (this.catalogRequested) return
     this.catalogRequested = true

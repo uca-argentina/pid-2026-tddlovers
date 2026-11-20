@@ -21,6 +21,15 @@ import './AttendanceDialog.css'
  *
  * Va en su propio modal, como tomar lista, para que una grupal de muchos no
  * llene el detalle. Cada cambio se avisa con onChange(reserva).
+ *
+ * Rol: docente. Props (de ClassDetailDialog): rows (reservas del turno), now,
+ * onChange(reservaActualizada) y onClose().
+ *
+ * Datos: acceptLesson → POST /api/classes/:id/accept y cancelLesson →
+ * POST /api/classes/:id/cancel, de a una reserva; qué botones se ven lo
+ * decide allowedActions (utils/classStates.js).
+ *
+ * Estado: busy (id en vuelo), confirmCancelId, error.
  */
 class StudentsDialog extends Component {
   state = {
@@ -34,6 +43,10 @@ class StudentsDialog extends Component {
     return this.props.now || nowParts()
   }
 
+  /**
+   * Corre `call(row.id)` (acceptLesson o cancelLesson) y le pasa la reserva
+   * devuelta a onChange; si falla deja el mensaje del backend en `error`.
+   */
   run(row, call) {
     if (this.state.busy) return
     this.setState({ busy: row.id, error: null })

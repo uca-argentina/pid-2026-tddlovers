@@ -166,4 +166,24 @@ describe('ClassDetailDialog — dirección', () => {
     expect(screen.getByText('Honduras 4800 · CP 1414 · Palermo, CABA')).toBeInTheDocument()
     expect(screen.queryByText(/aparece cuando pagues/)).not.toBeInTheDocument()
   })
+
+  it('en una grupal el docente ve el rango de precios, sin el paquete de un alumno', () => {
+    const conPaquete = { ...ana, priceCents: 0, packTokens: 1 }
+    renderDialog({ classes: [sofia, conPaquete], cls: sofia, now: ANTES })
+
+    const dialogo = screen.getByRole('dialog', { name: 'Matemática' })
+    expect(within(dialogo).getByText(/^Sin cargo – \$\s5\.000 por alumno$/)).toBeInTheDocument()
+    expect(within(dialogo).queryByText(/del paquete/)).not.toBeInTheDocument()
+  })
+
+  it('si todos pagan lo mismo, un solo precio por alumno', () => {
+    renderDialog({ now: ANTES })
+    expect(screen.getByText(/^\$\s5\.000 por alumno$/)).toBeInTheDocument()
+  })
+
+  it('el alumno de una grupal ve su paquete', () => {
+    const suya = { ...ana, priceCents: 0, packTokens: 1 }
+    renderDialog({ classes: [suya], cls: suya, viewRole: 'student', now: ANTES })
+    expect(screen.getByRole('dialog', { name: 'Matemática' })).toHaveTextContent('1 clase del paquete')
+  })
 })

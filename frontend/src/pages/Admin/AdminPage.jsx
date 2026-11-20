@@ -25,8 +25,19 @@ const DATE_FORMAT = new Intl.DateTimeFormat('es-AR', { day: 'numeric', month: 's
  *
  * Qué botones se ven lo decide allowedDecisions (utils/approval.js), que
  * copia las reglas del backend; el backend vuelve a chequear y, si algo
- * cambió en el medio (otro admin), contesta con un mensaje que se muestra en
+ * cambió en el medio (la misma cuenta admin decidió desde otra pestaña), contesta con un mensaje que se muestra en
  * la tarjeta.
+ *
+ * Ruta /admin. Props: user (de App); solo se carga si user.role === 'admin'.
+ *
+ * Datos (api/client.js):
+ *   - fetchTeachersForReview → GET /api/admin/teachers?status=<pestaña>, al
+ *     montar y al cambiar de pestaña (TABS; una sin status trae todos).
+ *   - approveTeacher → POST /api/admin/teachers/:id/approve y rejectTeacher →
+ *     POST /api/admin/teachers/:id/reject; devuelven el docente actualizado.
+ *
+ * Estado: tab (key de TABS), teachers (lista de la pestaña), loading, error,
+ * y por id de docente busy (acción en curso) y errors (último error).
  */
 class AdminPage extends Component {
   state = {
@@ -57,6 +68,7 @@ class AdminPage extends Component {
     return TABS.find((tab) => tab.key === this.state.tab) || TABS[0]
   }
 
+  /** Trae los docentes de la pestaña actual (GET /api/admin/teachers?status=) → `teachers`. */
   load = () => {
     const token = ++this.fetchToken
     this.setState({ loading: true, error: null, errors: {} })

@@ -7,7 +7,6 @@ import {
   checkUploadRoom,
   checkViewMaterial,
   contentDisposition,
-  hasEnded,
   inlineSafe,
   sanitizeFilename,
   validateSummary,
@@ -25,19 +24,6 @@ const clase = (over = {}) => ({
 const EN_CURSO = { iso: '2099-09-14', time: '14:29' };
 const TERMINADA = { iso: '2099-09-14', time: '14:30' };
 const DIAS_DESPUES = { iso: '2099-09-20', time: '09:00' };
-
-describe('hasEnded', () => {
-  it('termina justo a la hora de fin', () => {
-    expect(hasEnded(clase(), EN_CURSO)).toBe(false);
-    expect(hasEnded(clase(), TERMINADA)).toBe(true);
-  });
-
-  it('un fin "24:00" es la medianoche siguiente', () => {
-    const tarde = clase({ startTime: '23:00', endTime: '24:00' });
-    expect(hasEnded(tarde, { iso: '2099-09-14', time: '23:59' })).toBe(false);
-    expect(hasEnded(tarde, { iso: '2099-09-15', time: '00:00' })).toBe(true);
-  });
-});
 
 describe('checkEditMaterial', () => {
   const docente = (now) => ({ role: 'teacher', now });

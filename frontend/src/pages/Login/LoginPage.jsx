@@ -12,6 +12,15 @@ import { loginAccount } from '../../api/client.js'
  * Pantalla de login. Class component, mismo patrón visual que
  * RegisterPage (AuthHero + tarjeta blanca), pero sin pasos: un solo
  * formulario con email y contraseña.
+ *
+ * Ruta /ingresar. Props (de App): successMessage (cartel tras registrarse, o
+ * null) y onSuccess(user), con el que App guarda el usuario de la sesión.
+ *
+ * Datos: loginAccount → POST /api/auth/login con { email, password }; el
+ * backend deja la cookie de sesión y devuelve el usuario.
+ *
+ * Estado: values (email, password), touched, submitting, error y done (al
+ * entrar, redirige con <Navigate>).
  */
 class LoginPage extends Component {
   state = {

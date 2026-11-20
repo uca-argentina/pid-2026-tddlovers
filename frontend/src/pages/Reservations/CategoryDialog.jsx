@@ -15,6 +15,10 @@ import './CategoryDialog.css'
  *
  * Las tarjetas las arma la página (renderCard), que es la que tiene las
  * reservas, los favoritos y el detalle.
+ *
+ * Props (de ReservationsPage): category (una de CATEGORIES), turns
+ * (turnsIn(category, groupTurns(classes))), viewRole, renderCard(cls) y
+ * onClose(). Sin fetch. Estado: filters (forma de EMPTY_FILTERS).
  */
 class CategoryDialog extends Component {
   state = { filters: EMPTY_FILTERS }

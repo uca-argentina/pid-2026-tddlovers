@@ -1,3 +1,7 @@
+// Punto de entrada del backend (`node src/index.js`, ver package.json): carga
+// las variables de .env (dotenv), arma la app con buildApp() de app.js, la pone
+// a escuchar en el puerto y se encarga del apagado ordenado. Los tests NO pasan
+// por acá: usan buildApp() + app.inject() sin abrir un puerto.
 import 'dotenv/config';
 import { buildApp } from './app.js';
 import { closePool } from './db/pool.js';
@@ -15,10 +19,18 @@ app.listen({ port, host: '0.0.0.0' }, (err) => {
   }
 });
 
-// Docker manda SIGTERM en `stop`/`down` y mata el proceso a la fuerza si no
-// termina en el tiempo de gracia. Primero se cierra el servidor HTTP para que
-// los pedidos en curso terminen, y después el pool de la base, así ninguna
-// conexión se corta en medio de una consulta.
+/**
+ * Apaga el proceso ordenadamente: cierra Fastify (deja terminar los pedidos en
+ * curso) y después el pool de Postgres (closePool de db/pool.js), y sale con 0,
+ * o con 1 si algo falló al cerrar.
+ *
+ * Docker manda SIGTERM en `stop`/`down` y mata el proceso a la fuerza si no
+ * termina en el tiempo de gracia. Primero el servidor HTTP y después la base,
+ * así ninguna conexión se corta en medio de una consulta.
+ *
+ * @param {string} signal - 'SIGTERM' o 'SIGINT'; solo se usa para el log.
+ * Lo usan: los process.on de abajo.
+ */
 async function shutdown(signal) {
   app.log.info({ signal }, 'shutting down');
   try {

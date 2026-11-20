@@ -1,6 +1,8 @@
 import {
+  EMPTY_BOOKING_FILTERS,
   annotateClashes,
   cardKind,
+  countBookingFilters,
   dayKeyFromIso,
   filterCards,
   formatClashes,
@@ -12,7 +14,9 @@ import {
   rangesOverlap,
   resolveQuery,
   startOptions,
+  toMinutes,
 } from './booking.js'
+import { toMinutes as toMinutesDeWindows } from './windows.js'
 import { apiClass } from '../testing/fixtures.js'
 
 // 2026-09-14 es lunes. Una fila tal como la manda /api/availability.
@@ -394,3 +398,38 @@ describe('formatClashes', () => {
   })
 })
 
+describe('toMinutes', () => {
+  it('pasa la hora a minutos, con 24:00 como fin del día', () => {
+    expect(toMinutes('13:45')).toBe(825)
+    expect(toMinutes('24:00')).toBe(1440)
+  })
+
+  it('lo que no es hora da -1', () => {
+    expect(toMinutes('')).toBe(-1)
+    expect(toMinutes(undefined)).toBe(-1)
+    expect(toMinutes('25:00')).toBe(-1)
+  })
+
+  it('es la misma función que usa windows.js', () => {
+    expect(toMinutesDeWindows).toBe(toMinutes)
+  })
+})
+
+describe('countBookingFilters', () => {
+  it('sin nada elegido es 0', () => {
+    expect(countBookingFilters(EMPTY_BOOKING_FILTERS)).toBe(0)
+  })
+
+  it('cuenta cada chip, el horario como uno, el docente y favoritos', () => {
+    const filters = {
+      ...EMPTY_BOOKING_FILTERS,
+      dayKeys: ['lunes', 'martes'],
+      modalities: ['virtual'],
+      fromTime: '10:00',
+      toTime: '12:00',
+      teacherQuery: 'laura',
+      onlyFavorites: true,
+    }
+    expect(countBookingFilters(filters)).toBe(6)
+  })
+})

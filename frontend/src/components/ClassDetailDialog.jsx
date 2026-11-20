@@ -11,7 +11,7 @@ import { formatDayLongWithYear, formatDuration, fromISODate } from '../utils/cal
 import { canHaveMaterial } from '../utils/classMaterials.js'
 import { allowedActions, hasStarted, nowParts, paymentStatus } from '../utils/classStates.js'
 import { formatMoney } from '../utils/rates.js'
-import { turnRows } from '../utils/reservations.js'
+import { turnPriceLabel, turnRows } from '../utils/reservations.js'
 import { capacityLabel, modalityLabel, needsAddress, needsMeetingUrl } from '../utils/windows.js'
 import { rewardLabel } from '../utils/neuronas.js'
 import './ClassDetailDialog.css'
@@ -26,6 +26,22 @@ import './ClassDetailDialog.css'
  * Lo usan Mis reservas y la agenda del Calendario. `classes` son las
  * reservas que tiene cargadas la pantalla: de ahí salen los otros alumnos del
  * turno, que en una grupal el docente ve como filas separadas.
+ *
+ * Props:
+ *   - cls: la reserva que representa al turno (una fila de GET /api/classes).
+ *   - classes: ReservationsPage pasa todas sus reservas (turnRows saca las del
+ *     turno); DayAgenda pasa directamente `rows` del turno.
+ *   - viewRole: 'teacher' | 'student'.
+ *   - now: inyectable para tests (ReservationsPage lo reenvía; DayAgenda no).
+ *   - onChange(reservaActualizada): el padre reemplaza esa fila.
+ *   - onMaterialChange(cls, hasMaterial): solo lo pasa ReservationsPage.
+ *   - onClose().
+ *
+ * Sin fetch propio: las acciones las hacen ClassActions / TurnActions /
+ * StudentsDialog / AttendanceDialog, y el material ClassMaterial.
+ *
+ * Estado: takingAttendance (AttendanceDialog abierto) y managingStudents
+ * (StudentsDialog abierto).
  */
 class ClassDetailDialog extends Component {
   state = { takingAttendance: false, managingStudents: false }
@@ -82,8 +98,10 @@ class ClassDetailDialog extends Component {
             <PinIcon />
             <span>
               {cls.address}
-              {/* La dirección armada ya trae la localidad; las clases
-                  reservadas antes de las direcciones guardadas, no. */}
+              {/* La dirección armada (formatAddress) ya trae la localidad,
+                  pero en las clases reservadas antes de la migración 019 no
+                  está garantizado: por eso se agrega si falta. Esta rama es
+                  necesaria, no es código muerto. */}
               {cls.locality && !cls.address.includes(cls.locality) ? (
                 <span className="class-detail-muted"> · {cls.locality}</span>
               ) : null}
@@ -236,6 +254,40 @@ class ClassDetailDialog extends Component {
     )
   }
 
+  /**
+   * El precio de una reserva: lo que paga, y si usa paquete o neuronas. Es
+   * lo que ve el alumno, y el docente en una individual.
+   */
+  renderPrice() {
+    const { cls } = this.props
+    return (
+      <p className="class-detail-price">
+        {formatMoney(cls.priceCents)}
+        {cls.packTokens > 0 ? (
+          <span className="class-detail-muted">
+            {' · '}
+            {cls.packTokens === 1 ? '1 clase' : `${cls.packTokens} clases`} del paquete
+          </span>
+        ) : null}
+        {cls.rewardType ? (
+          <span className="class-detail-muted">
+            {' · '}
+            {rewardLabel(cls.rewardType)} con neuronas
+          </span>
+        ) : null}
+      </p>
+    )
+  }
+
+  /**
+   * El docente en una grupal: cada alumno paga lo suyo (con paquete, con
+   * neuronas o entero), así que va el monto o el rango, sin el paquete ni el
+   * canje de uno solo. El de cada uno está en "Ver alumnos".
+   */
+  renderGroupPrice(rows) {
+    return <p className="class-detail-price">{turnPriceLabel(rows)} por alumno</p>
+  }
+
   render() {
     const { cls, viewRole, onClose } = this.props
     const rows = this.getRows()
@@ -264,22 +316,7 @@ class ClassDetailDialog extends Component {
               <span>{this.renderKind(active)}</span>
             </li>
           </ul>
-          <p className="class-detail-price">
-            {formatMoney(cls.priceCents)}
-            {docente && cls.maxStudents > 1 ? ' por alumno' : ''}
-            {cls.packTokens > 0 ? (
-              <span className="class-detail-muted">
-                {' · '}
-                {cls.packTokens === 1 ? '1 clase' : `${cls.packTokens} clases`} del paquete
-              </span>
-            ) : null}
-            {cls.rewardType ? (
-              <span className="class-detail-muted">
-                {' · '}
-                {rewardLabel(cls.rewardType)} con neuronas
-              </span>
-            ) : null}
-          </p>
+          {docente && cls.maxStudents > 1 ? this.renderGroupPrice(rows) : this.renderPrice()}
 
           {docente ? this.renderTeacherStatus(rows) : this.renderStudentStatus()}
           {docente ? this.renderAttendance(active) : null}

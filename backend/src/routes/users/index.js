@@ -3,6 +3,13 @@ import { countExistingSubjectIds } from '../../db/subjects.js';
 import { toPublicUser } from '../../lib/publicUser.js';
 import { validateRates } from '../../lib/teacherRates.js';
 import { TeacherApproval } from '../../lib/teacherApproval.js';
+import { isUuid } from '../../lib/validators.js';
+
+// Montado en /api/users (app.js):
+//   PATCH /api/users/me  con sesión (cualquier rol; materias y tarifas solo docentes)
+// Usa: db/users.js, db/subjects.js, lib/teacherRates.js (validateRates),
+// lib/teacherApproval.js y lib/publicUser.js.
+// Los errores salen como { message } (+ `fields` en validaciones); no hay código `error`.
 
 // Mismo criterio que el registro: el teléfono es opcional, así que se acepta
 // vacío, pero si viene tiene que parecer un teléfono. La UI valida igual.
@@ -18,6 +25,11 @@ export default async function usersRoutes(app) {
    * lista entera de tarifas por hora, [{ subjectId, modality, hourlyRateCents }],
    * y solo de materias que el docente da. En un alumno se ignoran los dos —
    * no tiene materias propias.
+   *
+   * Body: { telefono?, subjectIds?, rates? }. Origen del usuario: request.user.
+   * Respuesta: 200 + usuario de toPublicUser (un docente rechazado vuelve a 'pending').
+   * Errores: 400 teléfono, materias o tarifas inválidas (con `fields`);
+   *   404 el usuario ya no existe.
    */
   app.patch('/me', { onRequest: [app.requireAuth, app.csrfProtection] }, async (request, reply) => {
     const { telefono, subjectIds, rates } = request.body ?? {};
@@ -37,7 +49,8 @@ export default async function usersRoutes(app) {
 
     let cleanSubjectIds;
     if (request.user.role === 'teacher' && subjectIds !== undefined) {
-      if (!Array.isArray(subjectIds)) {
+      // Un id que no es UUID llegaría a `$1::uuid[]` y sería un 500.
+      if (!Array.isArray(subjectIds) || !subjectIds.every(isUuid)) {
         return reply
           .code(400)
           .send({ message: 'Materias inválidas', fields: { subjectIds: 'invalid' } });

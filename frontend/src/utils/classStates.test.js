@@ -97,3 +97,20 @@ describe('paymentStatus con neuronas', () => {
     expect(paymentStatus(conResto).label).toBe('Sin pagar')
   })
 })
+
+describe('paymentStatus con paquete', () => {
+  it('una clase cubierta entera por el paquete dice "Con paquete", también ya aceptada', () => {
+    const conPaquete = apiClass({ priceCents: 0, packTokens: 1, paidAt: null })
+    expect(paymentStatus(conPaquete).label).toBe('Con paquete')
+    // Aceptarla la confirma con paidAt, pero el alumno no pagó nada.
+    expect(
+      paymentStatus({ ...conPaquete, status: 'confirmada', paidAt: '2099-09-14T12:00:00.000Z' })
+        .label,
+    ).toBe('Con paquete')
+  })
+
+  it('con un resto pagado aparte, "Pagó"', () => {
+    const conResto = apiClass({ priceCents: 250000, packTokens: 1, paidAt: '2099-09-14T12:00:00.000Z' })
+    expect(paymentStatus(conResto).label).toBe('Pagó')
+  })
+})

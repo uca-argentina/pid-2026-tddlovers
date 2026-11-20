@@ -5,6 +5,14 @@
 //
 // Como lib/classStates.js, no toca la base ni el reloj: se prueba solo, y la
 // ruta decide qué guardar con lo que devuelve.
+//
+// Dato: users.approval_status (enum teacher_approval_status, migración 012),
+// que llega por la sesión (request.user.approvalStatus) o por las consultas de
+// db/* (window.teacherApprovalStatus, offer.teacherApprovalStatus...).
+// Lo usan: routes/admin/index.js (check, approve, reject), routes/users/index.js
+// (afterProfileEdit), routes/classes/index.js y routes/packs/index.js
+// (bookingProblem).
+// Espejo: frontend/src/utils/approval.js, solo para elegir botones y avisos.
 
 /** En inglés, como el rol: viajan por la API y el front los traduce. */
 export const APPROVAL_STATUSES = ['pending', 'approved', 'rejected'];
@@ -39,6 +47,7 @@ export class TeacherApproval {
     this.status = status ?? null;
   }
 
+  /** ¿Está aprobado? Solo se usa adentro de la clase. */
   isApproved() {
     return this.status === 'approved';
   }
@@ -52,7 +61,11 @@ export class TeacherApproval {
     return this.isApproved();
   }
 
-  /** null si se le puede reservar, o { status, message } para el alumno. */
+  /**
+   * null si se le puede reservar (o comprarle un paquete), o { status: 409,
+   * message } para el alumno.
+   * Lo usan: routes/classes/index.js (checkWindowSlot) y routes/packs/index.js (comprar).
+   */
   bookingProblem() {
     if (this.canReceiveBookings()) return null;
     return deny(409, 'Este docente todavía no puede recibir reservas.');
@@ -61,6 +74,11 @@ export class TeacherApproval {
   /**
    * null si el admin puede tomar esa decisión ahora, o { status, message }.
    * Mismo contrato que checkAction de lib/classStates.js.
+   *
+   * @param {'approve'|'reject'} action - la acción de la URL
+   *   (POST /api/admin/teachers/:id/{approve,reject}).
+   * @returns {null|{status: number, message: string}}
+   * Lo usa: routes/admin/index.js.
    */
   check(action) {
     const transition = TRANSITIONS[action];
@@ -72,10 +90,12 @@ export class TeacherApproval {
     return null;
   }
 
+  /** El estado después de aprobar (otro objeto). Lo usa: routes/admin/index.js, después de check(). */
   approve() {
     return this.#apply('approve');
   }
 
+  /** El estado después de rechazar ("Dar de baja"). Lo usa: routes/admin/index.js, después de check(). */
   reject() {
     return this.#apply('reject');
   }
@@ -84,6 +104,8 @@ export class TeacherApproval {
    * Cómo queda después de que el docente guarda su perfil. Un rechazado que
    * corrige sus datos vuelve a la cola del admin: si no, rechazado sería un
    * estado sin salida y editar el perfil no serviría de nada.
+   * @returns {TeacherApproval} el mismo objeto, o uno nuevo en 'pending'.
+   * Lo usa: routes/users/index.js (PATCH /api/users/me, con request.user.approvalStatus).
    */
   afterProfileEdit() {
     return this.status === 'rejected' ? new TeacherApproval('pending') : this;
@@ -91,9 +113,9 @@ export class TeacherApproval {
 
   // Devuelve otro objeto en vez de mutar este: quien llama compara el estado
   // viejo con el nuevo para la escritura optimista (ver setTeacherApproval).
+  // No vuelve a llamar a check(): la ruta de admin lo hace antes para poder
+  // contestar con el status y el mensaje, y acá ya no hay error que dar.
   #apply(action) {
-    const denied = this.check(action);
-    if (denied) throw new Error(denied.message);
     return new TeacherApproval(TRANSITIONS[action].to);
   }
 }

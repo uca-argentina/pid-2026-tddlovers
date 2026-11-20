@@ -12,6 +12,15 @@ const POLL_MS = 5000
  * El chat entre el alumno y el docente sobre una entrega. Los mensajes propios
  * van a la derecha; `viewRole` dice cuáles son. Enter envía y Shift+Enter
  * corta la línea, como en cualquier chat.
+ *
+ * Props (de TeacherSubmissionDialog / StudentHomeworkDialog): submissionId,
+ * viewRole ('teacher' | 'student') y pollMs (cada cuánto se repregunta).
+ *
+ * Datos: fetchHomeworkMessages → GET /api/homework/submissions/:id/messages
+ * al montar y cada pollMs (si la pestaña está visible); sendHomeworkMessage
+ * → POST a la misma ruta al enviar (devuelve el mensaje creado).
+ *
+ * Estado: messages, loading, error, draft (lo que se está escribiendo), sending.
  */
 class HomeworkChat extends Component {
   state = { messages: [], loading: true, error: null, draft: '', sending: false }
@@ -44,6 +53,7 @@ class HomeworkChat extends Component {
     if (!document.hidden && !this.state.sending) this.load()
   }
 
+  /** Trae los mensajes de la entrega (GET /api/homework/submissions/:id/messages). */
   load() {
     const token = ++this.token
     fetchHomeworkMessages(this.props.submissionId)

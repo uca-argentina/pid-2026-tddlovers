@@ -220,21 +220,6 @@ describe('HomeworkPage como docente', () => {
     expect(tarjeta).toHaveTextContent('1 por corregir')
   })
 
-  it('al recargar, la respuesta de docente no rompe mientras el rol sigue en alumno', async () => {
-    api.fetchHomeworks.mockResolvedValue([tarea])
-    const { rerender } = renderPage('student')
-    await waitFor(() => expect(api.fetchHomeworks).toHaveBeenCalledTimes(1))
-    expect(await screen.findByText('Cargando tareas...')).toBeInTheDocument()
-
-    rerender(
-      <MemoryRouter>
-        <HomeworkPage viewRole="teacher" now={NOW} />
-      </MemoryRouter>,
-    )
-
-    expect(await screen.findByRole('button', { name: /TP 1/ })).toBeInTheDocument()
-  })
-
   it('asigna a un alumno', async () => {
     api.fetchHomeworks.mockResolvedValue([])
     api.fetchHomeworkTargets.mockResolvedValue({

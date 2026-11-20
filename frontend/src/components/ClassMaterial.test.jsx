@@ -63,7 +63,13 @@ describe('ClassMaterial', () => {
       'src',
       '/api/classes/c1/material/files/f2',
     )
-    expect(screen.getAllByRole('link', { name: /Descargar/ })[0]).toHaveAttribute('download', 'apunte.pdf')
+    const [pdf, imagen] = screen.getAllByRole('link', { name: /Descargar/ })
+    expect(pdf).toHaveAttribute('download', 'apunte.pdf')
+    expect(pdf).not.toHaveAttribute('target')
+    // La imagen se sirve inline desde el bucket (otro origen, `download` no
+    // corre): en la misma pestaña reemplazaría a la app.
+    expect(imagen).toHaveAttribute('target', '_blank')
+    expect(imagen).toHaveAttribute('rel', 'noreferrer')
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Adjuntar/ })).not.toBeInTheDocument()
   })

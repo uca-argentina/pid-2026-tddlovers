@@ -3,9 +3,18 @@ import { getPool } from './pool.js';
 // Las direcciones del docente (migración 019). Las guardadas (saved) son las
 // del perfil; las sueltas son de una sola ventana y las maneja
 // db/availability.js. Qué es válido lo decide lib/addresses.js.
+//
+// Tablas: teacher_addresses (019; a lo sumo una is_default por docente, índice
+// único parcial teacher_addresses_one_default); lee availability.address_id
+// (columna de 019) para no borrar una dirección en uso.
+// Locks (pg_advisory_xact_lock, siempre en este orden):
+//   1. 'availability:' || teacherId  (el mismo de db/availability.js)
+//   2. 'addresses:' || teacherId
+// Lo usan: routes/teachers/index.js (/me/addresses) y db/availability.js
+// (ADDRESS_JSON, insertAddress, lockAddresses).
 
 // La dirección como la espera el front. `ta` es el alias de teacher_addresses.
-export const ADDRESS_COLUMNS = `
+const ADDRESS_COLUMNS = `
   ta.id,
   ta.label,
   ta.street,
@@ -50,7 +59,15 @@ const VALUES = (a) => [
   a.notes,
 ];
 
-/** Las guardadas del docente: la predeterminada primero, después por nombre. */
+/**
+ * Las guardadas del docente: la predeterminada primero, después por nombre.
+ *
+ * @param {string} teacherId - request.user.id del docente.
+ * @returns {Promise<Array<{id, label, street, number, postalCode, locality, city,
+ *   floor, apartment, notes, saved, isDefault}>>} (ADDRESS_COLUMNS).
+ * Origen: teacher_addresses WHERE saved.
+ * Lo usa: routes/teachers/index.js (GET /me/addresses).
+ */
 export async function listSavedAddresses(teacherId) {
   const result = await getPool().query(
     `SELECT ${ADDRESS_COLUMNS}
@@ -62,6 +79,12 @@ export async function listSavedAddresses(teacherId) {
   return result.rows;
 }
 
+/**
+ * Una dirección del docente (guardada o suelta), leída con el cliente de la
+ * transacción en curso.
+ *
+ * @returns {Promise<object|null>} ADDRESS_COLUMNS, o null si no existe o es de otro docente.
+ */
 async function selectAddress(client, teacherId, id) {
   const result = await client.query(
     `SELECT ${ADDRESS_COLUMNS} FROM teacher_addresses ta WHERE ta.id = $1 AND ta.teacher_id = $2`,
@@ -79,12 +102,23 @@ async function selectAddress(client, teacherId, id) {
  *   - borrar cuenta las ventanas que la usan, y una ventana creada en el
  *     medio haría que la FK frene el DELETE con un error sin mensaje.
  * db/availability.js también lo usa cuando una ventana crea una dirección.
+ *
+ * @param {pg.PoolClient} client - cliente con una transacción abierta (los locks son xact).
+ * @param {string} teacherId - el docente dueño de las direcciones.
+ * @returns {Promise<void>}
+ * Lo usan: withAddressLock (acá) y db/availability.js (withAvailabilityLock).
  */
 export async function lockAddresses(client, teacherId) {
   await client.query(`SELECT pg_advisory_xact_lock(hashtext('availability:' || $1))`, [teacherId]);
   await client.query(`SELECT pg_advisory_xact_lock(hashtext('addresses:' || $1))`, [teacherId]);
 }
 
+/**
+ * Abre una transacción, toma lockAddresses y corre `work(client)`; commit si
+ * sale bien, rollback si tira.
+ *
+ * @returns {Promise<*>} lo que devuelva `work`.
+ */
 async function withAddressLock(teacherId, work) {
   const client = await getPool().connect();
   try {
@@ -101,6 +135,11 @@ async function withAddressLock(teacherId, work) {
   }
 }
 
+/**
+ * Deja `id` como la única predeterminada del docente: primero le saca la
+ * marca a la anterior (si no, el índice único parcial lo rechazaría) y
+ * después se la pone a esta, solo si es guardada.
+ */
 async function makeDefault(client, teacherId, id) {
   await client.query(
     `UPDATE teacher_addresses SET is_default = false
@@ -119,6 +158,15 @@ async function makeDefault(client, teacherId, id) {
  * (`client`, con lockAddresses tomado): la usan el perfil (guardada) y el
  * formulario de ventana (guardada o suelta). Si es la primera guardada del
  * docente, queda predeterminada.
+ *
+ * @param {pg.PoolClient} client - transacción ajena con lockAddresses ya tomado.
+ * @param {string} teacherId - docente dueño.
+ * @param {object} address - ya validada por lib/addresses.js validateAddress
+ *   ({label, street, number, postalCode, locality, city, floor, apartment, notes}).
+ * @param {{saved: boolean, isDefault?: boolean}} opciones - saved = aparece en el perfil.
+ * @returns {Promise<string>} el id nuevo.
+ * Origen: INSERT en teacher_addresses.
+ * Lo usan: createAddress (acá) y db/availability.js (ventana con "Otra dirección…").
  */
 export async function insertAddress(client, teacherId, address, { saved, isDefault = false }) {
   const result = await client.query(
@@ -140,7 +188,16 @@ export async function insertAddress(client, teacherId, address, { saved, isDefau
   return id;
 }
 
-/** La dirección guardada recién creada. */
+/**
+ * Crea una dirección guardada (del perfil).
+ *
+ * @param {string} teacherId - request.user.id.
+ * @param {object} address - body de POST /api/teachers/me/addresses, ya validado.
+ * @param {{isDefault?: boolean}} [opciones] - body.isDefault === true.
+ * @returns {Promise<object>} la dirección recién creada (ADDRESS_COLUMNS).
+ * Lo usa: routes/teachers/index.js (POST /me/addresses).
+ * Locks/transacción: withAddressLock (availability → addresses).
+ */
 export async function createAddress(teacherId, address, { isDefault = false } = {}) {
   return withAddressLock(teacherId, async (client) => {
     const id = await insertAddress(client, teacherId, address, { saved: true, isDefault });
@@ -152,6 +209,14 @@ export async function createAddress(teacherId, address, { isDefault = false } = 
  * Edita una guardada; o null si no existe o no es del docente. Las ventanas
  * que la usan cambian con ella (apuntan acá); las clases ya reservadas no
  * (tienen su copia).
+ *
+ * @param {string} teacherId - request.user.id.
+ * @param {string} id - params.id de PUT /api/teachers/me/addresses/:id.
+ * @param {object} address - body ya validado por validateAddress.
+ * @param {{isDefault?: boolean}} [opciones] - body.isDefault === true.
+ * @returns {Promise<object|null>} la dirección actualizada (ADDRESS_COLUMNS).
+ * Lo usa: routes/teachers/index.js.
+ * Locks/transacción: withAddressLock (availability → addresses).
  */
 export async function updateAddress(teacherId, id, address, { isDefault = false } = {}) {
   return withAddressLock(teacherId, async (client) => {
@@ -168,7 +233,15 @@ export async function updateAddress(teacherId, id, address, { isDefault = false 
   });
 }
 
-/** La guardada pasa a ser la predeterminada; null si no existe. */
+/**
+ * La guardada pasa a ser la predeterminada; null si no existe (o es suelta).
+ *
+ * @param {string} teacherId - request.user.id.
+ * @param {string} id - params.id de POST /api/teachers/me/addresses/:id/default.
+ * @returns {Promise<object|null>} la dirección (ADDRESS_COLUMNS) ya con isDefault.
+ * Lo usa: routes/teachers/index.js.
+ * Locks/transacción: withAddressLock (availability → addresses).
+ */
 export async function setDefaultAddress(teacherId, id) {
   return withAddressLock(teacherId, async (client) => {
     const address = await selectAddress(client, teacherId, id);
@@ -181,6 +254,13 @@ export async function setDefaultAddress(teacherId, id) {
 /**
  * Borra una guardada. Devuelve { deleted: true }, { inUse: n } si la usa
  * alguna ventana, o null si no existe.
+ *
+ * @param {string} teacherId - request.user.id.
+ * @param {string} id - params.id de DELETE /api/teachers/me/addresses/:id.
+ * @returns {Promise<{deleted: true}|{inUse: number}|null>}
+ * Origen: teacher_addresses; cuenta availability.address_id.
+ * Lo usa: routes/teachers/index.js (409 con inUse).
+ * Locks/transacción: withAddressLock (availability → addresses).
  */
 export async function deleteAddress(teacherId, id) {
   return withAddressLock(teacherId, async (client) => {

@@ -1,4 +1,8 @@
 // Datos de prueba compartidos por los tests. No lo importa la app.
+// Cada fábrica devuelve un objeto con la forma EXACTA de una respuesta del
+// backend (ya desenvuelta, como la devuelve api/client.js) y acepta
+// `overrides` para pisar solo lo que el test necesita. Lo usan los *.test.jsx
+// / *.test.js de pages/, components/, utils/ y App.test.jsx.
 //
 // Una clase tal como la devuelve el backend (GET /api/classes, /:id y las
 // acciones): los mismos campos que CLASS_COLUMNS en backend/src/db/classes.js.
@@ -47,7 +51,7 @@ export function apiClass(overrides = {}) {
 // (null en el resto). Por defecto, un docente aprobado sin materias.
 export function apiUser(overrides = {}) {
   return {
-    id: 1,
+    id: 'a1b2c3d4-0000-4000-8000-000000000001',
     email: 'agustin@example.com',
     role: 'teacher',
     nombre: 'Agustín',
@@ -62,7 +66,7 @@ export function apiUser(overrides = {}) {
 }
 
 // Lo que responde PATCH /api/users/me: el usuario entero ya actualizado, no
-// solo lo que se mandó.
+// solo lo que se mandó. `user` es el de antes (apiUser) y `payload` lo enviado.
 export function updatedUser(user, payload) {
   return apiUser({ ...user, ...payload })
 }
@@ -102,7 +106,8 @@ export function apiHomework(overrides = {}) {
   }
 }
 
-// Lo que responde GET /api/neuronas a un alumno (routes/neuronas en el backend).
+// Lo que responde GET /api/neuronas a un alumno (routes/neuronas en el backend;
+// level de levelFor y badges de badgesFor en backend/src/lib/neuronas.js).
 export function apiNeuronas(overrides = {}) {
   return {
     balance: 250,

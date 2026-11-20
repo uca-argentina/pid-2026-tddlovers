@@ -32,11 +32,11 @@ import { findRate } from '../../db/rates.js';
 import { listStudentPacks } from '../../db/packs.js';
 import { StudentPack } from '../../lib/classPacks.js';
 import { findBalance, settleHomeworkCredits } from '../../db/neuronas.js';
-import { REWARDS, rewardPriceCents, rewardProblem } from '../../lib/neuronas.js';
+import { REWARDS, rewardProblem } from '../../lib/neuronas.js';
 import { isTeacherOnVacation } from '../../db/vacations.js';
 import { VACATION_MESSAGE } from '../../lib/vacations.js';
 import { occursOn, toMinutes, toTime } from '../../lib/availabilityExpansion.js';
-import { classPriceCents, isValidClassMinutes, MIN_CLASS_MINUTES } from '../../lib/teacherRates.js';
+import { bookingPriceCents, isValidClassMinutes, MIN_CLASS_MINUTES } from '../../lib/teacherRates.js';
 import {
   CLASS_STATUSES,
   cancelReasonFor,
@@ -45,6 +45,7 @@ import {
 } from '../../lib/classStates.js';
 import { now } from '../../lib/clock.js';
 import { TeacherApproval } from '../../lib/teacherApproval.js';
+import { isRealDate, isUuid } from '../../lib/validators.js';
 import {
   deleteFiles,
   isConfigured,
@@ -53,16 +54,36 @@ import {
   signedDownloadUrl,
 } from '../../storage/files.js';
 
-const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+// Montado en /api/classes (app.js). "Dueño" = el docente o el alumno de ESA
+// clase (loadOwnClass); una clase ajena es 404.
+//   GET    /api/classes?from&to[&status]          con sesión: las del usuario según su rol
+//   GET    /api/classes/:id                        dueño
+//   POST   /api/classes                            solo student (CSRF): reservar
+//   POST   /api/classes/:id/accept                 dueño (CSRF; checkAction: docente)
+//   POST   /api/classes/:id/cancel                 dueño (CSRF)
+//   POST   /api/classes/:id/pay                    dueño (CSRF; checkAction: alumno)
+//   POST   /api/classes/:id/attendance             dueño (CSRF; checkAction: docente)
+//   POST   /api/classes/:id/reschedule             dueño (CSRF; checkAction: alumno, confirmada)
+//   POST   /api/classes/:id/turn/{accept,cancel}   docente de la clase (CSRF)
+//   GET    /api/classes/:id/material               dueño, clase terminada
+//   PUT    /api/classes/:id/material               docente (CSRF)
+//   POST   /api/classes/:id/material/files         docente (CSRF, multipart)
+//   GET    /api/classes/:id/material/files/:fileId dueño → 302 a link firmado
+//   DELETE /api/classes/:id/material/files/:fileId docente (CSRF)
+// Las reglas de cada acción las decide lib/classStates.js (checkAction) y las
+// del material lib/classMaterials.js; cada clase de un alumno sale por
+// forViewer (sin dirección exacta hasta pagar).
+// Usa: db/classes.js, db/availability.js, db/classMaterials.js, db/rates.js,
+// db/packs.js, db/neuronas.js, db/vacations.js, storage/files.js y varios lib/*.
+// Los errores salen como { message } (+ `fields` en validaciones); no hay código `error`.
+
 const TIME_RE = /^(?:[01]\d|2[0-3]):(?:00|30)$/;
-// Los ids son UUID: validarlo acá evita que un id cualquiera llegue a la base
-// y vuelva como un 500 en vez de un 400.
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const NO_LONGER_OFFERED = 'Ese horario ya no está disponible.';
 const NOT_FOUND = 'Esa clase no existe.';
 const FILE_NOT_FOUND = 'Ese archivo no existe.';
 const CHANGED_MEANWHILE = 'La clase cambió mientras tanto. Recargá la página.';
 
+// El { error } que devuelven los helpers de validación: status + body listo para mandar.
 const fail = (status, message, fields) => ({ error: { status, body: fields ? { message, fields } : { message } } });
 
 /**
@@ -85,21 +106,67 @@ const fail = (status, message, fields) => ({ error: { status, body: fields ? { m
  * vieja vuelve al saldo en la misma transacción, así que se puede volver a usar.
  *
  * Devuelve { booking } listo para bookClass/rescheduleClass, o { error }.
+ *
+ * @param {object} body - request.body: { windowId, date, startTime, durationMinutes,
+ *   subjectId (no al reprogramar), packId?, packTokens?, rewardType? }.
+ * @param {object} user - request.user (el alumno).
+ * @param {object|null} [fixed] - la clase vieja (findClassById) al reprogramar.
+ * @returns {Promise<{booking: object}|{error: {status, body}}>}
  */
 async function validateBooking(body, user, fixed = null) {
+  const parsed = parseBookingBody(body, fixed);
+  if (parsed.error) return parsed;
+  const { input } = parsed;
+  const clock = now();
+
+  const slot = await checkWindowSlot(input, user, fixed, clock);
+  if (slot.error) return slot;
+
+  const price = await priceBooking(input, slot, user, fixed, clock);
+  if (price.error) return price;
+
+  return {
+    booking: {
+      window: slot.window,
+      studentId: user.id,
+      date: input.date,
+      startTime: input.startTime,
+      endTime: slot.endTime,
+      subjectId: input.subjectId,
+      // Lo cubierto por el paquete ya se pagó al comprarlo: el precio de la
+      // clase es solo lo que se pasa (0 si el paquete la cubre entera).
+      priceCents: price.priceCents,
+      studentPackId: input.packId,
+      packTokens: input.packTokens,
+      rewardType: input.rewardType,
+      rewardNeuronas: price.rewardNeuronas,
+    },
+  };
+}
+
+/**
+ * La forma del body, sin tocar la base. Devuelve { input } o { error }.
+ * Después de esto, packId es null o un UUID, y sin paquete packTokens es 0.
+ *
+ * @returns {{input: {windowId, date, startTime, durationMinutes, subjectId, packId,
+ *   packTokens, rewardType}}|{error}} solo errores 400.
+ */
+function parseBookingBody(body, fixed) {
   const { windowId, date, startTime, durationMinutes } = body ?? {};
   const subjectId = fixed ? fixed.subjectId : body?.subjectId;
   const { packId = null, packTokens = 0, rewardType = null } = body ?? {};
 
-  if (!ISO_DATE_RE.test(date ?? '')) return fail(400, 'Fecha inválida', { date: 'invalid' });
+  // isRealDate y no solo la forma: '2026-02-30' en una ventana semanal
+  // llegaba a Postgres y volvía como un 500.
+  if (!isRealDate(date)) return fail(400, 'Fecha inválida', { date: 'invalid' });
   if (!TIME_RE.test(startTime ?? '')) {
     return fail(400, 'La clase tiene que empezar en punto o y media.', { startTime: 'invalid' });
   }
   if (!windowId) return fail(400, 'Falta la clase', { windowId: 'required' });
-  if (!UUID_RE.test(String(windowId))) return fail(400, 'Clase inválida', { windowId: 'invalid' });
+  if (!isUuid(String(windowId))) return fail(400, 'Clase inválida', { windowId: 'invalid' });
   if (!subjectId) return fail(400, 'Elegí la materia de la clase.', { subjectId: 'required' });
-  if (!UUID_RE.test(String(subjectId))) return fail(400, 'Materia inválida', { subjectId: 'invalid' });
-  if (packId !== null && !UUID_RE.test(String(packId))) {
+  if (!isUuid(String(subjectId))) return fail(400, 'Materia inválida', { subjectId: 'invalid' });
+  if (packId !== null && !isUuid(String(packId))) {
     return fail(400, 'Paquete inválido', { packId: 'invalid' });
   }
   if (packTokens !== 0 && packId === null) {
@@ -116,8 +183,24 @@ async function validateBooking(body, user, fixed = null) {
       durationMinutes: 'invalid',
     });
   }
+  return {
+    input: { windowId, date, startTime, durationMinutes, subjectId, packId, packTokens, rewardType },
+  };
+}
 
-  const { iso, time } = now();
+/**
+ * Que la ventana siga ofreciendo ese horario a este alumno: existe ese día,
+ * el docente está aprobado y no está de licencia, da esa materia en esa
+ * modalidad, la clase entra y el alumno no se choca consigo mismo.
+ * Devuelve { window, hourlyRateCents, endTime } o { error }.
+ *
+ * Origen: findWindowById, isTeacherOnVacation, findRate y hasOverlappingClass.
+ * Errores: 400 ya pasó / reservarse a sí mismo; 409 ya no se ofrece, licencia,
+ *   otro docente al reprogramar, sin tarifa, no entra, choque propio; el de
+ *   TeacherApproval.bookingProblem si el docente no está aprobado.
+ */
+async function checkWindowSlot(input, user, fixed, { iso, time }) {
+  const { windowId, date, startTime, durationMinutes, subjectId } = input;
   if (date < iso || (date === iso && startTime <= time)) return fail(400, 'Ese horario ya pasó.');
 
   const window = await findWindowById(windowId);
@@ -170,9 +253,23 @@ async function validateBooking(body, user, fixed = null) {
   });
   if (clashesWithMine) return fail(409, 'Ya tenés una clase reservada en ese horario.');
 
-  // Sin paquete se paga la clase entera; con paquete, solo lo que se pasa de
-  // lo que cubren las clases del paquete.
-  let extraMinutes = durationMinutes;
+  return { window, hourlyRateCents, endTime };
+}
+
+/**
+ * El precio, con el paquete o el canje si los hay (excluyentes: lo asegura
+ * parseBookingBody). La cuenta es bookingPriceCents; acá se chequea que el
+ * paquete o el canje se puedan usar. Devuelve { priceCents, rewardNeuronas }
+ * o { error }.
+ *
+ * Origen: listStudentPacks (paquetes del alumno con ese docente),
+ *   settleHomeworkCredits + findBalance (saldo, solo con canje).
+ */
+async function priceBooking(input, { window, hourlyRateCents }, user, fixed, { iso, time }) {
+  const { date, durationMinutes: minutes, packId, packTokens, rewardType } = input;
+  let packClassMinutes = 0;
+  let rewardNeuronas = 0;
+
   if (packId) {
     const rows = await listStudentPacks({
       studentId: user.id,
@@ -184,18 +281,14 @@ async function validateBooking(body, user, fixed = null) {
     const row = rows.find((item) => String(item.id) === String(packId));
     if (!row) return fail(409, 'No tenés ese paquete con este docente.');
     const pack = new StudentPack(row);
-    const tokens = packTokens;
-    const problem = pack.bookingProblem({ date, today: iso, tokens, minutes: durationMinutes });
+    const problem = pack.bookingProblem({ date, today: iso, tokens: packTokens, minutes });
     if (problem) return fail(problem.status, problem.message, { packTokens: 'invalid' });
-    extraMinutes = pack.extraMinutes({ tokens, minutes: durationMinutes });
+    packClassMinutes = pack.classMinutes;
   }
 
-  let priceCents = classPriceCents(hourlyRateCents, extraMinutes);
-  let rewardNeuronas = 0;
   if (rewardType) {
     if (!window.teacherAcceptsRewards) return fail(409, 'Este docente no acepta canjes de neuronas.');
-    const pricing = { hourlyRateCents, minutes: durationMinutes };
-    const problem = rewardProblem(rewardType, pricing);
+    const problem = rewardProblem(rewardType, { hourlyRateCents, minutes });
     if (problem) return fail(409, problem, { rewardType: 'invalid' });
 
     rewardNeuronas = REWARDS[rewardType].cost;
@@ -203,26 +296,16 @@ async function validateBooking(body, user, fixed = null) {
     const { balance } = await findBalance(user.id);
     const freed = fixed ? fixed.rewardNeuronas : 0;
     if (balance + freed < rewardNeuronas) return fail(409, 'No te alcanzan las neuronas.');
-    priceCents = rewardPriceCents(rewardType, pricing);
   }
 
-  return {
-    booking: {
-      window,
-      studentId: user.id,
-      date,
-      startTime,
-      endTime,
-      subjectId,
-      // Lo cubierto por el paquete ya se pagó al comprarlo: el precio de la
-      // clase es solo lo que se pasa (0 si el paquete la cubre entera).
-      priceCents,
-      studentPackId: packId || null,
-      packTokens: packId ? packTokens : 0,
-      rewardType,
-      rewardNeuronas,
-    },
-  };
+  const priceCents = bookingPriceCents({
+    hourlyRateCents,
+    minutes,
+    packClassMinutes,
+    packTokens,
+    rewardType,
+  });
+  return { priceCents, rewardNeuronas };
 }
 
 export default async function classesRoutes(app) {
@@ -237,11 +320,15 @@ export default async function classesRoutes(app) {
    * Las clases del usuario logueado en un rango. Como docente son las que da,
    * como alumno las que reservó — sale del rol de la sesión, así que nadie ve
    * la agenda de otro.
+   *
+   * Antes vence las pendientes que ya empezaron (expireStartedPending).
+   * Respuesta: 200 [clases de findClassesForUser pasadas por forViewer].
+   * Errores: 400 rango o estado inválido.
    */
   app.get('/', { onRequest: app.requireAuth }, async (request, reply) => {
     const { from, to, status } = request.query ?? {};
 
-    if (!ISO_DATE_RE.test(from ?? '') || !ISO_DATE_RE.test(to ?? '')) {
+    if (!isRealDate(from) || !isRealDate(to)) {
       return reply.code(400).send({ message: 'Rango de fechas inválido' });
     }
     if (status !== undefined && !CLASS_STATUSES.includes(status)) {
@@ -265,10 +352,13 @@ export default async function classesRoutes(app) {
    * rol sale de la clase y no de la sesión: es el docente de ESA clase o el
    * alumno de ESA clase. Una clase ajena da 404 y no 403, para no contar que
    * existe.
+   *
+   * @param {object} request - usa params.id y request.user.id.
+   * @returns {Promise<{cls: object, role: 'teacher'|'student'}|null>} cls de findClassById.
    */
   async function loadOwnClass(request) {
     const { id } = request.params;
-    if (!UUID_RE.test(id)) return null;
+    if (!isUuid(id)) return null;
     await expireStartedPending(now());
     const cls = await findClassById(id);
     if (!cls) return null;
@@ -277,6 +367,7 @@ export default async function classesRoutes(app) {
     return null;
   }
 
+  /** Una clase propia. Respuesta: 200 forViewer(clase). Errores: 404. */
   app.get('/:id', { onRequest: app.requireAuth }, async (request, reply) => {
     const own = await loadOwnClass(request);
     if (!own) return reply.code(404).send({ message: NOT_FOUND });
@@ -288,6 +379,12 @@ export default async function classesRoutes(app) {
    * tomar lista). Las reglas de si se puede las decide checkAction; `apply`
    * dice a qué estado pasa. Si entre que se leyó y se escribió el otro la
    * cambió, transitionClass no pisa nada y se avisa con un 409.
+   *
+   * @param {'accept'|'cancel'|'pay'|'attend'} name - 'attend' se monta como /attendance.
+   * @param {(own, body) => object} apply - el cambio ({ to, paid?, cancelledBy?,
+   *   cancelReason? }) o { error } (400).
+   * Respuesta: 200 forViewer(clase actualizada). Errores: 404, el status de
+   *   checkAction (403/409…), 400 body inválido, 409 cambió en el medio.
    */
   function action(name, apply) {
     app.post(
@@ -334,6 +431,10 @@ export default async function classesRoutes(app) {
    * que la acción permite (aceptar, solo las pendientes) con las mismas
    * reglas que de a una; si en el medio alguien tocó alguna, no se cambia
    * ninguna y se avisa con un 409. Devuelve las reservas actualizadas.
+   *
+   * Respuesta: 200 [clases actualizadas] (sin forViewer: solo lo ve el docente).
+   * Errores: 404 acción desconocida o clase ajena, 403 no es el docente, el de
+   *   checkAction si ninguna se puede, 409 cambió en el medio.
    */
   const TURN_ACTIONS = { accept: applyAccept, cancel: applyCancel };
 
@@ -384,6 +485,7 @@ export default async function classesRoutes(app) {
     paid: true,
   }));
 
+  // Tomar lista. Body: { attended: boolean }.
   action('attend', (own, body) => {
     if (typeof body.attended !== 'boolean') {
       return { error: { message: 'Falta indicar si el alumno estuvo.', fields: { attended: 'required' } } };
@@ -400,12 +502,20 @@ export default async function classesRoutes(app) {
    * La reserva nace pendiente: el docente todavía tiene que aceptarla. El
    * empate entre dos alumnos que reservan a la vez lo resuelven bookClass
    * (grupales y cupo) y las restricciones de la tabla (horarios).
+   *
+   * Body: ver validateBooking. Respuesta: 201 forViewer(clase nueva, 'student').
+   * Errores: 403 no alumno; los 400/409 de validateBooking; 409 conflicto en
+   *   bookClass (horario tomado, grupal llena, licencia, paquete, saldo).
    */
   app.post('/', { onRequest: [app.requireAuth, app.csrfProtection] }, async (request, reply) => {
     if (request.user.role !== 'student') {
       return reply.code(403).send({ message: 'Solo los alumnos pueden reservar clases' });
     }
 
+    // Una pendiente vencida sigue ocupando el horario hasta que se la marca:
+    // sin esto, bloqueaba la reserva hasta que alguien leyera clases.
+    // (Reprogramar ya pasa por acá en loadOwnClass.)
+    await expireStartedPending(now());
     const checked = await validateBooking(request.body, request.user);
     if (checked.error) return reply.code(checked.error.status).send(checked.error.body);
 
@@ -420,6 +530,10 @@ export default async function classesRoutes(app) {
    * reserva otro horario con el mismo docente y la misma materia. La nueva
    * nace pendiente y se vuelve a pagar: puede cambiar la modalidad, y con
    * ella el precio. Mismo body que reservar, sin materia.
+   *
+   * Respuesta: 201 forViewer(clase nueva, 'student').
+   * Errores: 404; el de checkAction('reschedule'); los de validateBooking;
+   *   409 conflicto en rescheduleClass.
    */
   app.post(
     '/:id/reschedule',
@@ -446,6 +560,10 @@ export default async function classesRoutes(app) {
    * grupal, cualquier reserva no cancelada de ese turno lleva al mismo.
    * Primero se chequea que la clase sea del usuario (404 si no) y después si
    * ya se puede ver o tocar (lib/classMaterials.js).
+   *
+   * @param {Function} check - checkViewMaterial o checkEditMaterial.
+   * @returns {Promise<{cls, role, turn: {teacherId, date, startTime}}|null>} con
+   *   null ya mandó la respuesta (404 o el status de `check`).
    */
   async function loadMaterialAccess(request, reply, check) {
     const own = await loadOwnClass(request);
@@ -462,12 +580,17 @@ export default async function classesRoutes(app) {
     return { ...own, turn: { teacherId, date, startTime } };
   }
 
+  /** El material del turno. Respuesta: 200 findMaterial. Errores: 404, el de checkViewMaterial. */
   app.get('/:id/material', { onRequest: app.requireAuth }, async (request, reply) => {
     const access = await loadMaterialAccess(request, reply, checkViewMaterial);
     if (!access) return reply;
     return reply.send(await findMaterial(access.turn));
   });
 
+  /**
+   * Guardar el resumen. Body: { summary } (≤5000).
+   * Respuesta: 200 findMaterial. Errores: 400, 404, el de checkEditMaterial.
+   */
   app.put(
     '/:id/material',
     { onRequest: [app.requireAuth, app.csrfProtection] },
@@ -493,6 +616,12 @@ export default async function classesRoutes(app) {
 
   const STORAGE_OFF = 'El almacenamiento de archivos no está configurado.';
 
+  /**
+   * Subir archivos (multipart). Chequea topes → sube al bucket → registra en la base.
+   * Respuesta: 201 findMaterial. Errores: 400 topes/sin archivos, 413 archivo
+   *   muy grande o demasiados (multipart), 404, el de checkEditMaterial,
+   *   503 almacenamiento sin configurar.
+   */
   app.post(
     '/:id/material/files',
     { onRequest: [app.requireAuth, app.csrfProtection] },
@@ -501,9 +630,15 @@ export default async function classesRoutes(app) {
       if (!access) return reply;
       if (!isConfigured()) return reply.code(503).send({ message: STORAGE_OFF });
 
-      // Se leen enteros a memoria: son pocos y chicos (10 MB cada uno como
-      // mucho), y hay que tenerlos todos para chequear los topes antes de
-      // subir nada al bucket.
+      // Lo que ya tiene el turno, ANTES de leer nada: así se corta apenas un
+      // archivo se pasa de los topes, sin juntar en memoria todo lo que mande
+      // el cliente (20 archivos de casi 10 MB serían ~200 MB de buffers).
+      const { files: existing } = await findMaterial(access.turn);
+      const used = {
+        count: existing.length,
+        bytes: existing.reduce((sum, file) => sum + file.sizeBytes, 0),
+      };
+
       const files = [];
       try {
         for await (const part of request.files()) {
@@ -514,20 +649,20 @@ export default async function classesRoutes(app) {
             sizeBytes: data.length,
             data,
           });
+          // Con lo leído hasta acá: si ya no entra, no tiene sentido seguir.
+          // Lo que falta del body queda sin leer, así que se cierra la
+          // conexión en vez de dejarla colgada esperando que alguien lo lea.
+          const tooMuch = checkUploadRoom(used, files);
+          if (tooMuch) {
+            return reply.code(400).header('connection', 'close').send({ message: tooMuch });
+          }
         }
       } catch (err) {
         const message = UPLOAD_ERRORS[err.code];
         if (!message) throw err;
         return reply.code(err.statusCode === 406 ? 400 : 413).send({ message });
       }
-
-      // Primero los topes contra lo que ya tiene el turno, para no subir al
-      // bucket algo que después no se va a poder guardar.
-      const { files: existing } = await findMaterial(access.turn);
-      const used = {
-        count: existing.length,
-        bytes: existing.reduce((sum, file) => sum + file.sizeBytes, 0),
-      };
+      // Sin archivos el bucle no chequea nada.
       const tooMuch = checkUploadRoom(used, files);
       if (tooMuch) return reply.code(400).send({ message: tooMuch });
 
@@ -554,6 +689,10 @@ export default async function classesRoutes(app) {
     }
   );
 
+  /**
+   * Borrar un archivo: primero la fila, después el objeto del bucket.
+   * Respuesta: 200 findMaterial. Errores: 404, el de checkEditMaterial, 503.
+   */
   app.delete(
     '/:id/material/files/:fileId',
     { onRequest: [app.requireAuth, app.csrfProtection] },
@@ -561,7 +700,7 @@ export default async function classesRoutes(app) {
       const access = await loadMaterialAccess(request, reply, checkEditMaterial);
       if (!access) return reply;
       if (!isConfigured()) return reply.code(503).send({ message: STORAGE_OFF });
-      if (!UUID_RE.test(request.params.fileId)) {
+      if (!isUuid(request.params.fileId)) {
         return reply.code(404).send({ message: FILE_NOT_FOUND });
       }
       // Primero la fila: desde ahí ya nadie lo puede pedir. Si borrar el
@@ -579,12 +718,15 @@ export default async function classesRoutes(app) {
    * minutos. El archivo va directo del bucket al navegador, sin pasar por el
    * backend; el link ya dice si se muestra (imágenes) o se descarga (todo lo
    * demás) y con qué nombre.
+   *
+   * Respuesta: 302 a signedDownloadUrl (storage/files.js). Errores: 404, el de
+   *   checkViewMaterial, 503.
    */
   app.get('/:id/material/files/:fileId', { onRequest: app.requireAuth }, async (request, reply) => {
     const access = await loadMaterialAccess(request, reply, checkViewMaterial);
     if (!access) return reply;
     if (!isConfigured()) return reply.code(503).send({ message: STORAGE_OFF });
-    if (!UUID_RE.test(request.params.fileId)) {
+    if (!isUuid(request.params.fileId)) {
       return reply.code(404).send({ message: FILE_NOT_FOUND });
     }
     const file = await findFileMeta(access.turn, request.params.fileId);

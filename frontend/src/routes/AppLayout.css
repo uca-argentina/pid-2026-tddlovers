@@ -66,3 +66,15 @@
     padding: calc(12px + env(safe-area-inset-top)) 16px 16px;
   }
 }
+
+/* Mientras se recupera la sesión (SessionLoading): centrado y sin barra. */
+.app-session-loading {
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  color: var(--color-text-muted);
+  background: var(--color-bg);
+}

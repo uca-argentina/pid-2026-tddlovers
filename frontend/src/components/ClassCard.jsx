@@ -7,6 +7,7 @@ import { formatRangeLabel } from '../utils/availability.js'
 import { formatDayLong, fromISODate } from '../utils/calendar.js'
 import { isFavorite } from '../utils/favorites.js'
 import { formatMoney } from '../utils/rates.js'
+import { turnPriceLabel } from '../utils/reservations.js'
 import { capacityLabel, modalityLabel } from '../utils/windows.js'
 import { rewardLabel } from '../utils/neuronas.js'
 import './ClassCard.css'
@@ -27,6 +28,14 @@ const INTERACTIVE = 'button, a, input, textarea, select, label'
  * La tarjeta entera es clickeable para el dedo, y la materia es además un
  * botón de verdad para el teclado y los lectores de pantalla: un <li> con
  * onClick solo no se puede enfocar.
+ *
+ * Solo la usa ReservationsPage (renderCard). Sin fetch propio.
+ *
+ * Props (de ReservationsPage): cls (la reserva que representa al turno, de
+ * GET /api/classes), rows (turnRows: todas las del turno), viewRole,
+ * favoriteIds / onFavoriteChange / onFavoriteError (de withFavorites),
+ * showActions (false en "Próxima"/"Última"), badge ({ label, tone } o null),
+ * onOpen(cls) (abre ClassDetailDialog) y onChange(reservaActualizada).
  */
 class ClassCard extends Component {
   handleClick = (event) => {
@@ -58,6 +67,23 @@ class ClassCard extends Component {
     return anotados ? `Grupal · ${anotados} de ${cls.maxStudents}` : capacityLabel(cls.maxStudents)
   }
 
+  /**
+   * El precio con lo que lo cubre (paquete, neuronas). En una grupal el
+   * docente tiene una reserva por alumno, cada una con su precio: ahí va el
+   * monto o el rango "c/u", sin el paquete ni el canje de uno solo (el de
+   * cada alumno está en el detalle).
+   */
+  getPrice() {
+    const { cls, viewRole } = this.props
+    if (viewRole === 'teacher' && cls.maxStudents > 1) return `${turnPriceLabel(this.rows())} c/u`
+    let precio = formatMoney(cls.priceCents)
+    if (cls.packTokens > 0) {
+      precio += ` · ${cls.packTokens === 1 ? '1 clase' : `${cls.packTokens} clases`} del paquete`
+    }
+    if (cls.rewardType) precio += ` · ${rewardLabel(cls.rewardType)} con neuronas`
+    return precio
+  }
+
   renderActions() {
     const { cls, viewRole, onChange } = this.props
     if (viewRole === 'teacher') return <TurnActions rows={this.rows()} onChange={onChange} />
@@ -87,13 +113,7 @@ class ClassCard extends Component {
             {viewRole === 'teacher' ? '' : `Docente: ${cls.teacherName} · `}
             {this.getKind()}
             {` · ${modalityLabel(cls.modality)}`}
-            {` · ${formatMoney(cls.priceCents)}`}
-            {/* En una grupal cada alumno paga lo suyo. */}
-            {viewRole === 'teacher' && cls.maxStudents > 1 ? ' c/u' : ''}
-            {cls.packTokens > 0
-              ? ` · ${cls.packTokens === 1 ? '1 clase' : `${cls.packTokens} clases`} del paquete`
-              : ''}
-            {cls.rewardType ? ` · ${rewardLabel(cls.rewardType)} con neuronas` : ''}
+            {` · ${this.getPrice()}`}
           </p>
           {viewRole === 'student' && favoriteIds ? (
             <FavoriteButton

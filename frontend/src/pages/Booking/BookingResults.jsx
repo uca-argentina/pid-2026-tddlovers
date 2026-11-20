@@ -13,6 +13,16 @@ import './BookingResults.css'
  * las clases propias, acá las que todavía no son de nadie.
  *
  * Sin fetch propio: los datos bajan por props.
+ *
+ * Props (de BookingBoard.renderResults):
+ *   - date: el día elegido (Date, de state.selectedIso).
+ *   - cards: tarjetas de ese día ya filtradas (getFilteredByDate).
+ *   - loading / filtered: si se está cargando el rango y si hay filtros activos.
+ *   - packs: paquetes del alumno (GET /api/packs/mine); de acá sale el resumen
+ *     por docente (packSummaryWith) que muestra cada BookingCard.
+ *   - favoriteIds, favoriteError, onFavoriteChange, onFavoriteError: los de
+ *     withFavorites, reenviados por BookingBoard.
+ *   - onReservar(card) → handler: abre BookingDialog con esa tarjeta.
  */
 class BookingResults extends Component {
   renderEmpty() {

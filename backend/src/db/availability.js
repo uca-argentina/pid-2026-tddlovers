@@ -1,5 +1,19 @@
 import { getPool } from './pool.js';
 import { ADDRESS_JSON, insertAddress, lockAddresses } from './addresses.js';
+import { todayIso } from '../lib/clock.js';
+
+// Las ventanas de disponibilidad del docente (crudas; la expansión por fecha
+// la hace lib/availabilityExpansion.js).
+// Tablas: availability (migración 003, rehecha en 006: start_date,
+// repeats_weekly, modality, max_students, meeting_url; address_id de 019),
+// teacher_addresses (019), teacher_rates + subjects (009/002), users
+// (approval_status de 012, accepts_neurona_rewards de 021) y teacher_featured (021).
+// Locks: las escrituras toman, vía lockAddresses de db/addresses.js,
+//   1. 'availability:' || teacherId  2. 'addresses:' || teacherId
+// La no-superposición entre ventanas se chequea acá bajo ese lock, no con
+// una constraint.
+// Lo usan: routes/teachers (/me/availability), routes/availability
+// (findPublishedWindows) y routes/classes (findWindowById).
 
 // La ventana tal como la espera el front: fecha 'YYYY-MM-DD' y horas 'HH:MM'.
 // Se recorta acá y no en la ruta para que ningún endpoint tenga que acordarse.
@@ -60,6 +74,14 @@ const OCCURS_IN_RANGE = (from, to) => `
  * Las ventanas del docente que caen en el rango, sin expandir: la pantalla del
  * docente necesita la ventana entera (id, si se repite, su fecha original)
  * para poder editarla.
+ *
+ * @param {{teacherId: string, from: string, to: string}} args - teacherId =
+ *   request.user.id; from/to = query de GET /api/teachers/me/availability ('YYYY-MM-DD').
+ * @returns {Promise<Array<{id, teacherId, date, repeatsWeekly, start, end, modality,
+ *   maxStudents, meetingUrl, locality, address}>>} (WINDOW_COLUMNS; address es
+ *   el objeto ADDRESS_JSON o null).
+ * Origen: availability LEFT JOIN teacher_addresses.
+ * Lo usa: routes/teachers/index.js.
  */
 export async function findTeacherWindows({ teacherId, from, to }) {
   const result = await getPool().query(
@@ -79,6 +101,16 @@ export async function findTeacherWindows({ teacherId, from, to }) {
  * guardada pero no se ofrece (la pantalla del docente se lo avisa). Lo mismo
  * con las de un docente que no está aprobado: puede cargarlas mientras espera,
  * pero no se ofrecen hasta que un admin lo apruebe.
+ *
+ * Ojo: devuelve meetingUrl y address completos; quien arma la respuesta al
+ * alumno (lib/availabilityExpansion.js) se queda solo con `locality`.
+ *
+ * @param {{from: string, to: string}} rango - query de GET /api/availability, ya validado.
+ * @returns {Promise<Array<object>>} WINDOW_COLUMNS + teacherName,
+ *   subjects: [{id, name, hourlyRateCents}], teacherAcceptsRewards, teacherFeatured
+ *   (Destacado vigente hoy en hora argentina).
+ * Origen: availability + teacher_addresses + users + teacher_rates/subjects + teacher_featured.
+ * Lo usa: routes/availability/index.js.
  */
 export async function findPublishedWindows({ from, to }) {
   const result = await getPool().query(
@@ -112,6 +144,12 @@ export async function findPublishedWindows({ from, to }) {
  *
  * Trae el estado de aprobación del docente: quien tenga el id de una ventana
  * de un docente no aprobado no tiene que poder reservarla igual.
+ *
+ * @param {string} id - body.windowId de POST /api/classes o de POST /api/classes/:id/reschedule.
+ * @returns {Promise<object|null>} WINDOW_COLUMNS + teacherName,
+ *   teacherApprovalStatus, teacherAcceptsRewards.
+ * Origen: availability + teacher_addresses + users.
+ * Lo usa: routes/classes/index.js (reservar y reprogramar).
  */
 export async function findWindowById(id) {
   const result = await getPool().query(
@@ -135,6 +173,18 @@ export async function findWindowById(id) {
  *     semanal;
  *   - las dos sueltas: si son el mismo día.
  * Tocarse en el borde NO es pisarse: 13:00-14:00 y 14:00-15:00 conviven.
+ *
+ * Solo cuentan las fechas desde hoy ($7): lo que ya pasó no se puede volver a
+ * dar. Si no, una suelta vieja impediría editar una semanal que arrancó antes
+ * que ella (al editar, la fecha de la semanal puede estar en el pasado). Una
+ * suelta nueva o editada nunca cae antes de hoy (validateWindow), así que
+ * para ella el recorte no cambia nada.
+ *
+ * @param {pg.PoolClient} client - transacción con el lock del docente tomado.
+ * @param {string} teacherId - docente dueño.
+ * @param {object} window - ventana ya validada (date, repeatsWeekly, start, end).
+ * @param {string|null} excludeId - la propia ventana al editar (null al crear).
+ * @returns {Promise<{start, end, repeatsWeekly}|null>} la que se pisa, para el mensaje.
  */
 async function findOverlappingWindow(client, teacherId, window, excludeId) {
   const result = await client.query(
@@ -146,18 +196,28 @@ async function findOverlappingWindow(client, teacherId, window, excludeId) {
        AND ($2::uuid IS NULL OR id <> $2::uuid)
        AND EXTRACT(ISODOW FROM start_date) = EXTRACT(ISODOW FROM $3::date)
        AND start_time < $6::time AND end_time > $5::time
+       AND (repeats_weekly OR start_date >= $7::date)
        AND CASE
          WHEN repeats_weekly AND $4::boolean THEN true
          WHEN repeats_weekly THEN start_date <= $3::date
-         WHEN $4::boolean THEN start_date >= $3::date
+         WHEN $4::boolean THEN start_date >= GREATEST($3::date, $7::date)
          ELSE start_date = $3::date
        END
      LIMIT 1`,
-    [teacherId, excludeId, window.date, window.repeatsWeekly, window.start, window.end]
+    [
+      teacherId,
+      excludeId,
+      window.date,
+      window.repeatsWeekly,
+      window.start,
+      window.end,
+      todayIso(),
+    ]
   );
   return result.rows[0] ?? null;
 }
 
+/** El texto del 409 de superposición, para el docente. */
 function overlapMessage(other) {
   const semanal = other.repeatsWeekly ? ', que se repite todas las semanas' : '';
   return `Se pisa con otra clase tuya de ${other.start} a ${other.end}${semanal}.`;
@@ -169,6 +229,12 @@ function overlapMessage(other) {
  * de que cualquiera inserte. Toma también el lock de sus direcciones (en el
  * orden de lockAddresses), porque guardar una ventana puede crear una. Los
  * locks se sueltan solos al terminar la transacción.
+ *
+ * Hace ROLLBACK (sin tirar) si `work` devuelve null, { conflict } o { invalid },
+ * así una dirección creada en el camino no queda guardada.
+ *
+ * @returns {Promise<*>} lo que devuelva `work`.
+ * Locks/transacción: lockAddresses ('availability:' y después 'addresses:').
  */
 async function withTeacherLock(teacherId, work) {
   const client = await getPool().connect();
@@ -187,6 +253,7 @@ async function withTeacherLock(teacherId, work) {
   }
 }
 
+/** Re-lee la ventana recién guardada con la misma forma que findTeacherWindows. */
 async function selectWindow(client, id) {
   const result = await client.query(
     `SELECT ${WINDOW_COLUMNS}
@@ -209,6 +276,9 @@ const ADDRESS_GONE = {
  *   - `newAddress`: se crea acá, guardada o suelta según `saveAddress`;
  *   - `addressId`: una guardada del docente, o la suelta que ya tenía esta
  *     misma ventana (`currentAddressId`, al editar).
+ *
+ * @returns {Promise<{addressId: string|null}|{invalid: object}>}
+ * Origen: teacher_addresses (lee o inserta vía insertAddress).
  */
 async function resolveAddress(client, teacherId, window, currentAddressId = null) {
   if (window.modality === 'virtual') return { addressId: null };
@@ -250,7 +320,20 @@ const WINDOW_VALUES = (w, addressId) => [
   addressId,
 ];
 
-/** { window }, { conflict } o { invalid } con el mensaje para el docente. */
+/**
+ * Crea una ventana. { window }, { conflict } o { invalid } con el mensaje
+ * para el docente.
+ *
+ * @param {string} teacherId - request.user.id.
+ * @param {object} window - body de POST /api/teachers/me/availability ya
+ *   validado por lib/availabilityWindow.js validateWindow (date, repeatsWeekly,
+ *   start, end, modality, maxStudents, meetingUrl y addressId | newAddress + saveAddress).
+ * @returns {Promise<{window: object}|{conflict: string}|{invalid: object}>}
+ *   window con la forma de findTeacherWindows.
+ * Origen: INSERT en availability (y quizá en teacher_addresses).
+ * Lo usa: routes/teachers/index.js.
+ * Locks/transacción: withTeacherLock.
+ */
 export async function createWindow(teacherId, window) {
   return withTeacherLock(teacherId, async (client) => {
     const other = await findOverlappingWindow(client, teacherId, window, null);
@@ -279,6 +362,14 @@ export async function createWindow(teacherId, window) {
  * Ojo: esto NO toca las clases ya reservadas. Si el docente achica o cambia
  * una ventana que alguien ya tenía tomada, esa clase sigue en pie con lo que
  * se copió al reservarla (la dirección incluida).
+ *
+ * @param {string} teacherId - request.user.id.
+ * @param {string} id - params.id de PUT /api/teachers/me/availability/:id.
+ * @param {object} window - body ya validado por validateWindow (como en createWindow).
+ * @returns {Promise<{window}|{conflict}|{invalid}|null>}
+ * Origen: UPDATE availability; borra direcciones sueltas huérfanas.
+ * Lo usa: routes/teachers/index.js.
+ * Locks/transacción: withTeacherLock.
  */
 export async function updateWindow(teacherId, id, window) {
   return withTeacherLock(teacherId, async (client) => {
@@ -306,7 +397,17 @@ export async function updateWindow(teacherId, id, window) {
   });
 }
 
-/** true si se borró. Las clases ya reservadas quedan (ver updateWindow). */
+/**
+ * Borra una ventana del docente. true si se borró. Las clases ya reservadas
+ * quedan (ver updateWindow).
+ *
+ * @param {string} teacherId - request.user.id.
+ * @param {string} id - params.id de DELETE /api/teachers/me/availability/:id.
+ * @returns {Promise<boolean>}
+ * Origen: DELETE en availability; borra direcciones sueltas huérfanas.
+ * Lo usa: routes/teachers/index.js.
+ * Locks/transacción: withTeacherLock.
+ */
 export async function deleteWindow(teacherId, id) {
   const result = await withTeacherLock(teacherId, async (client) => {
     const deleted = await client.query(

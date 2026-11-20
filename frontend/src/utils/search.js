@@ -1,6 +1,17 @@
 import { normalizeText } from './booking.js'
 
-/** El nombre que se muestra y contra el que se busca un docente. */
+// Las sugerencias del buscador de la barra (solo alumnos): materias de
+// GET /api/subjects y docentes de GET /api/teachers. Lo usa
+// components/SearchBar.jsx. Lo que se elige termina en /disponibilidad?q=…,
+// y ahí lo interpreta resolveQuery de utils/booking.js.
+
+/**
+ * El nombre que se muestra y contra el que se busca un docente.
+ *
+ * @param {{nombre?: string, apellido?: string}|null} teacher - de GET /api/teachers.
+ * @returns {string} 'Nombre Apellido'.
+ * Lo usa: components/SearchBar.jsx.
+ */
 export function teacherFullName(teacher) {
   return [teacher?.nombre, teacher?.apellido].filter(Boolean).join(' ')
 }
@@ -35,6 +46,12 @@ function rankBy(items, texto, getName) {
  * Los docentes se buscan por nombre y no por las materias que dan: para eso
  * está la sección de materias, y mezclarlo llenaría "Docentes" de gente que
  * no se llama como lo que se tipeó.
+ *
+ * @param {string} query - lo tipeado en el buscador.
+ * @param {{subjects?: Array<{id, name}>, teachers?: Array<{id, nombre, apellido}>}} lists -
+ *   el catálogo (fetchSubjects) y los docentes aprobados (fetchTeachers).
+ * @returns {{subjects: Array, teachers: Array}} los que coinciden, mejor coincidencia primero.
+ * Lo usa: components/SearchBar.jsx.
  */
 export function suggest(query, { subjects = [], teachers = [] } = {}) {
   const texto = normalizeText(query)

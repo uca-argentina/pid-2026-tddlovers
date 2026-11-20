@@ -7,9 +7,12 @@ import {
   groupTurns,
   lastClass,
   nextClass,
+  orderTurnRows,
   subjectsOf,
   turnSiblings,
+  turnPriceLabel,
   turnsIn,
+  withTurnMaterial,
 } from './reservations.js'
 
 const category = (key) => CATEGORIES.find((c) => c.key === key)
@@ -102,6 +105,18 @@ describe('turnSiblings', () => {
   })
 })
 
+describe('orderTurnRows', () => {
+  it('las en pie primero y las canceladas al final, cada grupo por nombre', () => {
+    const rows = [
+      apiClass({ id: 'z', studentName: 'Zoe', status: 'cancelada' }),
+      apiClass({ id: 's', studentName: 'Sofía' }),
+      apiClass({ id: 'b', studentName: 'Beto', status: 'cancelada' }),
+      apiClass({ id: 'a', studentName: 'Ana' }),
+    ]
+    expect(orderTurnRows(rows).map((c) => c.id)).toEqual(['a', 's', 'b', 'z'])
+  })
+})
+
 describe('filterTurns', () => {
   const grupal = { teacherId: 't1', date: '2099-09-20', startTime: '10:00', maxStudents: 3 }
   const mate = { subjectId: 'mate', subjectName: 'Matemática' }
@@ -151,5 +166,35 @@ describe('filterTurns', () => {
       { id: 'fisica', name: 'Física' },
       { id: 'mate', name: 'Matemática' },
     ])
+  })
+})
+
+describe('withTurnMaterial', () => {
+  it('marca el material en las reservas en pie del turno, no en las canceladas ni en otros', () => {
+    const base = { teacherId: 't1', date: '2099-09-14', startTime: '11:00', maxStudents: 3 }
+    const ana = apiClass({ ...base, id: 'a', status: 'realizada', hasMaterial: false })
+    const beto = apiClass({ ...base, id: 'b', status: 'cancelada', hasMaterial: false })
+    const otra = apiClass({ ...base, id: 'c', startTime: '13:00', status: 'realizada', hasMaterial: false })
+
+    const porId = Object.fromEntries(
+      withTurnMaterial([ana, beto, otra], ana, true).map((c) => [c.id, c.hasMaterial]),
+    )
+    expect(porId).toEqual({ a: true, b: false, c: false })
+  })
+})
+
+describe('turnPriceLabel', () => {
+  it('un solo monto si todos los alumnos pagan lo mismo', () => {
+    const rows = [apiClass({ id: 'a', priceCents: 500000 }), apiClass({ id: 'b', priceCents: 500000 })]
+    expect(turnPriceLabel(rows)).toMatch(/^\$\s5\.000$/)
+  })
+
+  it('un rango si cada uno paga distinto, sin contar a los que se bajaron', () => {
+    const rows = [
+      apiClass({ id: 'a', priceCents: 500000 }),
+      apiClass({ id: 'b', priceCents: 250000, packTokens: 1 }),
+      apiClass({ id: 'c', priceCents: 0, status: 'cancelada' }),
+    ]
+    expect(turnPriceLabel(rows)).toMatch(/^\$\s2\.500 – \$\s5\.000$/)
   })
 })

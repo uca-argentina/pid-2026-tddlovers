@@ -25,6 +25,16 @@ const STATUS_ORDER = ['pendiente', 'aceptada', 'confirmada', 'realizada', 'no_pr
  * Va en un solo pedido por la clase entera (POST /:id/turn/...), que el
  * backend aplica todo o nada: o se acepta (o cancela) a todos, o a ninguno.
  * Cada reserva actualizada se avisa con onChange(reserva).
+ *
+ * Rol: docente. Props (de ClassCard, DayAgenda y ClassDetailDialog): rows
+ * (todas las reservas del turno, de GET /api/classes), now (solo lo pasa
+ * ClassDetailDialog) y onChange(reserva).
+ *
+ * Datos: acceptTurn → POST /api/classes/:id/turn/accept y cancelTurn →
+ * POST /api/classes/:id/turn/cancel, con el id de una reserva del turno que
+ * permita esa acción; ambos devuelven el array de reservas actualizadas.
+ *
+ * Estado: busy ('accept' | 'cancel' | null), error, confirmingCancel.
  */
 class TurnActions extends Component {
   state = { busy: null, error: null, confirmingCancel: false }
@@ -42,6 +52,11 @@ class TurnActions extends Component {
     return this.active().filter((row) => allowedActions(row, 'teacher', now).includes(action))
   }
 
+  /**
+   * Manda la acción de turno (`call` = acceptTurn o cancelTurn) usando la
+   * primera reserva que la permite (allowedActions) y avisa onChange por cada
+   * reserva del array devuelto.
+   */
   async runTurn(action, call) {
     const [primera] = this.withAction(action)
     if (this.state.busy || !primera) return

@@ -28,6 +28,21 @@ import './ClassActions.css'
  *
  * Cuando una acción sale bien avisa con onChange(claseActualizada): quien la
  * muestra decide qué hacer (reemplazarla en su lista, sacarla si se canceló).
+ *
+ * En la práctica la usa el alumno: ClassCard y DayAgenda (con
+ * exclude={['attend']}) y ClassDetailDialog (viewRole "student"); el docente
+ * usa TurnActions.
+ *
+ * Props: cls (una reserva de GET /api/classes), viewRole, exclude (acciones a
+ * esconder), now (inyectable para tests) y
+ * onChange(reservaActualizada).
+ *
+ * Datos (api/client.js), cada uno devuelve la reserva actualizada:
+ *   acceptLesson → POST /api/classes/:id/accept, payLesson → …/pay,
+ *   cancelLesson → …/cancel, markAttendance → …/attendance. Reprogramar es
+ *   un link a /disponibilidad?reprogramar=<id> (BookingBoard).
+ *
+ * Estado: busy (acción en vuelo), error, confirmingCancel.
  */
 class ClassActions extends Component {
   state = {
@@ -38,6 +53,7 @@ class ClassActions extends Component {
     confirmingCancel: false,
   }
 
+  /** Corre `call()` (un pedido a la API) y le pasa la reserva devuelta a onChange. */
   run(action, call) {
     if (this.state.busy) return
     this.setState({ busy: action, error: null })
@@ -170,7 +186,7 @@ class ClassActions extends Component {
   }
 
   render() {
-    const { cls, viewRole, label } = this.props
+    const { cls, viewRole } = this.props
     const now = this.props.now || nowParts()
     // `exclude` saca acciones que se hacen en otro lado: en las tarjetas,
     // tomar lista va en el detalle de la clase (ClassDetailDialog).
@@ -182,7 +198,6 @@ class ClassActions extends Component {
     return (
       <div className="class-actions">
         <div className="class-actions-status">
-          {label ? <span className="class-actions-label">{label}</span> : null}
           <span className={`class-status is-${tone}`}>{statusLabel(cls.status)}</span>
           {/* En una aceptada la deuda ya la dice el botón de pagar (y el
               docente la ve en la pastilla). En una clase ya dada, no: puede
@@ -218,7 +233,6 @@ class ClassActions extends Component {
 
 ClassActions.defaultProps = {
   viewRole: 'student',
-  label: null,
   exclude: [],
   // Inyectable para los tests; en la app es la hora real.
   now: null,

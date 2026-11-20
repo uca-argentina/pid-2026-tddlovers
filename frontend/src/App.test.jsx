@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App.jsx'
 import { formatMonthTitle } from './utils/calendar.js'
-import { apiUser, updatedUser } from './testing/fixtures.js'
+import { apiClass, apiUser, updatedUser } from './testing/fixtures.js'
 
 // Mockeamos el cliente entero para no esperar la latencia simulada de los
 // datos de mentira y para controlar qué devuelve cada llamada.
@@ -187,7 +187,7 @@ describe('App', () => {
     fetchCurrentUser.mockResolvedValue(user)
     go('/')
     render(<App />)
-    await userEvent.click(screen.getByLabelText('Disponibilidad'))
+    await userEvent.click(await screen.findByLabelText('Disponibilidad'))
     // Por el título de la pantalla y no por texto suelto: el usuario de
     // prueba es docente y en ese rol la barra también dice "Disponibilidad",
     // así que un getByText encontraría dos.
@@ -213,6 +213,31 @@ describe('App', () => {
     window.dispatchEvent(new PopStateEvent('popstate'))
 
     expect(await screen.findByText('Iniciá sesión para ver tu perfil.')).toBeInTheDocument()
+  })
+
+  it('al recargar no monta ninguna pantalla hasta saber quién es', async () => {
+    let contestar
+    fetchCurrentUser.mockReturnValue(new Promise((resolve) => (contestar = resolve)))
+    fetchClasses.mockImplementation(({ status }) =>
+      Promise.resolve(status === 'pendiente' ? [apiClass({ status: 'pendiente' })] : []),
+    )
+    go('/')
+    render(<App />)
+
+    expect(screen.getByRole('status')).toHaveTextContent('Cargando...')
+    expect(fetchClasses).not.toHaveBeenCalled()
+
+    // Llega la sesión de un docente: el calendario se monta ya como docente
+    // y pide el aviso de solicitudes.
+    contestar(user)
+    expect(await screen.findByText(/Tenés 1 solicitud de clase/)).toBeInTheDocument()
+  })
+
+  it('el login no espera a la sesión', () => {
+    fetchCurrentUser.mockReturnValue(new Promise(() => {}))
+    go('/ingresar')
+    render(<App />)
+    expect(screen.getByRole('button', { name: 'Iniciar sesión' })).toBeInTheDocument()
   })
 
   it('una ruta que no existe vuelve al calendario', async () => {

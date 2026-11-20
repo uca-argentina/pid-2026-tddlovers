@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  MAX_RANGE_DAYS,
+  dateRangeProblem,
   datesBetween,
   dayKeyFromIso,
   expandAvailability,
   occursOn,
   openingsForWindow,
+  withoutClass,
 } from './availabilityExpansion.js';
 
 // 2026-09-14 es lunes.
@@ -127,6 +130,23 @@ describe('openingsForWindow', () => {
     expect(abiertos(grupal, [turno({ subjectId: 's9' })]).groups).toEqual([]);
   });
 
+  it('does not offer joining a group that ends after the window (it was shrunk)', () => {
+    // La grupal de 14:00 a 15:00 quedó de cuando la ventana llegaba a las 15.
+    const achicada = ventana({ maxStudents: 3, end: '14:30' });
+    expect(abiertos(achicada, [turno({ start: '14:00', end: '15:00' })]).groups).toEqual([]);
+  });
+
+  it('does not offer joining a group that started before the window', () => {
+    const grupal = ventana({ maxStudents: 3, start: '14:00', end: '16:00' });
+    expect(abiertos(grupal, [turno({ start: '13:30', end: '14:30' })]).groups).toEqual([]);
+  });
+
+  it('offers a group that ends exactly when the window does', () => {
+    const grupal = ventana({ maxStudents: 3 });
+    const { groups } = abiertos(grupal, [turno({ start: '14:00', end: '15:00' })]);
+    expect(groups).toHaveLength(1);
+  });
+
   it('drops what already started', () => {
     // 13:10: ni sumarse a la de 13:00 ni arrancar antes de 13:30.
     const { free, groups } = abiertos(ventana({ maxStudents: 3, end: '16:00' }), [], 13 * 60 + 10);
@@ -235,5 +255,60 @@ describe('expandAvailability', () => {
   it('trims hours already started today', () => {
     const rows = expandir({ nowIso: LUNES, nowTime: '13:15' });
     expect(rows[0].free).toEqual([{ start: '13:30', end: '15:00' }]);
+  });
+});
+
+describe('withoutClass', () => {
+  const clase = {
+    teacherId: 't1',
+    date: LUNES,
+    startTime: '13:00',
+    endTime: '14:00',
+    subjectId: 's1',
+  };
+
+  it('drops the turn of an individual class, so its slot is offered again', () => {
+    const otro = turno({ start: '14:00', end: '15:00' });
+    expect(withoutClass([turno(), otro], clase)).toEqual([otro]);
+  });
+
+  it('in a group only frees that seat', () => {
+    expect(withoutClass([turno({ enrolled: 3 })], clase)).toEqual([turno({ enrolled: 2 })]);
+  });
+
+  it('leaves other teachers and dates alone', () => {
+    const ajenos = [turno({ teacherId: 't2' }), turno({ date: MARTES })];
+    expect(withoutClass(ajenos, clase)).toEqual(ajenos);
+  });
+
+  it('lets a reschedule move a class half an hour onto itself', () => {
+    const rows = expandAvailability({
+      windows: [ventana()],
+      taken: withoutClass([turno()], clase),
+      from: LUNES,
+      to: LUNES,
+    });
+    expect(rows[0].free).toEqual([{ start: '13:00', end: '15:00' }]);
+  });
+});
+
+describe('dateRangeProblem', () => {
+  it('accepts a month grid', () => {
+    expect(dateRangeProblem('2026-08-31', '2026-10-11')).toBeNull();
+  });
+
+  it('rejects dates that do not exist instead of letting Postgres fail', () => {
+    expect(dateRangeProblem('2026-02-30', '2026-03-05')).toMatch(/inválido/);
+    expect(dateRangeProblem(undefined, '2026-03-05')).toMatch(/inválido/);
+  });
+
+  it('rejects a reversed range', () => {
+    expect(dateRangeProblem('2026-03-05', '2026-03-01')).toMatch(/al revés/);
+  });
+
+  it(`caps the range at ${MAX_RANGE_DAYS} days`, () => {
+    expect(dateRangeProblem('2026-01-01', '2026-04-03')).toBeNull(); // 93 días
+    expect(dateRangeProblem('2026-01-01', '2026-04-04')).toMatch(/hasta 93 días/);
+    expect(dateRangeProblem('2026-01-01', '9999-12-31')).toMatch(/hasta/);
   });
 });

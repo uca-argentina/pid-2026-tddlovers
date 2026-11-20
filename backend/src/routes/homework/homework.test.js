@@ -199,7 +199,7 @@ describe('/api/homework', () => {
       expect(db.createHomework).not.toHaveBeenCalled();
     });
 
-    it('a una grupal le llega a los anotados, no a los cancelados', async () => {
+    it('a una grupal le llega a sus anotados', async () => {
       const headers = await authedHeaders(app, 'teacher', DOCENTE);
       findClassById.mockResolvedValue({
         teacherId: DOCENTE,
@@ -208,10 +208,8 @@ describe('/api/homework', () => {
         startTime: '13:00',
         subjectId: 'materia',
       });
-      findTurnClasses.mockResolvedValue([
-        { studentId: ALUMNO, status: 'confirmada' },
-        { studentId: OTRO, status: 'cancelada' },
-      ]);
+      // findTurnClasses ya viene sin las canceladas.
+      findTurnClasses.mockResolvedValue([{ studentId: ALUMNO, status: 'confirmada' }]);
       db.createHomework.mockResolvedValue(TAREA);
       db.findTeacherHomework.mockResolvedValue({ id: TAREA, submissions: [] });
 
@@ -234,6 +232,24 @@ describe('/api/homework', () => {
       expect((await send('POST', '/api/homework', headers, { ...NUEVA, classId: CLASE })).statusCode).toBe(404);
       findClassById.mockResolvedValueOnce({ teacherId: DOCENTE, maxStudents: 1 });
       expect((await send('POST', '/api/homework', headers, { ...NUEVA, classId: CLASE })).statusCode).toBe(400);
+    });
+
+    it('no asigna a una grupal de hace más de 60 días', async () => {
+      const headers = await authedHeaders(app, 'teacher', DOCENTE);
+      findClassById.mockResolvedValue({
+        teacherId: DOCENTE,
+        maxStudents: 5,
+        date: '2001-01-01',
+        startTime: '13:00',
+        subjectId: 'materia',
+      });
+
+      const res = await send('POST', '/api/homework', headers, { ...NUEVA, classId: CLASE });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().message).toMatch(/60 días/);
+      expect(findTurnClasses).not.toHaveBeenCalled();
+      expect(db.createHomework).not.toHaveBeenCalled();
     });
 
     it('exige exactamente un destino', async () => {
